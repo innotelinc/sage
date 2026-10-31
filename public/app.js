@@ -462,7 +462,7 @@ function stopListening() {
 async function toggleWatch() {
   if (cap.watchOn) return stopWatch();
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    toast('This browser cannot capture the screen. iPhone: record with Control Center, then upload the video in Read.', 'error');
+    offerScreenFallback();
     return;
   }
   try {
@@ -471,7 +471,12 @@ async function toggleWatch() {
       audio: false,
     });
   } catch (error) {
-    if (error.name !== 'NotAllowedError') toast(`Screen capture failed: ${error.message}`, 'error');
+    if (error.name === 'NotAllowedError') return;
+    if (error.name === 'NotSupportedError' || /not supported/i.test(String(error.message || ''))) {
+      offerScreenFallback();
+      return;
+    }
+    toast(`Screen capture failed (${error.name}): ${error.message}`, 'error');
     return;
   }
   cap.watchOn = true;
@@ -888,7 +893,7 @@ async function toggleStudyMode() {
   setStudyUi(true);
   if (!cap.listenOn) await startListening();
   if (!cap.watchOn && !cap.cameraOn) {
-    if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) await toggleWatch();
+    if (!IS_NATIVE && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) await toggleWatch();
     else await toggleCamera();
   }
   stopStudyTimer();
@@ -1472,6 +1477,23 @@ async function testConnection() {
   }
 }
 
+/* Screen capture is unavailable on iOS in every browser and app shell, so the
+   Watch button offers the routes that do work rather than failing. */
+function openTab(name) {
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${name}`));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function offerScreenFallback() {
+  const dialog = $('screenDialog');
+  if (!dialog) {
+    toast('This device cannot capture the screen. Mirror it to a computer and use a relay code, or upload a recording in Read.', 'error');
+    return;
+  }
+  if (!dialog.open) dialog.showModal();
+}
+
 /* ── wiring ────────────────────────────────────────────────── */
 function bind() {
   $('tabs').addEventListener('click', (event) => {
@@ -1490,6 +1512,22 @@ function bind() {
   $('btnTestConn').onclick = testConnection;
   $('btnVerifyKey').onclick = saveGatewayKey;
   $('btnMicCheck').onclick = micCheck;
+  $('btnScreenRelay').onclick = () => {
+    $('screenDialog').close();
+    openTab('live');
+    $('relayCode').focus();
+    toast('Open /relay.html on the computer showing the class, share the window there, then enter its code.');
+  };
+  $('btnScreenUpload').onclick = () => {
+    $('screenDialog').close();
+    openTab('read');
+    $('readFiles').click();
+  };
+  $('btnScreenCamera').onclick = () => {
+    $('screenDialog').close();
+    toggleCamera();
+  };
+  $('btnScreenClose').onclick = () => $('screenDialog').close();
 
   $('btnListen').onclick = startListening;
   $('btnScreen').onclick = toggleWatch;

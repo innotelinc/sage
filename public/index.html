@@ -289,6 +289,22 @@
       </form>
     </dialog>
 
+    <dialog id="screenDialog">
+      <h3>Watching the screen</h3>
+      <p class="mini muted">
+        iOS gives a web page no way to read the screen — no iPhone or iPad browser can, in any app shell. These
+        routes do work.
+      </p>
+      <div class="dialog-actions">
+        <button type="button" class="btn ghost" id="btnScreenRelay">Use a relay code</button>
+        <button type="button" class="btn primary" id="btnScreenUpload">Upload a recording</button>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn ghost" id="btnScreenCamera">Aim the camera</button>
+        <button type="button" class="btn ghost" id="btnScreenClose">Close</button>
+      </div>
+    </dialog>
+
     <div class="toast" id="toast" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
     <script type="module" src="/app.js"></script>
