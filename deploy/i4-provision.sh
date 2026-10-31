@@ -87,7 +87,7 @@ log "   $(bx bash -c 'ls /opt/sage | tr "\n" " "')"
 log "6. secrets + certificate"
 base64 -w0 /opt/sage/.env | timeout 90 incus exec "$R$NAME" -- bash -c 'base64 -d > /opt/sage/.env && chmod 600 /opt/sage/.env' 2>/dev/null
 # The Docker deployment mounts its certificate at /app/certs; here the tree is /opt/sage.
-bxr bash -c "sed -i -e 's|^TLS_CERT=.*|TLS_CERT=/opt/sage/certs/fullchain.pem|' -e 's|^TLS_KEY=.*|TLS_KEY=/opt/sage/certs/privkey.pem|' /opt/sage/.env"
+bxr bash -c "sed -i -e 's|^TLS_CERT=.*|TLS_CERT=/opt/sage/certs/fullchain.pem|' -e 's|^TLS_KEY=.*|TLS_KEY=/opt/sage/certs/privkey.pem|' -e 's|^PORT=.*|PORT=443|' /opt/sage/.env"
 base64 -w0 /opt/sage/certs/fullchain.pem | timeout 90 incus exec "$R$NAME" -- bash -c 'base64 -d > /opt/sage/certs/fullchain.pem && chmod 644 /opt/sage/certs/fullchain.pem' 2>/dev/null
 base64 -w0 /opt/sage/certs/privkey.pem | timeout 90 incus exec "$R$NAME" -- bash -c 'base64 -d > /opt/sage/certs/privkey.pem && chmod 600 /opt/sage/certs/privkey.pem' 2>/dev/null
 log "   certs: $(bx bash -c 'ls /opt/sage/certs | tr "\n" " "')"
@@ -118,7 +118,7 @@ sleep 6
 log "   service: $(bx systemctl is-active sage)"
 
 log "8. health"
-curl -sS -m 12 --resolve "sage.lab.innotel.us:8443:$IP" https://sage.lab.innotel.us:8443/api/health \
+curl -sS -m 12 --resolve "sage.lab.innotel.us:443:$IP" https://sage.lab.innotel.us:443/api/health \
   -w '\n   http=%{http_code} verify=%{ssl_verify_result}\n' 2>&1 | head -3
 
 log "9. autostart"
