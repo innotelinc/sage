@@ -1,67 +1,75 @@
 # Sage · iOS / TestFlight
 
-Sage ships as a web app. This directory holds the packaging for wrapping it in an
-iOS shell and getting a build into TestFlight. **Nothing here can be built on
-Windows** — an `.ipa` requires macOS with Xcode.
+Sage ships as a web app wrapped in a Capacitor iOS shell. Nothing here builds on
+Windows — an `.ipa` requires macOS with Xcode — so the build runs on a GitHub
+**macos-26** runner and uploads itself.
 
-## Why a shell and not a rewrite
+## Status: a build has reached App Store Connect
 
-Capacitor wraps the deployed PWA (`https://sage.innotel.tech`) in a native
-container. Microphone, camera and speech all keep using the same browser APIs,
-so there is one codebase and one deployment to maintain.
+The `iOS TestFlight` workflow archives, exports and uploads successfully. No
+certificate or provisioning profile is stored anywhere: signing is automatic,
+driven by the App Store Connect API key, so Xcode creates and manages the
+distribution certificate and profile itself.
 
-## The three things TestFlight needs that this repo does not contain
+## What signing actually needs
 
-1. **An Apple Developer Program membership** (99 USD/yr) and its 10-character Team ID.
-2. **An App Store Connect app record** for the bundle id `us.innotel.sage`.
-   The record must exist *before* the first upload, or `altool` rejects it.
-3. **Signing material**: an Apple Distribution certificate (`.p12`) and an App
-   Store provisioning profile for that bundle id. App Store Connect API key
-   (`AuthKey_XXXX.p8`, key id, issuer id) covers the upload itself.
+Four repository secrets, nothing else:
 
-## Route A — GitHub Actions (no Mac needed after secrets are set)
+| Secret | Meaning |
+| --- | --- |
+| `APPLE_TEAM_ID` | 10-character team id |
+| `ASC_KEY_ID` | App Store Connect API key id |
+| `ASC_ISSUER_ID` | App Store Connect issuer id |
+| `ASC_PRIVATE_KEY` | contents of `AuthKey_<KEY_ID>.p8` |
 
-1. Create the app record in App Store Connect with bundle id `us.innotel.sage`.
-2. Add the seven secrets listed at the top of
-   `.github/workflows/ios-testflight.yml`.
-3. Put the real Team ID into `ExportOptions.plist` (the workflow substitutes
-   `REPLACE_TEAM_ID` from `APPLE_TEAM_ID`, but a literal value is clearer).
-4. Run the **iOS TestFlight** workflow (Actions → Run workflow), or push a tag
-   `ios-v1.0.0`.
+An **App Store Connect app record for `us.innotel.sage`** must exist before the
+first upload, or the upload is rejected.
 
-The first run does `npx cap add ios`, so `ios/` is generated rather than
-committed. If you would rather review the Xcode project in the repo, run
-`npx cap add ios` on a Mac and commit the result — the workflow skips generation
-when `ios/` already exists.
+## Why the runner is macos-26
 
-## Route B — a Mac with Xcode
+App Store Connect now refuses builds that are not made with the **iOS 26 SDK**;
+`macos-15` tops out at Xcode 16 (iOS 18.5 SDK) and fails with
+`STATE_ERROR.VALIDATION_ERROR` / "must be built with the iOS 26 SDK". `macos-26`
+is generally available and ships Xcode 26.
+
+## Why there is no Podfile step
+
+`@capacitor/ios` is 8.x, which moved iOS to **Swift Package Manager**. There is
+no `Podfile`; `xcodebuild` resolves packages itself and the generated container
+is `ios/App/App.xcodeproj`. The workflow still runs `pod install` when a Podfile
+does exist, so a Capacitor 7 checkout keeps working.
+
+## Assets are bundled, not loaded remotely
+
+`capacitor.config.json` has no `server.url`, so `public/` is copied into the app.
+That means the app is served from `capacitor://localhost` and its absolute API
+call (`/api/tts`) would hit nothing. Two small changes bridge that:
+
+- `public/index.html` sets `window.__SAGE_API__` to `https://sage.innotel.tech`
+  when the protocol is `capacitor:` or `ionic:`.
+- `public/app.js` routes API paths through `apiUrl()`, and `server.mjs` answers
+  CORS preflights for those native origins only.
+
+## Running it
+
+Actions → **iOS TestFlight** → Run workflow, or push a tag `ios-v*`.
+`CFBundleVersion` is set from `GITHUB_RUN_NUMBER`, so every upload is unique.
+
+To build on a Mac instead:
 
 ```bash
-npm install --no-save @capacitor/core @capacitor/cli @capacitor/ios
-npx cap add ios
 cp deploy/ios/capacitor.config.json capacitor.config.json
-npx cap sync ios
-cd ios/App && pod install
-open App.xcworkspace      # set signing team, then Product > Archive
+npm install --no-save @capacitor/core @capacitor/cli @capacitor/ios
+npx cap add ios && npx cap sync ios
+open ios/App/App.xcodeproj     # set the team, then Product > Archive
 ```
 
-Merge the keys from `Info.additions.plist` into `ios/App/App/Info.plist` before
-archiving. Without `NSMicrophoneUsageDescription` iOS kills the app the instant
-Sage calls `getUserMedia`, and App Review rejects vague usage strings.
+## Still unverified
 
-## Known risks, stated plainly
-
-- **Guideline 4.2 (minimum functionality).** A container that only loads a
-  website is the classic rejection. Sage is a real tool with camera, microphone
-  and background audio, but the reviewer's first impression of a remote-URL
-  shell is a wrapped site. Bundling `public/` locally and calling the API over
-  the network reads better than `server.url` pointing at the live site.
-- **Background listening.** `UIBackgroundModes: audio` lets the microphone keep
-  recording with the screen off only while an audio session is active; iOS will
-  still suspend a long idle recording. Classroom-length capture is not
-  guaranteed and needs a real device test before promising it.
-- **Version/build numbers.** `CFBundleVersion` must increase on every upload;
-  the workflow uses `GITHUB_RUN_NUMBER`.
-- **Nothing here has been executed.** No macOS, Xcode or Apple account was
-  available while writing these files, so treat the workflow and plists as a
-  reviewed starting point that still needs one real run to validate.
+- **Device behaviour.** The build uploads, but nobody has installed it yet:
+  microphone, camera and background audio in the shell are untested on hardware.
+- **Guideline 4.2.** Bundling assets helps, but a reviewer may still see a web app
+  in a native frame. The camera and microphone work are the argument that it is
+  not a wrapped website.
+- **Background listening.** `UIBackgroundModes: audio` does not guarantee
+  classroom-length capture with the screen off.
