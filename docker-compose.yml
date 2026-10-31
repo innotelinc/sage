@@ -1,0 +1,22 @@
+services:
+  sage:
+    build: .
+    image: sage-course-agent:latest
+    container_name: sage
+    ports:
+      - "8787:8787"
+    # The gateway key stays in your .env on the host — it is never baked into the image.
+    env_file:
+      - .env
+    environment:
+      PORT: "8787"
+    volumes:
+      - sage-threads:/app/threads
+    restart: unless-stopped
+    # Run exactly one replica: the relay stores frames in this process's memory,
+    # so a second container would not see the frames the first one received.
+    deploy:
+      replicas: 1
+
+volumes:
+  sage-threads:

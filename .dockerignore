@@ -1,0 +1,21 @@
+# Secrets and local state never go into the image.
+.env
+.env.*
+.dev.vars
+
+# Not needed at runtime.
+.git
+.github
+.freebuff
+node_modules
+threads
+web
+scripts
+README.md
+
+# Noise.
+*.log
+.DS_Store
+Dockerfile
+docker-compose.yml
+.dockerignore

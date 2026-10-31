@@ -65,6 +65,30 @@ No install step: no dependencies, Node 20+. Set `AI_BASE_URL` for any OpenAI-com
 **Install on a phone:** open the app, then *Add to Home Screen*. Mic and screen capture require a secure
 context — `https://` or `localhost` — so use a tunnel or a deployment rather than a bare LAN address.
 
+## Run it in Docker
+
+The image is Node plus the source — there is no `npm install` layer, because the app has no dependencies.
+
+```bash
+docker compose up -d --build     # reads .env from the host, serves http://localhost:8787
+```
+
+Or without Compose:
+
+```bash
+docker build -t sage .
+docker run -d --name sage -p 8787:8787 --env-file .env sage
+```
+
+Your key is passed in at runtime from `.env`; `.dockerignore` keeps `.env`, `.git` and local state out of the
+image, so a built image is safe to share. Every setting is an ordinary environment variable: `AI_BASE_URL`,
+`OPENAI_API_KEY`, `AI_CHAT_MODEL`, `AI_VISION_MODEL`, `AI_TRANSCRIBE_MODEL`, `ACCESS_CODE`, `PORT`.
+
+Run **exactly one container**. The relay keeps frames in the process's memory, so a second replica would never
+see what the first one received. The server binds `0.0.0.0:8787` so it is reachable from your LAN, but microphones
+and screen capture need a secure context — put it behind TLS (Caddy, Traefik, nginx) before opening it from a
+phone, and set `ACCESS_CODE` when it is reachable by anyone but you.
+
 ## Capture matrix
 
 A web page cannot read an iPhone screen or a cast stream. This is what actually works:
