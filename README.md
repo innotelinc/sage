@@ -1,6 +1,7 @@
 <div align="center">
 
 [![Latest release](https://img.shields.io/github/v/release/innotelinc/sage?color=18181b)](https://github.com/innotelinc/sage/releases)
+[![Website](https://img.shields.io/badge/site-sage.innotel.tech-6366f1)](https://sage.innotel.tech)
 [![Pages](https://github.com/innotelinc/sage/actions/workflows/pages.yml/badge.svg)](https://innotelinc.github.io/sage/)
 [![Theme: Unity](https://img.shields.io/badge/theme-Unity-6366f1)](https://github.com/innotelinc/innotel-platform-stack/blob/main/standards/unity/README.md)
 
@@ -38,7 +39,7 @@ interface follows the shared **Unity** theme, and the whole thing runs on plain 
 >
 > **A product of [Innotel Labs](https://innotel.us)** — applied AI, learning platforms, and the systems behind them.
 >
-> **Landing page:** [innotelinc.github.io/sage](https://innotelinc.github.io/sage) ·
+> **Website:** [sage.innotel.tech](https://sage.innotel.tech) ·
 > **Releases:** [github.com/innotelinc/sage/releases](https://github.com/innotelinc/sage/releases)
 
 ---
@@ -194,5 +195,5 @@ live in the device's `localStorage`; the server keeps no state. If you expose th
 ---
 
 <div align="center">
-<sub>A product of <a href="https://innotel.us">Innotel Labs</a> · Unity theme · <a href="https://innotelinc.github.io/sage">innotelinc.github.io/sage</a></sub>
+<sub>A product of <a href="https://innotel.us">Innotel Labs</a> · Unity theme · <a href="https://sage.innotel.tech">sage.innotel.tech</a></sub>
 </div>
