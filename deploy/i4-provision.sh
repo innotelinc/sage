@@ -87,9 +87,17 @@ log "   $(bx bash -c 'ls /opt/sage | tr "\n" " "')"
 log "6. secrets + certificate"
 base64 -w0 /opt/sage/.env | timeout 90 incus exec "$R$NAME" -- bash -c 'base64 -d > /opt/sage/.env && chmod 600 /opt/sage/.env' 2>/dev/null
 # The Docker deployment mounts its certificate at /app/certs; here the tree is /opt/sage.
-bxr bash -c "sed -i -e 's|^TLS_CERT=.*|TLS_CERT=/opt/sage/certs/fullchain.pem|' -e 's|^TLS_KEY=.*|TLS_KEY=/opt/sage/certs/privkey.pem|' -e 's|^PORT=.*|PORT=443|' /opt/sage/.env"
-base64 -w0 /opt/sage/certs/fullchain.pem | timeout 90 incus exec "$R$NAME" -- bash -c 'base64 -d > /opt/sage/certs/fullchain.pem && chmod 644 /opt/sage/certs/fullchain.pem' 2>/dev/null
-base64 -w0 /opt/sage/certs/privkey.pem | timeout 90 incus exec "$R$NAME" -- bash -c 'base64 -d > /opt/sage/certs/privkey.pem && chmod 600 /opt/sage/certs/privkey.pem' 2>/dev/null
+# PORT must be set even when .env never carried it, and TLS_CERT/TLS_KEY must be
+# present or the server silently serves plain HTTP on 443 and every client fails.
+bxr bash -c "grep -q '^PORT=' /opt/sage/.env && sed -i 's|^PORT=.*|PORT=443|' /opt/sage/.env || echo PORT=443 >> /opt/sage/.env; grep -q '^TLS_CERT=' /opt/sage/.env || echo TLS_CERT=/opt/sage/certs/fullchain.pem >> /opt/sage/.env; grep -q '^TLS_KEY=' /opt/sage/.env || echo TLS_KEY=/opt/sage/certs/privkey.pem >> /opt/sage/.env"
+# Never replace a certificate that already covers the public name. The staged
+# copy on this host is the *.lab.innotel.us wildcard, which does not.
+if bx bash -c "openssl x509 -in /opt/sage/certs/fullchain.pem -noout -ext subjectAltName 2>/dev/null | grep -q innotel.tech"; then
+  log "   certificate already covers innotel.tech - left in place"
+else
+  base64 -w0 /opt/sage/certs/fullchain.pem | timeout 90 incus exec "$R$NAME" -- bash -c 'base64 -d > /opt/sage/certs/fullchain.pem && chmod 644 /opt/sage/certs/fullchain.pem' 2>/dev/null
+  base64 -w0 /opt/sage/certs/privkey.pem | timeout 90 incus exec "$R$NAME" -- bash -c 'base64 -d > /opt/sage/certs/privkey.pem && chmod 600 /opt/sage/certs/privkey.pem' 2>/dev/null
+fi
 log "   certs: $(bx bash -c 'ls /opt/sage/certs | tr "\n" " "')"
 
 log "7. unit"
