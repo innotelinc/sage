@@ -18,7 +18,7 @@ on:
 
 jobs:
   testflight:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -86,19 +86,6 @@ jobs:
             CONTAINER="-project ios/App/App.xcodeproj"
           fi
           echo "building with $CONTAINER"
-          xcodebuild \
-            $CONTAINER \
-            -scheme App \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -archivePath build/Sage.xcarchive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            -resolvePackageDependencies
-
           xcodebuild \
             $CONTAINER \
             -scheme App \
