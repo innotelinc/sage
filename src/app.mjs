@@ -10,8 +10,13 @@ const MAX_IMAGES = 6;
 const MAX_TEXT = 24000;
 const UPSTREAM_TIMEOUT_MS = 120000;
 
+// The estate's OmniRoute gateway. Keys entered in the app are issued here, so it
+// is also the default endpoint — one place to look when something is wrong.
+const DEFAULT_BASE_URL = 'https://gateway.innotel.us/v1';
+const MAX_KEY_LENGTH = 200;
+
 export function resolveConfig(env = {}) {
-  const baseUrl = String(env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
+  const baseUrl = String(env.AI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, '');
   const key = env.AI_API_KEY || env.OPENAI_API_KEY || '';
   const chatModel = env.AI_CHAT_MODEL || 'gpt-4o-mini';
   return {
@@ -31,6 +36,49 @@ function json(body, status = 200) {
   });
 }
 
+function gatewayHosts(env = {}) {
+  return String(env.GATEWAY_HOSTS || 'gateway.innotel.us')
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * A key entered in the app's admin panel arrives per request. It is only ever
+ * forwarded upstream, and the base URL is pinned to the gateway host, so this
+ * cannot be turned into an open proxy or a way to spend someone else's credits.
+ */
+function withClientCredentials(request, env, cfg) {
+  const key = String(request.headers.get('x-ai-key') || '').trim();
+  const base = String(request.headers.get('x-ai-base') || '').trim();
+  if (!key && !base) return { cfg };
+
+  let next = cfg;
+
+  if (key) {
+    if (key.length > MAX_KEY_LENGTH || /\s/.test(key)) {
+      return { error: json({ error: 'bad_key', message: 'That does not look like an API key.' }, 400) };
+    }
+    next = { ...next, key };
+  }
+
+  if (base) {
+    let parsed;
+    try {
+      parsed = new URL(base);
+    } catch {
+      return { error: json({ error: 'bad_base', message: 'Base URL must be a full https URL.' }, 400) };
+    }
+    const allowed = gatewayHosts(env);
+    if (parsed.protocol !== 'https:' || !allowed.includes(parsed.host.toLowerCase())) {
+      return { error: json({ error: 'bad_base', message: `Base URL must be https://${allowed.join(' or https://')}.` }, 400) };
+    }
+    next = { ...next, baseUrl: `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}` };
+  }
+
+  return { cfg: next };
+}
+
 function isDataImage(value) {
   return typeof value === 'string' && /^data:image\/(png|jpe?g|webp|gif);base64,/.test(value) && value.length < 6_000_000;
 }
@@ -41,13 +89,25 @@ function authorised(request, cfg) {
   return provided && provided === cfg.accessCode;
 }
 
+/** A rejected key is a user problem, not a server one: say so plainly. */
+function keyRejected(status, detail) {
+  return json(
+    {
+      error: 'bad_key',
+      status,
+      message: `The gateway rejected this API key (${status}). Check it in Settings → Gateway. ${String(detail).slice(0, 300)}`,
+    },
+    401
+  );
+}
+
 async function handleChat(body, cfg) {
   if (!cfg.key) {
     return json(
       {
         error: 'no_key',
         message:
-          'No model key configured. Set OPENAI_API_KEY (and optionally AI_BASE_URL) in .env, then restart. Ollama users: AI_BASE_URL=http://localhost:11434/v1 and any key.',
+          'No model key configured. Enter an OmniRoute key under Settings → Gateway, or set OPENAI_API_KEY in .env and restart.',
       },
       503
     );
@@ -98,6 +158,7 @@ async function handleChat(body, cfg) {
 
   if (!upstream.ok) {
     const detail = await upstream.text().catch(() => '');
+    if (upstream.status === 401 || upstream.status === 403) return keyRejected(upstream.status, detail);
     return json(
       {
         error: 'upstream_error',
@@ -128,7 +189,9 @@ async function handleChat(body, cfg) {
 }
 
 async function handleTranscribe(request, cfg) {
-  if (!cfg.key) return json({ error: 'no_key', message: 'Transcription needs OPENAI_API_KEY.' }, 503);
+  if (!cfg.key) {
+    return json({ error: 'no_key', message: 'Transcription needs an API key — enter a gateway key in Settings.' }, 503);
+  }
 
   let form;
   try {
@@ -159,6 +222,7 @@ async function handleTranscribe(request, cfg) {
 
   if (!upstream.ok) {
     const detail = await upstream.text().catch(() => '');
+    if (upstream.status === 401 || upstream.status === 403) return keyRejected(upstream.status, detail);
     return json({ error: 'upstream_error', message: `Transcription returned ${upstream.status}. ${String(detail).slice(0, 400)}` }, 502);
   }
 
@@ -168,7 +232,7 @@ async function handleTranscribe(request, cfg) {
 
 export async function handleRequest(request, env = {}) {
   const url = new URL(request.url);
-  const cfg = resolveConfig(env);
+  let cfg = resolveConfig(env);
 
   if (!url.pathname.startsWith('/api/')) {
     return env.ASSETS ? env.ASSETS.fetch(request) : json({ error: 'not_found', message: 'Static assets are not bound.' }, 404);
@@ -185,6 +249,8 @@ export async function handleRequest(request, env = {}) {
       ok: true,
       configured: Boolean(cfg.key),
       provider: host,
+      gateway: gatewayHosts(env),
+      acceptsClientKey: true,
       chatModel: cfg.chatModel,
       visionModel: cfg.visionModel,
       transcribeModel: cfg.transcribeModel,
@@ -196,6 +262,10 @@ export async function handleRequest(request, env = {}) {
   if (!authorised(request, cfg)) {
     return json({ error: 'unauthorised', message: 'Wrong or missing access code.' }, 401);
   }
+
+  const client = withClientCredentials(request, env, cfg);
+  if (client.error) return client.error;
+  cfg = client.cfg;
 
   if (url.pathname.startsWith('/api/relay/')) {
     return handleRelay(request, url, json);

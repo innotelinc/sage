@@ -10,6 +10,7 @@
       (function () {
         if (/^(capacitor|ionic):$/.test(location.protocol)) {
           window.__SAGE_API__ = 'https://sage.innotel.tech';
+          window.__SAGE_NATIVE__ = true;
         }
       })();
     </script>
@@ -48,8 +49,8 @@
         <div class="setup hidden" id="setupCard">
           <h3>Connect a brain</h3>
           <p>
-            Add a model key on the machine running this app — <code>OPENAI_API_KEY</code> in <code>.env</code> — then
-            restart. Use <code>AI_BASE_URL</code> for Groq, OpenRouter or a local Ollama.
+            Open <strong>Settings → Gateway</strong> and paste an OmniRoute key from
+            <code>gateway.innotel.us</code>. Only keys the gateway accepts will be stored.
           </p>
           <button class="btn ghost small" id="btnRetryHealth">Check again</button>
         </div>
@@ -233,6 +234,27 @@
     <dialog id="settingsDialog">
       <form method="dialog" id="settingsForm">
         <h3>Settings</h3>
+
+        <fieldset class="admin-block">
+          <legend>Gateway</legend>
+          <p class="mini muted">
+            OmniRoute keys only. The key is checked against <code>gateway.innotel.us/v1/models</code> before it is
+            stored, and rejected keys are never saved. It stays on this device.
+          </p>
+          <label>API key
+            <input id="setGatewayKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"
+                   placeholder="OmniRoute key from gateway.innotel.us" />
+          </label>
+          <label>Base URL <input id="setGatewayBase" type="text" inputmode="url" value="https://gateway.innotel.us/v1" /></label>
+          <div class="dialog-actions">
+            <button type="button" class="btn ghost" id="btnVerifyKey">Verify &amp; save</button>
+            <button type="button" class="btn ghost" id="btnMicCheck">Check microphone</button>
+          </div>
+          <p class="mini muted" id="gatewayStatus"></p>
+          <div class="chips" id="gatewayModels"></div>
+          <p class="mini muted" id="micStatus"></p>
+        </fieldset>
+
         <div class="grid2">
           <label>Agent name <input id="setName" type="text" maxlength="30" /></label>
           <label>Course <input id="setCourse" type="text" maxlength="120" placeholder="e.g. BIO 201 · Physiology" /></label>

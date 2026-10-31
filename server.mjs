@@ -112,7 +112,7 @@ function applyCors(req, res) {
   res.setHeader('access-control-allow-origin', origin);
   res.setHeader('vary', 'origin');
   res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
-  res.setHeader('access-control-allow-headers', 'content-type, x-access-code');
+  res.setHeader('access-control-allow-headers', 'content-type, x-access-code, x-ai-key, x-ai-base');
   res.setHeader('access-control-max-age', '600');
 }
 async function handler(req, res) {
@@ -169,6 +169,6 @@ server.listen(port, '0.0.0.0', () => {
       }
     }
   }
-  console.log(`  model:   ${process.env.AI_CHAT_MODEL || 'gpt-4o-mini'} via ${process.env.AI_BASE_URL || 'https://api.openai.com/v1'}`);
-  console.log(`  key:     ${configured ? 'configured' : 'MISSING — add OPENAI_API_KEY to .env'}\n`);
+  console.log(`  model:   ${process.env.AI_CHAT_MODEL || 'gpt-4o-mini'} via ${process.env.AI_BASE_URL || 'https://gateway.innotel.us/v1'}`);
+  console.log(`  key:     ${configured ? 'configured' : 'MISSING — set OPENAI_API_KEY or enter a gateway key in the app'}\n`);
 });

@@ -3,12 +3,23 @@
 
 const $ = (id) => document.getElementById(id);
 const LS_KEY = 'sage.course-agent.v1';
+const IS_NATIVE = /^(capacitor|ionic):$/.test(location.protocol) || Boolean(window.__SAGE_NATIVE__);
+const GATEWAY_DEFAULT = 'https://gateway.innotel.us/v1';
 
 /* ── state ─────────────────────────────────────────────────── */
 const defaultState = () => ({
   persona: { name: 'Sage', course: '', tone: 'warm', depth: 'balanced', humour: 3, risk: 2, traits: [] },
   language: '',
-  settings: { tts: true, autoNotes: true, noteIntervalSec: 20, snapSec: 6, accessCode: '', ttsVoice: '' },
+  settings: {
+    tts: true,
+    autoNotes: true,
+    noteIntervalSec: 20,
+    snapSec: 6,
+    accessCode: '',
+    ttsVoice: '',
+    gatewayKey: '',
+    gatewayBase: 'https://gateway.innotel.us/v1',
+  },
   memory: [],
   evolution: [],
   session: { transcript: [], notes: [] },
@@ -131,6 +142,10 @@ function scrollFeed(el) {
 async function api(path, options = {}) {
   const headers = {};
   if (state.settings.accessCode) headers['x-access-code'] = state.settings.accessCode;
+  const gatewayKey = String(state.settings.gatewayKey || '').trim();
+  if (gatewayKey) headers['x-ai-key'] = gatewayKey;
+  const gatewayUrl = String(state.settings.gatewayBase || '').trim();
+  if (gatewayUrl && gatewayUrl !== GATEWAY_DEFAULT) headers['x-ai-base'] = gatewayUrl;
   let body;
   if (options.form) body = options.form;
   else if (options.body) {
@@ -139,7 +154,7 @@ async function api(path, options = {}) {
   }
   let res;
   try {
-    res = await fetch(path, { method: options.method || (body ? 'POST' : 'GET'), headers, body });
+    res = await fetch(apiUrl(path), { method: options.method || (body ? 'POST' : 'GET'), headers, body });
   } catch (error) {
     throw new Error(`Cannot reach the agent server (${error.message}).`);
   }
@@ -182,7 +197,7 @@ async function checkHealth() {
     const ok = health.configured;
     $('statusDot').className = `dot ${ok ? 'ok' : 'warn'}`;
     $('statusDot').title = ok ? `connected to ${health.provider}` : 'no model key configured';
-    $('modelTag').textContent = ok ? health.chatModel : 'no key';
+    $('modelTag').textContent = state.settings.gatewayKey ? 'gateway' : ok ? health.chatModel : 'no key';
     $('setupCard').classList.toggle('hidden', ok);
     if (health.authRequired && !state.settings.accessCode) {
       toast('This server is protected. Enter the access code in Settings.', 'error');
@@ -305,9 +320,18 @@ function startRecognition(SR) {
     showInterim(interim.trim());
   };
   rec.onerror = (event) => {
-    if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-      toast('Microphone permission denied.', 'error');
+    if (event.error === 'not-allowed') {
+      toast(micBlockedMessage({ name: 'NotAllowedError' }), 'error');
       stopListening();
+    } else if (event.error === 'service-not-allowed') {
+      // WKWebView ships no dictation service even when the mic grant is fine,
+      // so this is not a permission failure and must not be reported as one.
+      dictationOff = true;
+      toast('On-device dictation is unavailable here — using server transcription.', 'error');
+      stopListening();
+      setTimeout(function () {
+        if (!cap.listenOn) startListening();
+      }, 400);
     } else if (event.error === 'audio-capture') {
       toast('No microphone found.', 'error');
       stopListening();
@@ -333,6 +357,7 @@ function startRecognition(SR) {
 }
 
 let transcribeBlocked = false;
+let dictationOff = false;
 
 async function transcribeBlob(blob) {
   if (transcribeBlocked) return;
@@ -395,11 +420,11 @@ async function startListening() {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
   } catch (error) {
-    toast(`Microphone blocked: ${error.message}`, 'error');
+    toast(micBlockedMessage(error), 'error');
     return;
   }
   cap.listenOn = true;
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const SR = IS_NATIVE || dictationOff ? null : window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SR) startRecognition(SR);
   else if (transcribeBlocked) {
     toast('No on-device speech recognition in this browser, and this gateway key cannot transcribe. Try Chrome on Android or a desktop browser.', 'error');
@@ -1269,6 +1294,124 @@ async function runRead() {
 }
 
 /* ── settings ──────────────────────────────────────────────── */
+/* ── gateway admin ─────────────────────────────────────────── */
+function gatewayBase() {
+  return (state.settings.gatewayBase || GATEWAY_DEFAULT).replace(/\/+$/, '');
+}
+
+function gatewayError(body) {
+  const err = body && body.error;
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object') return err.message || err.code || 'rejected';
+  return '';
+}
+
+/* A key only counts as an OmniRoute key if the gateway itself accepts it. */
+async function verifyGatewayKey(key, base) {
+  let res;
+  try {
+    res = await fetch(base + '/models', {
+      headers: { authorization: 'Bearer ' + key, accept: 'application/json' },
+    });
+  } catch (error) {
+    return { ok: false, message: 'Cannot reach ' + base + ' (' + error.message + ').' };
+  }
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const detail = gatewayError(body);
+    return { ok: false, message: detail ? res.status + ': ' + detail : 'Gateway rejected the key (' + res.status + ').' };
+  }
+  const list = Array.isArray(body && body.data) ? body.data : Array.isArray(body && body.models) ? body.models : [];
+  const models = list.map(function (m) { return String((m && (m.id || m.name)) || m); }).filter(Boolean).slice(0, 24);
+  return { ok: true, models: models, message: 'Accepted · ' + (models.length || 'all') + ' routes available.' };
+}
+
+function renderGatewayChips(models) {
+  const chips = $('gatewayModels');
+  chips.innerHTML = '';
+  for (const model of models) {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = model;
+    chips.appendChild(chip);
+  }
+}
+
+async function saveGatewayKey() {
+  const button = $('btnVerifyKey');
+  const status = $('gatewayStatus');
+  const key = $('setGatewayKey').value.trim();
+  const base = ($('setGatewayBase').value.trim() || GATEWAY_DEFAULT).replace(/\/+$/, '');
+
+  if (!key) {
+    state.settings.gatewayKey = '';
+    state.settings.gatewayBase = base;
+    persist();
+    renderGatewayChips([]);
+    status.textContent = 'No gateway key stored — falling back to the server key, if it has one.';
+    checkHealth();
+    return;
+  }
+  if (base !== GATEWAY_DEFAULT) {
+    status.textContent = 'Base URL must be ' + GATEWAY_DEFAULT + '.';
+    return;
+  }
+
+  busy(button, true);
+  status.textContent = 'Checking the key with the gateway…';
+  try {
+    const result = await verifyGatewayKey(key, base);
+    if (!result.ok) {
+      renderGatewayChips([]);
+      status.textContent = 'Rejected — ' + result.message;
+      toast('That key was not accepted by the gateway.', 'error');
+      return;
+    }
+    state.settings.gatewayKey = key;
+    state.settings.gatewayBase = base;
+    persist();
+    status.textContent = result.message;
+    renderGatewayChips(result.models);
+    $('modelTag').textContent = 'gateway';
+    toast('Gateway key accepted.');
+    checkHealth();
+  } finally {
+    busy(button, false);
+  }
+}
+
+/* A named DOMException reads far better than one blanket "denied" message. */
+function micBlockedMessage(error) {
+  const name = String((error && error.name) || 'Error');
+  if (name === 'NotAllowedError' || name === 'SecurityError') {
+    return IS_NATIVE
+      ? 'iOS has the microphone switched off for Sage. Settings → Sage → Microphone → on, then reopen the app.'
+      : 'Microphone blocked. Allow it, or open this page over HTTPS.';
+  }
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'No microphone is available.';
+  if (name === 'NotReadableError') return 'Another app is holding the microphone.';
+  return 'Microphone blocked (' + name + '): ' + ((error && error.message) || 'unknown error');
+}
+
+async function micCheck() {
+  const out = $('micStatus');
+  const bits = [
+    IS_NATIVE ? 'native shell' : location.protocol.replace(':', ''),
+    window.isSecureContext ? 'secure context' : 'NOT a secure context',
+    navigator.mediaDevices && navigator.mediaDevices.getUserMedia ? 'getUserMedia' : 'no getUserMedia',
+    IS_NATIVE || dictationOff ? 'server transcription' : window.SpeechRecognition || window.webkitSpeechRecognition ? 'on-device dictation' : 'no dictation',
+  ];
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const track = stream.getAudioTracks()[0];
+    bits.push('mic: ' + ((track && track.label) || 'unnamed'));
+    stream.getTracks().forEach(function (t) { t.stop(); });
+  } catch (error) {
+    bits.push('mic error: ' + ((error && error.name) || 'unknown'));
+  }
+  out.textContent = bits.join(' · ');
+}
+
 function openSettings() {
   const p = state.persona;
   $('setName').value = p.name;
@@ -1285,6 +1428,12 @@ function openSettings() {
   $('settingsStatus').textContent = health
     ? `${health.provider} · ${health.chatModel} · vision ${health.visionModel}`
     : '';
+  $('setGatewayKey').value = state.settings.gatewayKey || '';
+  $('setGatewayBase').value = state.settings.gatewayBase || GATEWAY_DEFAULT;
+  $('gatewayStatus').textContent = state.settings.gatewayKey
+    ? 'Key stored on this device. Use the mic check if capture is refusing.'
+    : '';
+  $('micStatus').textContent = '';
   $('settingsDialog').showModal();
 }
 
@@ -1339,6 +1488,8 @@ function bind() {
   $('btnRetryHealth').onclick = checkHealth;
   $('btnSaveSettings').onclick = () => setTimeout(saveSettings, 0);
   $('btnTestConn').onclick = testConnection;
+  $('btnVerifyKey').onclick = saveGatewayKey;
+  $('btnMicCheck').onclick = micCheck;
 
   $('btnListen').onclick = startListening;
   $('btnScreen').onclick = toggleWatch;
