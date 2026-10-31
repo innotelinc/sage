@@ -85,10 +85,26 @@ image, so a built image is safe to share. Every setting is an ordinary environme
 `OPENAI_API_KEY`, `AI_CHAT_MODEL`, `AI_VISION_MODEL`, `AI_TRANSCRIBE_MODEL`, `ACCESS_CODE`, `PORT`.
 
 Run **exactly one container**. The relay keeps frames in the process's memory, so a second replica would never
-see what the first one received. The server binds `0.0.0.0:8787` so it is reachable from your LAN, but microphones
-and screen capture need a secure context — put it behind TLS (Caddy, Traefik, nginx) before opening it from a
-phone, and set `ACCESS_CODE` when it is reachable by anyone but you.
+see what the first one received. Set `ACCESS_CODE` when the instance is reachable by anyone but you.
 
+### Serving HTTPS
+
+Microphones and screen capture need a secure context, so a bare `http://192.168.x.x` address will not let a phone
+listen or watch. Point `TLS_CERT` and `TLS_KEY` at a certificate and the same server speaks HTTPS on `PORT`
+instead — no extra proxy container:
+
+```bash
+PORT=8443
+TLS_CERT=/app/certs/fullchain.pem
+TLS_KEY=/app/certs/privkey.pem
+```
+
+`./certs:/app/certs:ro` is already mounted by the compose file. The image runs as uid 1000, so the material has to
+be readable by it: `chown -R 1000:1000 certs`, a traversable `certs/` directory, `chmod 600` on the key.
+
+Issuance belongs to **Cerulean**, not to this repo: register the name in a zone it manages, let it issue the
+certificate (ACME DNS-01 through Technitium), then copy the material onto the host. A zone wildcard covers every
+name beneath it, so `sage.<zone>` needs only the DNS record.
 ## Capture matrix
 
 A web page cannot read an iPhone screen or a cast stream. This is what actually works:

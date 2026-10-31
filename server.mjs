@@ -3,6 +3,7 @@
  * handler. Works on localhost and on your LAN (http://<pc-ip>:8787).
  */
 import http from 'node:http';
+import https from 'node:https';
 import { createReadStream } from 'node:fs';
 import { stat, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -91,7 +92,7 @@ async function sendStatic(req, res, pathname) {
   }
 }
 
-const server = http.createServer(async (req, res) => {
+async function handler(req, res) {
   const url = new URL(req.url, 'http://localhost');
 
   if (url.pathname.startsWith('/api/')) {
@@ -109,18 +110,29 @@ const server = http.createServer(async (req, res) => {
   }
 
   await sendStatic(req, res, url.pathname);
-});
+}
 
 const port = Number(process.env.PORT) || 8787;
+
+// TLS switches on only when both files are supplied, so localhost development
+// stays plain HTTP and a certificate can be mounted without touching code.
+const tlsCert = process.env.TLS_CERT;
+const tlsKey = process.env.TLS_KEY;
+const secure = Boolean(tlsCert && tlsKey);
+const scheme = secure ? 'https' : 'http';
+
+const server = secure
+  ? https.createServer({ cert: await readFile(tlsCert), key: await readFile(tlsKey) }, handler)
+  : http.createServer(handler);
 
 server.listen(port, '0.0.0.0', () => {
   const configured = Boolean(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
   console.log(`\n  Sage · course-taking agent`);
-  console.log(`  local:   http://localhost:${port}`);
+  console.log(`  local:   ${scheme}://localhost:${port}`);
   for (const [name, addresses] of Object.entries(os.networkInterfaces())) {
     for (const address of addresses || []) {
       if (address.family === 'IPv4' && !address.internal) {
-        console.log(`  ${name.padEnd(7)} http://${address.address}:${port}  (open this on your phone — needs HTTPS for mic/screen)`);
+        console.log(`  ${name.padEnd(7)} ${scheme}://${address.address}:${port}${secure ? '  (open this on your phone)' : '  (needs HTTPS for mic/screen)'}`);
       }
     }
   }

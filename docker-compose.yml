@@ -5,13 +5,15 @@ services:
     container_name: sage
     ports:
       - "8787:8787"
+      - "8443:8443"
     # The gateway key stays in your .env on the host — it is never baked into the image.
     env_file:
       - .env
-    environment:
-      PORT: "8787"
+    # PORT and TLS_CERT/TLS_KEY come from .env, so the same compose file serves
+    # plain HTTP locally and HTTPS where a certificate is mounted.
     volumes:
       - sage-threads:/app/threads
+      - ./certs:/app/certs:ro
     restart: unless-stopped
     # Run exactly one replica: the relay stores frames in this process's memory,
     # so a second container would not see the frames the first one received.
