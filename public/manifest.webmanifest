@@ -1,0 +1,18 @@
+{
+  "name": "Sage · course agent",
+  "short_name": "Sage",
+  "description": "Listens, watches, reads, evaluates and answers for you in class.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080b12",
+  "theme_color": "#080b12",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

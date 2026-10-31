@@ -1,0 +1,46 @@
+# Publish the SAGE landing page (web/landing/) to GitHub Pages.
+#
+# Requires Pages to be enabled once: repo Settings → Pages → Source:
+# "GitHub Actions". After that, every push to main touching the landing page
+# republishes https://innotelinc.github.io/sage/. workflow_dispatch works too.
+
+name: Pages (landing)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/landing/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload landing page
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/landing
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en" data-scheme="operations">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SAGE — Course-Taking Agent — Platform</title>
+  <meta name="description" content="SAGE listens to the lecture, watches the slides, reads the material, evaluates what matters, answers quizzes and writes essays in your voice — self-hosted, gateway-backed, installable on a phone.">
+  <meta property="og:title" content="SAGE — Course-Taking Agent — Platform">
+  <meta property="og:description" content="A course-taking agent that listens, watches, reads, evaluates, answers, and writes — then evolves between classes.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b0d10'/%3E%3Cpath d='M16 6c0 5.5-4.5 10-10 10 5.5 0 10 4.5 10 10 0-5.5 4.5-10 10-10-5.5 0-10-4.5-10-10z' fill='%236ee7b7'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="unity-theme.css">
+  <script>window.UNITY_DEFAULT_SCHEME = "operations";</script>
+  <script src="unity-theme.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: var(--brand-soft); }
+
+    a { color: var(--brand); text-decoration: none; }
+    a:hover { color: var(--brand-ring); }
+
+    code, pre { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+    /* ---- Top bar ---- */
+    .topbar {
+      position: sticky; top: 0; z-index: 10;
+      background: color-mix(in srgb, var(--canvas) 72%, transparent);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar-inner { display: flex; align-items: center; gap: 20px; height: 60px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: 0.04em; color: var(--ink); }
+    .brand:hover { color: var(--ink); }
+    .brand svg { display: block; }
+    .topbar nav { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+    .topbar nav a {
+      color: var(--ink-soft); padding: 6px 12px; border-radius: var(--radius-sm);
+      font-size: 14px; transition: color .15s, background .15s;
+    }
+    .topbar nav a:hover { color: var(--ink); background: var(--surface-sunken); }
+    .topbar .gh {
+      display: inline-flex; align-items: center; gap: 8px; margin-left: 8px;
+      border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 14px;
+      color: var(--ink); font-size: 14px; transition: border-color .15s, background .15s;
+    }
+    .topbar .gh:hover { border-color: var(--brand); background: var(--brand-soft); color: var(--ink); }
+
+    /* ---- Hero ---- */
+    .hero { position: relative; overflow: hidden; padding: 92px 0 64px; }
+    .hero::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(620px 330px at 72% -12%, color-mix(in srgb, var(--brand) 15%, transparent), transparent 70%),
+        radial-gradient(520px 300px at 12% 112%, color-mix(in srgb, var(--info) 9%, transparent), transparent 70%);
+    }
+    .hero-inner { position: relative; max-width: 780px; }
+    .kicker {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--brand-ring); background: var(--brand-soft);
+      border: 1px solid color-mix(in srgb, var(--brand) 25%, transparent);
+      border-radius: 999px; padding: 6px 14px;
+    }
+    h1 {
+      font-size: clamp(2.2rem, 5.6vw, 3.6rem);
+      line-height: 1.05; letter-spacing: -0.03em;
+      margin: 22px 0 0; font-weight: 700;
+    }
+    h1 .dim { color: var(--ink-faint); }
+    .lead { font-size: clamp(1rem, 2.1vw, 1.18rem); color: var(--ink-soft); margin: 20px 0 0; max-width: 660px; }
+    .lead strong { color: var(--ink); font-weight: 600; }
+    .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 9px;
+      padding: 12px 22px; border-radius: var(--radius);
+      font-size: 15px; font-weight: 600; border: 1px solid transparent;
+      transition: transform .15s, background .15s, border-color .15s;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--brand); color: #04120c; }
+    .btn-primary:hover { background: var(--brand-ring); color: #04120c; }
+    .btn-ghost { border-color: var(--line); color: var(--ink); }
+    .btn-ghost:hover { border-color: var(--brand); background: var(--brand-soft); color: var(--ink); }
+
+    /* ---- Terminal ---- */
+    .term {
+      margin-top: 34px; border: 1px solid var(--line); border-radius: var(--radius);
+      background: var(--surface); overflow: hidden;
+    }
+    .term-bar {
+      display: flex; align-items: center; gap: 7px; padding: 10px 14px;
+      border-bottom: 1px solid var(--line); background: var(--surface-muted);
+    }
+    .term-bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-faint); opacity: .5; display: block; }
+    .term-bar span { margin-left: 6px; font-size: 11.5px; color: var(--ink-faint); letter-spacing: .04em; }
+    .term pre { margin: 0; padding: 16px 18px; font-size: 13px; line-height: 1.75; overflow-x: auto; color: var(--ink-soft); }
+    .term .p { color: var(--brand); }
+    .term .c { color: var(--ink-faint); }
+
+    /* ---- Stats ---- */
+    .stats {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+      margin: 56px 0 0; background: var(--line); border: 1px solid var(--line);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .stat { background: var(--surface); padding: 20px 18px; }
+    .stat b { display: block; font-size: clamp(1.3rem, 3vw, 1.75rem); letter-spacing: -0.02em; font-weight: 680; }
+    .stat span { font-size: 12px; color: var(--ink-faint); display: block; margin-top: 3px; }
+
+    /* ---- Sections ---- */
+    section { padding: 74px 0 0; }
+    h2 { font-size: clamp(1.5rem, 3.4vw, 2.15rem); letter-spacing: -0.025em; margin: 0 0 8px; font-weight: 680; }
+    .section-lead { color: var(--ink-soft); margin: 0 0 30px; max-width: 640px; }
+
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 22px 20px;
+      transition: border-color .18s, transform .18s, background .18s;
+    }
+    .card:hover { border-color: color-mix(in srgb, var(--brand) 45%, transparent); transform: translateY(-2px); }
+    .card .ico { font-size: 21px; line-height: 1; }
+    .card h3 { font-size: 15.5px; margin: 12px 0 6px; font-weight: 640; letter-spacing: -0.01em; }
+    .card p { margin: 0; font-size: 13.8px; color: var(--ink-soft); line-height: 1.62; }
+
+    /* ---- Table ---- */
+    .table-wrap { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { background: var(--surface-muted); color: var(--ink-faint); font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
+    tr:last-child td { border-bottom: 0; }
+    td code { font-size: 12.5px; color: var(--ink-soft); }
+    .pill { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px; }
+    .yes { color: #04120c; background: var(--ok); }
+    .kind { color: var(--ink); background: var(--surface-sunken); }
+    .no { color: var(--ink-faint); background: var(--surface-sunken); }
+
+    /* ---- Split ---- */
+    .split { display: grid; grid-template-columns: 1.05fr .95fr; gap: 34px; align-items: start; }
+    .split h2 { margin-top: 0; }
+    .list { list-style: none; padding: 0; margin: 0; }
+    .list li { position: relative; padding: 9px 0 9px 26px; color: var(--ink-soft); border-bottom: 1px solid var(--line); font-size: 14.5px; }
+    .list li:last-child { border-bottom: 0; }
+    .list li::before { content: "→"; position: absolute; left: 0; color: var(--brand); }
+    .list b { color: var(--ink); font-weight: 600; }
+
+    .note {
+      border-left: 2px solid var(--brand); background: var(--surface);
+      border-radius: 0 var(--radius) var(--radius) 0; padding: 16px 18px;
+      font-size: 14px; color: var(--ink-soft);
+    }
+    .note b { color: var(--ink); }
+
+    /* ---- Roadmap ---- */
+    .road { display: grid; gap: 10px; }
+    .road-row {
+      display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    }
+    .road-row .v { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px; color: var(--brand); min-width: 62px; }
+    .road-row p { margin: 0; font-size: 14px; color: var(--ink-soft); }
+    .road-row.shipped .v { color: var(--ok); }
+
+    /* ---- Footer ---- */
+    footer { margin-top: 84px; border-top: 1px solid var(--line); padding: 34px 0 60px; }
+    .foot { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: space-between; }
+    .foot p { margin: 0; font-size: 13px; color: var(--ink-faint); }
+    .foot nav { display: flex; gap: 18px; font-size: 13.5px; }
+
+    @media (max-width: 900px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .grid { grid-template-columns: 1fr 1fr; }
+      .split { grid-template-columns: 1fr; gap: 24px; }
+      .topbar nav a:not(.gh) { display: none; }
+    }
+    @media (max-width: 620px) {
+      .grid { grid-template-columns: 1fr; }
+      .hero { padding: 64px 0 44px; }
+      section { padding: 54px 0 0; }
+      th, td { padding: 11px 12px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="#top">
+      <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 4c0 6.6-5.4 12-12 12 6.6 0 12 5.4 12 12 0-6.6 5.4-12 12-12-6.6 0-12-5.4-12-12z" fill="currentColor" opacity=".9"/>
+      </svg>
+      SAGE
+    </a>
+    <nav>
+      <a href="#does">What it does</a>
+      <a href="#capture">Capture</a>
+      <a href="#gateway">Gateway</a>
+      <a href="#start">Get started</a>
+      <a class="gh" href="https://github.com/innotelinc/sage">GitHub</a>
+    </nav>
+  </div>
+</div>
+
+<header class="hero" id="top">
+  <div class="wrap hero-inner">
+    <span class="kicker">v1.0 &middot; course-taking agent</span>
+    <h1>The class, taken for you.<br><span class="dim">In your own voice.</span></h1>
+    <p class="lead">
+      <strong>SAGE</strong> sits in the lecture, watches the slides, reads the material, and answers when it counts —
+      quizzes, tests and essays, written the way you write. It listens, it evaluates, it decides, then it
+      <strong>evolves between classes</strong> from what it got right. Self-hosted, installable on a phone.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#start">Get started</a>
+      <a class="btn btn-ghost" href="https://github.com/innotelinc/sage">Read the source</a>
+    </div>
+
+    <div class="term">
+      <div class="term-bar"><i></i><i></i><i></i><span>setup</span></div>
+      <pre><span class="p">$</span> cp .env.example .env   <span class="c"># your gateway key</span>
+<span class="p">$</span> npm run dev            <span class="c"># http://localhost:8787 — no dependencies</span></pre>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><b>0</b><span>runtime dependencies</span></div>
+      <div class="stat"><b>~1.3 s</b><span>measured answer latency</span></div>
+      <div class="stat"><b>6</b><span>working surfaces</span></div>
+      <div class="stat"><b>Node / Worker</b><span>same API handler</span></div>
+    </div>
+  </div>
+</header>
+
+<section id="does">
+  <div class="wrap">
+    <h2>It listens, watches, reads, then decides.</h2>
+    <p class="section-lead">
+      Four ways in, one persona out. Everything it perceives is folded into the same memory, so a slide
+      and a sentence from ten minutes ago can answer the question being asked now.
+    </p>
+    <div class="grid">
+      <div class="card">
+        <div class="ico">🎙</div>
+        <h3>Listening</h3>
+        <p>Live lecture transcript through on-device speech recognition, chunked into notes that keep definitions, numbers and the words <code>EXAM:</code> — everything the instructor stressed.</p>
+      </div>
+      <div class="card">
+        <div class="ico">🖥</div>
+        <h3>Watching</h3>
+        <p>Screen share, phone camera, or an uploaded screen recording. Frames are sampled and read as they change, so a whiteboard becomes notes while it is being written.</p>
+      </div>
+      <div class="card">
+        <div class="ico">📖</div>
+        <h3>Reading</h3>
+        <p>Slides, photographs, handouts and pasted chapters become study notes with the formulas exactly as given, likely exam questions, and the gaps the material leaves.</p>
+      </div>
+      <div class="card">
+        <div class="ico">⚖️</div>
+        <h3>Evaluating</h3>
+        <p>It commits to an answer with a confidence score and the reason it knows, rather than hedging. Ambiguity gets the most likely reading and one clause saying so.</p>
+      </div>
+      <div class="card">
+        <div class="ico">✍️</div>
+        <h3>Writing</h3>
+        <p>Quizzes answered one decision at a time, and essays with a real argument — citing only the material you supplied, never inventing a reference.</p>
+      </div>
+      <div class="card">
+        <div class="ico">🧬</div>
+        <h3>Evolving</h3>
+        <p>After class it reviews its own notes and rewrites its behaviour: how this instructor grades, which answer shape earned marks, how you like to sound.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="capture">
+  <div class="wrap">
+    <h2>What it can actually capture.</h2>
+    <p class="section-lead">
+      No hand-waving: a web page cannot read an iPhone screen or a cast stream. Here is exactly what works,
+      checked against what the browser exposes.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Source</th><th>Capturable</th><th>How</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Android Chrome — whole phone screen</td><td><span class="pill yes">yes</span></td><td><b>Watch</b> → pick the screen, including other apps</td></tr>
+          <tr><td>Desktop browser — tab, window or screen</td><td><span class="pill yes">yes</span></td><td><b>Watch</b> → pick the surface</td></tr>
+          <tr><td>Mirrored iPhone (AirPlay to a Mac/PC)</td><td><span class="pill yes">yes</span></td><td><b>Watch</b> the mirroring window</td></tr>
+          <tr><td>iPhone screen directly</td><td><span class="pill no">no</span></td><td>iOS has no capture API — use Control Center recording, then <b>Read</b> the video</td></tr>
+          <tr><td>Camera — board, projector, TV</td><td><span class="pill yes">yes</span></td><td><b>Aim</b></td></tr>
+          <tr><td>TV cast stream (Chromecast / AirPlay)</td><td><span class="pill no">no</span></td><td>The stream never reaches the page — aim the camera, or capture on the receiving computer</td></tr>
+          <tr><td>Worksheet, textbook page</td><td><span class="pill yes">yes</span></td><td>Photo → <b>Answer</b> or <b>Read</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="section-lead" style="margin-top:18px;font-size:13.5px">
+      Mic and screen capture need a secure context: <code>https://</code> or <code>localhost</code>. A bare LAN
+      address loads the interface but not the capture.
+    </p>
+  </div>
+</section>
+
+<section id="gateway">
+  <div class="wrap split">
+    <div>
+      <h2>One gateway, every model.</h2>
+      <p class="section-lead">
+        SAGE speaks plain OpenAI-compatible HTTP, so the gateway is a base URL and a key — nothing else.
+        This build ships wired to Innotel OmniRoute.
+      </p>
+      <ul class="list">
+        <li><b>Endpoint</b> — <code>https://gateway.innotel.us/v1</code></li>
+        <li><b>Verified model</b> — <code>agy/gemini-3-flash</code>, text and vision in about a second</li>
+        <li><b>Keys</b> — <a href="https://subscribe.innotel.us">subscribe.innotel.us</a></li>
+        <li><b>Anywhere else</b> — OpenAI, Groq, OpenRouter or a local Ollama, via <code>AI_BASE_URL</code></li>
+      </ul>
+    </div>
+    <div>
+      <div class="note">
+        <b>The key's allowlist is the real contract.</b> The gateway lists 1,249 models, but a key routes only
+        the connections it is scoped for. On this key every audio model sits behind an <code>openrouter</code>
+        connection that is excluded, so server transcription answers <code>403</code> — SAGE detects that once
+        and falls back to on-device speech recognition instead of retrying forever.
+      </div>
+      <div class="term" style="margin-top:16px">
+        <div class="term-bar"><i></i><i></i><i></i><span>verify any model before trusting it</span></div>
+        <pre><span class="p">$</span> curl -s https://gateway.innotel.us/v1/chat/completions \
+    -H "authorization: Bearer $KEY" \
+    -H "content-type: application/json" \
+    -d '{"model":"agy/gemini-3-flash","messages":[{"role":"user","content":"OK"}]}'</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <h2>Runs on what you already have.</h2>
+    <p class="section-lead">
+      Plain Node with no dependencies, or a Cloudflare Worker — the same <code>src/app.mjs</code> handler serves
+      both. The phone app is the same page, added to the home screen.
+    </p>
+    <div class="grid">
+      <div class="card">
+        <div class="ico">🧩</div>
+        <h3>Persona is a file</h3>
+        <p><code>src/persona.mjs</code> holds the identity rules and one contract per task: note, answer, quiz, essay, read, phrase, evolve.</p>
+      </div>
+      <div class="card">
+        <div class="ico">🔐</div>
+        <h3>Secrets stay server-side</h3>
+        <p>The key lives in <code>.env</code>, gitignored and never served — the browser only ever talks to your own API.</p>
+      </div>
+      <div class="card">
+        <div class="ico">📱</div>
+        <h3>Installable</h3>
+        <p>A PWA with a manifest and offline shell. Add to Home Screen and it opens standalone, with its own icon.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Roadmap.</h2>
+    <p class="section-lead">Shipped is shipped; the rest is named honestly.</p>
+    <div class="road">
+      <div class="road-row shipped"><span class="v">v1.0</span><p>Listening, watching, reading, quiz and essay surfaces, self-evolution memory, gateway wiring, PWA install.</p></div>
+      <div class="road-row"><span class="v">next</span><p>In-app model picker listing what the key can actually call, so switching models needs no <code>.env</code> edit.</p></div>
+      <div class="road-row"><span class="v">next</span><p>Cross-device relay: a computer watching a mirrored phone or TV feeds analysis to the phone in real time.</p></div>
+      <div class="road-row"><span class="v">next</span><p>Hands-free classroom mode that notices when a question is asked and offers the line to say, unprompted.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <p>SAGE — a course-taking agent. Part of the Innotel platform, in the Unity theme.</p>
+    <nav>
+      <a href="https://github.com/innotelinc/sage">Source</a>
+      <a href="https://github.com/innotelinc/sage/releases">Releases</a>
+      <a href="https://subscribe.innotel.us">Keys</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>

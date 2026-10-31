@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0f19" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Sage" />
+    <meta name="description" content="A course-taking agent that listens, watches, reads, evaluates, answers quizzes and writes essays in your voice." />
+    <title>Sage · course agent</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="dot" id="statusDot" title="checking…"></span>
+        <span class="brand-name" id="agentName">Sage</span>
+        <span class="tag" id="modelTag">connecting</span>
+      </div>
+      <button class="icon-btn" id="btnSettings" title="Settings" aria-label="Settings">⚙</button>
+    </header>
+
+    <nav class="tabs" id="tabs" role="tablist">
+      <button class="tab active" data-tab="live" role="tab">Live</button>
+      <button class="tab" data-tab="answer" role="tab">Answer</button>
+      <button class="tab" data-tab="quiz" role="tab">Quiz</button>
+      <button class="tab" data-tab="essay" role="tab">Essay</button>
+      <button class="tab" data-tab="read" role="tab">Read</button>
+      <button class="tab" data-tab="memory" role="tab">Memory</button>
+    </nav>
+
+    <main>
+      <!-- ── LIVE ─────────────────────────────────────────────── -->
+      <section class="panel active" id="tab-live">
+        <div class="setup hidden" id="setupCard">
+          <h3>Connect a brain</h3>
+          <p>
+            Add a model key on the machine running this app — <code>OPENAI_API_KEY</code> in <code>.env</code> — then
+            restart. Use <code>AI_BASE_URL</code> for Groq, OpenRouter or a local Ollama.
+          </p>
+          <button class="btn ghost small" id="btnRetryHealth">Check again</button>
+        </div>
+
+        <div class="capture-grid">
+          <button class="cap-btn" id="btnListen">
+            <span class="cap-ico">🎙</span>
+            <span class="cap-label">Listen</span>
+            <span class="cap-sub">lecture audio → transcript</span>
+          </button>
+          <button class="cap-btn" id="btnScreen">
+            <span class="cap-ico">🖥</span>
+            <span class="cap-label">Watch</span>
+            <span class="cap-sub">slides, screen, cast</span>
+          </button>
+          <button class="cap-btn" id="btnCamera">
+            <span class="cap-ico">📷</span>
+            <span class="cap-label">Aim</span>
+            <span class="cap-sub">board or TV camera</span>
+          </button>
+          <button class="cap-btn danger" id="btnStopAll">
+            <span class="cap-ico">⏹</span>
+            <span class="cap-label">Stop</span>
+            <span class="cap-sub">end all capture</span>
+          </button>
+        </div>
+
+        <div class="statusline">
+          <span id="captureStatus">Idle. Nothing is being recorded.</span>
+          <span class="counters" id="counters"></span>
+        </div>
+
+        <div class="live-grid">
+          <div class="col">
+            <div class="col-head">
+              <h4>Hearing</h4>
+              <button class="mini" id="btnClearTranscript">clear</button>
+            </div>
+            <div class="feed" id="transcript"><p class="empty">No audio yet. Tap Listen.</p></div>
+          </div>
+          <div class="col">
+            <div class="col-head">
+              <h4>Knowing</h4>
+              <button class="mini" id="btnClearNotes">clear</button>
+            </div>
+            <div class="feed" id="liveNotes"><p class="empty">Notes appear here as it understands.</p></div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn primary" id="btnAnswerNow">Answer last question</button>
+          <button class="btn" id="btnSay">What do I say?</button>
+          <label class="switch"><input type="checkbox" id="ttsToggle" checked /> speak answers</label>
+        </div>
+
+        <div class="ask-row">
+          <input id="liveAskInput" type="text" placeholder="Ask it anything about what's on screen…" />
+          <button class="btn" id="btnLiveAsk">Ask</button>
+        </div>
+
+        <div class="result" id="liveAnswer" hidden></div>
+      </section>
+
+      <!-- ── ANSWER ───────────────────────────────────────────── -->
+      <section class="panel" id="tab-answer">
+        <p class="hint">
+          A question from a quiz slide, a worksheet, or your own curiosity. Attach a photo of the question if it is
+          easier to show than to type.
+        </p>
+        <textarea id="answerText" rows="4" placeholder="Paste the question…"></textarea>
+        <div class="field-row">
+          <label class="file-btn">
+            <input type="file" id="answerFiles" accept="image/*" multiple hidden />
+            <span id="answerFilesLabel">＋ photo of question</span>
+          </label>
+          <span class="mini muted" id="answerFileCount"></span>
+        </div>
+        <div class="thumbs" id="answerThumbs"></div>
+        <button class="btn primary block" id="btnAnswer">Answer it</button>
+        <div class="result" id="answerResult" hidden></div>
+      </section>
+
+      <!-- ── QUIZ ─────────────────────────────────────────────── -->
+      <section class="panel" id="tab-quiz">
+        <p class="hint">
+          Paste the whole quiz — separate questions with a blank line. It answers in order, one decision at a time.
+          You can also attach the printed page as a photo.
+        </p>
+        <textarea id="quizText" rows="7" placeholder="1. Which organelle…&#10;&#10;2. A 3 kg block…"></textarea>
+        <div class="field-row">
+          <label class="file-btn">
+            <input type="file" id="quizFiles" accept="image/*" multiple hidden />
+            <span id="quizFilesLabel">＋ photo of quiz</span>
+          </label>
+          <span class="mini muted" id="quizFileCount"></span>
+        </div>
+        <div class="thumbs" id="quizThumbs"></div>
+        <div class="actions">
+          <button class="btn primary" id="btnQuizSolve">Solve all</button>
+          <button class="btn ghost" id="btnQuizStop" disabled>Stop</button>
+        </div>
+        <div class="quiz-progress mini muted" id="quizProgress"></div>
+        <div id="quizResults" class="stack"></div>
+      </section>
+
+      <!-- ── ESSAY ────────────────────────────────────────────── -->
+      <section class="panel" id="tab-essay">
+        <p class="hint">Give it the prompt and the material. It writes in your voice, cites only what you gave it.</p>
+        <input id="essayTopic" type="text" placeholder="Essay question or title" />
+        <textarea id="essayRubric" rows="2" placeholder="Rubric / what earns marks (optional)"></textarea>
+        <textarea id="essaySources" rows="4" placeholder="Source material, quotes, lecture notes it may rely on (optional)"></textarea>
+        <div class="field-row">
+          <label class="inline-field">words <input id="essayWords" type="number" min="150" max="4000" step="50" value="800" /></label>
+          <label class="inline-field">tone
+            <select id="essayTone">
+              <option value="">as me</option>
+              <option value="academic">academic</option>
+              <option value="punchy">punchy</option>
+              <option value="reflective">reflective</option>
+              <option value="technical">technical</option>
+            </select>
+          </label>
+        </div>
+        <button class="btn primary block" id="btnEssay">Write it</button>
+        <div class="result" id="essayResult" hidden>
+          <div class="result-head"><span class="result-tag">Draft</span>
+            <span class="result-tools"><button class="mini" id="btnEssayCopy">copy</button><button class="mini" id="btnEssayDownload">.md</button></span>
+          </div>
+          <div class="prose" id="essayOutput"></div>
+        </div>
+      </section>
+
+      <!-- ── READ ─────────────────────────────────────────────── -->
+      <section class="panel" id="tab-read">
+        <p class="hint">
+          Drop in slides, screenshots, a phone screen recording, or paste a chapter. Video is sampled into frames, so
+          an iOS screen recording works here.
+        </p>
+        <label class="file-btn block">
+          <input type="file" id="readFiles" accept="image/*,video/*,.txt,.md,.csv,.vtt,.srt" multiple hidden />
+          <span id="readFilesLabel">＋ files, photos, screen recording</span>
+        </label>
+        <div class="thumbs" id="readThumbs"></div>
+        <textarea id="readPaste" rows="4" placeholder="…or paste text / notes here"></textarea>
+        <button class="btn primary block" id="btnRead">Read &amp; extract</button>
+        <div class="result" id="readResult" hidden><div class="prose" id="readOutput"></div></div>
+      </section>
+
+      <!-- ── MEMORY ───────────────────────────────────────────── -->
+      <section class="panel" id="tab-memory">
+        <p class="hint">What it has learned about this course and about you. Everything here is fed back in next time.</p>
+        <div class="actions">
+          <button class="btn primary" id="btnEvolve">Evolve</button>
+          <button class="btn ghost" id="btnExport">Export</button>
+          <button class="btn ghost" id="btnClearMemory">Wipe</button>
+        </div>
+        <div class="ask-row">
+          <input id="memoryAdd" type="text" placeholder="Teach it something durable…" />
+          <button class="btn" id="btnMemoryAdd">Add</button>
+        </div>
+        <h4 class="section-title">Evolved behaviour</h4>
+        <div id="traitsList" class="chips"></div>
+        <h4 class="section-title">Notes <span class="mini muted" id="memoryCount"></span></h4>
+        <div id="memoryList" class="stack"></div>
+        <h4 class="section-title">Evolution log</h4>
+        <div id="evolutionLog" class="stack"></div>
+      </section>
+    </main>
+
+    <dialog id="settingsDialog">
+      <form method="dialog" id="settingsForm">
+        <h3>Settings</h3>
+        <div class="grid2">
+          <label>Agent name <input id="setName" type="text" maxlength="30" /></label>
+          <label>Course <input id="setCourse" type="text" maxlength="120" placeholder="e.g. BIO 201 · Physiology" /></label>
+          <label>Tone
+            <select id="setTone">
+              <option value="warm">warm</option>
+              <option value="plain">plain</option>
+              <option value="formal">formal</option>
+              <option value="blunt">blunt</option>
+            </select>
+          </label>
+          <label>Depth
+            <select id="setDepth">
+              <option value="balanced">balanced</option>
+              <option value="concise">concise</option>
+              <option value="detailed">detailed</option>
+            </select>
+          </label>
+          <label>Humour <input id="setHumour" type="range" min="0" max="5" step="1" /></label>
+          <label>Risk <input id="setRisk" type="range" min="0" max="5" step="1" /></label>
+          <label>Language <input id="setLanguage" type="text" placeholder="auto" maxlength="40" /></label>
+          <label>Note cadence (s) <input id="setInterval" type="number" min="8" max="120" step="2" /></label>
+          <label class="span2">Access code <input id="setAccess" type="password" placeholder="only if the server sets ACCESS_CODE" /></label>
+        </div>
+        <label class="check"><input type="checkbox" id="setAutoNotes" /> auto-analyse capture</label>
+        <label class="check"><input type="checkbox" id="setTts" /> speak answers aloud</label>
+        <div class="dialog-actions">
+          <button type="button" class="btn ghost" id="btnTestConn">Test</button>
+          <button type="submit" class="btn primary" id="btnSaveSettings">Save</button>
+        </div>
+        <p class="mini muted" id="settingsStatus"></p>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" hidden></div>
+    <video id="srcVideo" playsinline muted hidden></video>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
