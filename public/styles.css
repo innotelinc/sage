@@ -73,6 +73,12 @@ body {
   font-size: 17px;
   cursor: pointer;
   flex: none;
+  /* Also used by the About link, which is an anchor and must not sit inline. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  padding: 0;
 }
 .icon-btn:active { transform: scale(0.96); }
 

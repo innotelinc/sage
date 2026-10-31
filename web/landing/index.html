@@ -3,11 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SAGE — Course-Taking Agent — Platform</title>
-  <meta name="description" content="SAGE listens to the lecture, watches the slides, reads the material, evaluates what matters, answers quizzes and writes essays in your voice — self-hosted, gateway-backed, installable on a phone.">
-  <meta property="og:title" content="SAGE — Course-Taking Agent — Platform">
+  <title>About SAGE — Course-Taking Agent</title>
+  <meta name="description" content="About SAGE: it listens to the lecture, watches the slides, reads the material, evaluates what matters, answers quizzes and writes essays in your voice — self-hosted, gateway-backed, installable on a phone.">
+  <meta property="og:title" content="About SAGE — Course-Taking Agent">
   <meta property="og:description" content="A course-taking agent that listens, watches, reads, evaluates, answers, and writes — then evolves between classes.">
   <meta property="og:type" content="website">
+  <meta property="og:url" content="https://sage.innotel.tech/about">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b0d10'/%3E%3Cpath d='M16 6c0 5.5-4.5 10-10 10 5.5 0 10 4.5 10 10 0-5.5 4.5-10 10-10-5.5 0-10-4.5-10-10z' fill='%236ee7b7'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="unity-theme.css">
   <script>window.UNITY_DEFAULT_SCHEME = "operations";</script>
@@ -59,6 +60,12 @@
       color: var(--ink); font-size: 14px; transition: border-color .15s, background .15s;
     }
     .topbar .gh:hover { border-color: var(--brand); background: var(--brand-soft); color: var(--ink); }
+    /* The About page is one hop from the app; the app is the product. */
+    .topbar .btn-open {
+      margin-left: 4px; padding: 7px 14px; border-radius: var(--radius);
+      background: var(--brand); color: #04120c; font-size: 14px; font-weight: 600;
+    }
+    .topbar .btn-open:hover { background: var(--brand-ring); color: #04120c; }
 
     /* ---- Hero ---- */
     .hero { position: relative; overflow: hidden; padding: 92px 0 64px; }
@@ -195,7 +202,7 @@
       th, td { padding: 11px 12px; font-size: 13px; }
     }
   </style>
-  <link rel="canonical" href="https://sage.innotel.tech/" />
+  <link rel="canonical" href="https://sage.innotel.tech/about" />
 </head>
 <body>
 
@@ -213,13 +220,14 @@
       <a href="#gateway">Gateway</a>
       <a href="#start">Get started</a>
       <a class="gh" href="https://github.com/innotelinc/sage">GitHub</a>
+      <a class="btn-open" href="/">Open the app</a>
     </nav>
   </div>
 </div>
 
 <header class="hero" id="top">
   <div class="wrap hero-inner">
-    <span class="kicker">v1.1 &middot; course-taking agent &middot; a product of Innotel Labs</span>
+    <span class="kicker">About &middot; v1.1 &middot; course-taking agent &middot; a product of Innotel Labs</span>
     <h1>The class, taken for you.<br><span class="dim">In your own voice.</span></h1>
     <p class="lead">
       <strong>SAGE</strong> sits in the lecture, watches the slides, reads the material, and answers when it counts —
@@ -227,8 +235,9 @@
       <strong>evolves between classes</strong> from what it got right. Self-hosted, installable on a phone.
     </p>
     <div class="cta">
-      <a class="btn btn-primary" href="#start">Get started</a>
+      <a class="btn btn-primary" href="/">Open the app</a>
       <a class="btn btn-ghost" href="https://github.com/innotelinc/sage">Read the source</a>
+      <a class="btn btn-ghost" href="#start">Self-host it</a>
     </div>
 
     <div class="term">
@@ -417,7 +426,6 @@
       <div class="road-row shipped"><span class="v">v1.0</span><p>Listening, watching, reading, quiz and essay surfaces, self-evolution memory, gateway wiring, PWA install.</p></div>
       <div class="road-row shipped"><span class="v">v1.1</span><p>Study mode with automatic question detection, and the cross-device relay for mirrored phones, tablets and cast windows.</p></div>
       <div class="road-row"><span class="v">next</span><p>In-app model picker listing what the key can actually call, so switching models needs no <code>.env</code> edit.</p></div>
-      <div class="road-row"><span class="v">next</span><p>Cross-device relay: a computer watching a mirrored phone or TV feeds analysis to the phone in real time.</p></div>
       <div class="road-row"><span class="v">next</span><p>Hands-free classroom mode that notices when a question is asked and offers the line to say, unprompted.</p></div>
     </div>
   </div>
@@ -427,6 +435,7 @@
   <div class="wrap foot">
     <p>SAGE — a course-taking agent. A product of <a href="https://innotel.us">Innotel Labs</a>, in the Unity theme.</p>
     <nav>
+      <a href="/">Open the app</a>
       <a href="https://github.com/innotelinc/sage">Source</a>
       <a href="https://github.com/innotelinc/sage/releases">Releases</a>
       <a href="https://innotel.us">Innotel Labs</a>

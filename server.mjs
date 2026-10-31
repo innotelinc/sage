@@ -13,6 +13,9 @@ import { handleRequest } from './src/app.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(root, 'public');
+// The About page is the landing page from web/landing (the same tree GitHub
+// Pages publishes). It is served at /about, not at / — the root is the app.
+const aboutDir = path.join(root, 'web', 'landing');
 
 // Minimal .env loader (never overrides real environment variables).
 try {
@@ -64,10 +67,10 @@ function toRequest(req, body) {
   });
 }
 
-async function sendStatic(req, res, pathname) {
+async function sendStatic(req, res, pathname, baseDir = publicDir) {
   const relative = decodeURIComponent(pathname).replace(/^\/+/, '');
-  const target = path.join(publicDir, relative || 'index.html');
-  if (!target.startsWith(publicDir)) {
+  const target = path.join(baseDir, relative || 'index.html');
+  if (target !== baseDir && !target.startsWith(baseDir + path.sep)) {
     res.writeHead(403).end('Forbidden');
     return;
   }
@@ -92,6 +95,13 @@ async function sendStatic(req, res, pathname) {
   }
 }
 
+// /about and anything under /about/* come out of the landing tree, so the page,
+// its stylesheet and its theme script keep working at their own paths.
+async function sendAbout(req, res, pathname) {
+  const relative = pathname.replace(/^\/about\/?/, '');
+  await sendStatic(req, res, relative, aboutDir);
+}
+
 async function handler(req, res) {
   const url = new URL(req.url, 'http://localhost');
 
@@ -106,6 +116,11 @@ async function handler(req, res) {
       console.error('API error:', error);
       res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'server_error', message: error.message }));
     }
+    return;
+  }
+
+  if (url.pathname === '/about' || url.pathname.startsWith('/about/')) {
+    await sendAbout(req, res, url.pathname);
     return;
   }
 

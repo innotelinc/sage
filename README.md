@@ -39,7 +39,8 @@ interface follows the shared **Unity** theme, and the whole thing runs on plain 
 >
 > **A product of [Innotel Labs](https://innotel.us)** — applied AI, learning platforms, and the systems behind them.
 >
-> **Website:** [sage.innotel.tech](https://sage.innotel.tech) ·
+> **App:** [sage.innotel.tech](https://sage.innotel.tech) ·
+> **About:** [sage.innotel.tech/about](https://sage.innotel.tech/about) ·
 > **Releases:** [github.com/innotelinc/sage/releases](https://github.com/innotelinc/sage/releases)
 
 ---
@@ -165,8 +166,13 @@ src/app.mjs       /api/health, /api/chat (vision-aware), /api/transcribe — sta
 public/           the app: capture pipeline, feeds, quiz/essay surfaces, memory, PWA shell
 server.mjs        zero-dependency Node server: static files, API bridge, LAN URLs
 worker.mjs        Cloudflare Worker entry — same handler, ASSETS binding
-web/landing/      Unity-styled landing page, published to GitHub Pages
+web/landing/      Unity-styled About page, served at /about; published to GitHub Pages too
 ```
+
+The app owns the root. `web/landing/` is served at `/about` (and everything under it,
+stylesheet and theme script included) rather than at `/`, so the marketing page cannot
+stand in front of the thing you came to use. The same tree is what the Pages workflow
+publishes to innotelinc.github.io/sage.
 
 The API handler is written against standard `Request`/`Response`, so the Node server and the Worker share one
 code path. Nothing is duplicated between runtimes.
