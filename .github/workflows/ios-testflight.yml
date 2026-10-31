@@ -48,6 +48,7 @@ jobs:
           npm install --no-audit --no-fund --no-save @capacitor/core @capacitor/cli @capacitor/ios
           if [ ! -d ios ]; then npx cap add ios; fi
           npx cap sync ios
+          echo "generated layout:"; ls -1 ios/App
 
       - name: Merge usage descriptions into Info.plist
         run: |
@@ -61,8 +62,17 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}" "$PLIST"
 
-      - name: Install CocoaPods dependencies
-        run: pod install --project-directory=ios/App
+      - name: Install native dependencies
+        run: |
+          # Capacitor 7 shipped a Podfile; Capacitor 8 (what we install) moved
+          # iOS to Swift Package Manager and has none. Support both instead of
+          # assuming CocoaPods.
+          if [ -f ios/App/Podfile ]; then
+            echo "CocoaPods project - running pod install"
+            pod install --project-directory=ios/App
+          else
+            echo "No Podfile - SPM-based project, xcodebuild resolves packages"
+          fi
 
       - name: Archive
         env:
@@ -70,8 +80,27 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
+          if [ -d ios/App/App.xcworkspace ]; then
+            CONTAINER="-workspace ios/App/App.xcworkspace"
+          else
+            CONTAINER="-project ios/App/App.xcodeproj"
+          fi
+          echo "building with $CONTAINER"
           xcodebuild \
-            -workspace ios/App/App.xcworkspace \
+            $CONTAINER \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Sage.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            -resolvePackageDependencies
+
+          xcodebuild \
+            $CONTAINER \
             -scheme App \
             -configuration Release \
             -sdk iphoneos \
