@@ -1,0 +1,18 @@
+[Unit]
+Description=Kokoro speech for SAGE (CPU)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/kokoro
+Environment=KOKORO_HOST=127.0.0.1
+Environment=KOKORO_PORT=8880
+# The model is memory-mapped per request; one worker keeps the footprint flat.
+Environment=OMP_NUM_THREADS=2
+ExecStart=/opt/kokoro/venv/bin/python /opt/kokoro/service.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

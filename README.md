@@ -140,6 +140,23 @@ in order of fidelity:
 Relay frames live in the server process and expire after ten idle minutes, so the relay needs the single Node
 server rather than a multi-isolate Worker deployment.
 
+## Voice
+
+Answers are read aloud. The default is the browser`s own `speechSynthesis`, which is free and instant but sounds
+like a screen reader and differs on every device. Point `TTS_URL` at the bundled Kokoro sidecar and the same
+replies come from **Kokoro-82M** instead — Apache-2.0, ~340 MB of ONNX, faster than realtime on a couple of CPU
+cores, so no GPU and no per-character bill.
+
+```bash
+TTS_URL=http://127.0.0.1:8880
+TTS_VOICE=af_heart      # af_bella, af_nicole, am_michael, bf_emma, bm_george …
+TTS_SPEED=1
+```
+
+`deploy/kokoro/` carries the service, the systemd unit and the model fetch. It is `kokoro-onnx`, not the torch
+build, precisely so a CPU host can serve it. With no `TTS_URL` the app keeps working and the client falls back to
+the browser — speech is never a hard dependency.
+
 ## Architecture
 
 ```

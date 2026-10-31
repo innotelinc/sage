@@ -4,6 +4,7 @@
  */
 import { buildSystemPrompt, parseMemory, parseStructured, MODES } from './persona.mjs';
 import { handleRelay } from './relay.mjs';
+import { synthesize, ttsConfig } from './tts.mjs';
 
 const MAX_IMAGES = 6;
 const MAX_TEXT = 24000;
@@ -198,6 +199,30 @@ export async function handleRequest(request, env = {}) {
 
   if (url.pathname.startsWith('/api/relay/')) {
     return handleRelay(request, url, json);
+  }
+
+  if (url.pathname === '/api/tts/status' && request.method === 'GET') {
+    const voice = ttsConfig(env);
+    return json({ available: voice.enabled, voice: voice.voice, speed: voice.speed, fallback: 'browser' });
+  }
+
+  if (url.pathname === '/api/tts' && request.method === 'POST') {
+    const body = await request.json().catch(() => null);
+    if (!body) return json({ error: 'bad_json', message: 'Body must be JSON.' }, 400);
+    try {
+      const spoken = await synthesize(body.text, { voice: body.voice, speed: body.speed }, env);
+      if (!spoken) {
+        return json(
+          { error: 'no_voice', message: 'No local voice is configured, so the browser will speak instead.', fallback: 'browser' },
+          503
+        );
+      }
+      return new Response(spoken.audio, {
+        headers: { 'content-type': spoken.type, 'cache-control': 'private, max-age=86400' },
+      });
+    } catch (error) {
+      return json({ error: 'voice_failed', message: error.message, fallback: 'browser' }, 502);
+    }
   }
 
   if (url.pathname === '/api/chat' && request.method === 'POST') {

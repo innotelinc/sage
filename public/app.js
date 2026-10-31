@@ -8,7 +8,7 @@ const LS_KEY = 'sage.course-agent.v1';
 const defaultState = () => ({
   persona: { name: 'Sage', course: '', tone: 'warm', depth: 'balanced', humour: 3, risk: 2, traits: [] },
   language: '',
-  settings: { tts: true, autoNotes: true, noteIntervalSec: 20, snapSec: 6, accessCode: '' },
+  settings: { tts: true, autoNotes: true, noteIntervalSec: 20, snapSec: 6, accessCode: '', ttsVoice: '' },
   memory: [],
   evolution: [],
   session: { transcript: [], notes: [] },
@@ -706,17 +706,51 @@ let voices = [];
 function loadVoices() {
   voices = window.speechSynthesis?.getVoices?.() || [];
 }
-function speak(text) {
+let currentAudio = null;
+
+async function speakLocal(text) {
+  try {
+    const headers = { 'content-type': 'application/json' };
+    if (state.settings.accessCode) headers['x-access-code'] = state.settings.accessCode;
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ text: text.slice(0, 1500), voice: state.settings.ttsVoice || '' }),
+    });
+    if (!res.ok) return false;
+    const blob = await res.blob();
+    if (!blob.size) return false;
+    const url = URL.createObjectURL(blob);
+    if (currentAudio) currentAudio.pause();
+    currentAudio = new Audio(url);
+    currentAudio.onended = () => URL.revokeObjectURL(url);
+    await currentAudio.play();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function cleanForSpeech(text) {
+  return String(text)
+    .replace(/[`*_#]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function speak(text) {
   if (!text) return;
+  const clean = cleanForSpeech(text);
+  if (!clean) return;
+
+  // A local Kokoro voice first: smoother than any system voice and identical on
+  // every device. Falls back to the browser when it is not configured.
+  if (await speakLocal(clean)) return;
+
   if (!('speechSynthesis' in window)) {
     toast('This browser has no speech output.', 'error');
     return;
   }
-  const clean = String(text)
-    .replace(/\*\*|__|\*|_|`|#/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!clean) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(clean.slice(0, 900));
   const want = (state.language || 'en').slice(0, 2).toLowerCase();
