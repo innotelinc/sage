@@ -36,6 +36,8 @@ interface follows the shared **Unity** theme, and the whole thing runs on plain 
 > turn. It ships wired to the **Innotel OmniRoute** gateway, works with any OpenAI-compatible endpoint, and
 > runs unchanged as a Node process or a Cloudflare Worker.
 >
+> **A product of [Innotel Labs](https://innotel.us)** — applied AI, learning platforms, and the systems behind them.
+>
 > **Landing page:** [innotelinc.github.io/sage](https://innotelinc.github.io/sage) ·
 > **Releases:** [github.com/innotelinc/sage/releases](https://github.com/innotelinc/sage/releases)
 
@@ -72,10 +74,30 @@ A web page cannot read an iPhone screen or a cast stream. This is what actually 
 | Android Chrome — whole phone screen | **yes** | *Watch* → pick the screen, including other apps |
 | Desktop browser — tab, window or screen | **yes** | *Watch* → pick the surface |
 | Mirrored iPhone (AirPlay to a Mac/PC) | **yes** | *Watch* the mirroring window |
-| iPhone screen directly | **no** | iOS has no capture API — Control Center recording, then upload in *Read* (frames are sampled) |
+| iPhone screen directly | **no** | iOS has no capture API — mirror it to a computer and use the **relay**, or upload a screen recording in *Read* |
 | Camera — board, projector, TV | **yes** | *Aim* |
 | TV cast stream (Chromecast / AirPlay) | **no** | The stream never reaches the page — aim the camera, or capture on the receiving computer |
 | Worksheet, textbook page | **yes** | Photo → *Answer* or *Read* |
+
+## Study mode (hands-free)
+
+One toggle starts the behaviour that matters in a lecture: the mic and the screen run together, notes accumulate,
+and when a question shows up in the transcript it answers on its own — throttled to one answer every 45 seconds so
+it does not fill the room with text. Nothing to tap while the class is moving.
+
+## Reading another app on the same phone
+
+You cannot study in one app and capture that app from a web page on iOS — the platform forbids it. Three paths,
+in order of fidelity:
+
+| Setup | What happens |
+| --- | --- |
+| **Android — direct capture** | Start *Watch*, choose the whole screen, then switch to the course app. Sage keeps sampling frames and reading what is on screen, with the audio. |
+| **iPhone / TV — mirror + relay** | Mirror the phone to a Mac or PC (AirPlay, or a QuickTime recording window). Open `/relay.html` there, share the mirrored window, and it publishes frames under a short code. Join that code in *Live* on the phone: analysis appears on the phone while the course app stays in front. A TV cast window works the same way. |
+| **iPhone — recording** | Record the screen from Control Center and upload the video in *Read*. Best for material you can replay, not for live answers. |
+
+Relay frames live in the server process and expire after ten idle minutes, so the relay needs the single Node
+server rather than a multi-isolate Worker deployment.
 
 ## Architecture
 
@@ -125,12 +147,12 @@ live in the device's `localStorage`; the server keeps no state. If you expose th
 ## Roadmap
 
 - **v1.0** — shipped: listening, watching, reading, quiz and essay surfaces, self-evolution memory, gateway wiring, PWA install.
+- **v1.1** — shipped: hands-free study mode with automatic question detection, and the cross-device relay for mirrored phones, tablets and cast windows.
 - In-app model picker that lists what a key can actually call.
-- Cross-device relay from a computer capturing a mirrored phone or TV.
-- Hands-free classroom mode that offers the line to say, unprompted.
+- Native iOS capture, which no web page can do.
 
 ---
 
 <div align="center">
-<sub>Part of the Innotel platform · Unity theme · <a href="https://innotelinc.github.io/sage">innotelinc.github.io/sage</a></sub>
+<sub>A product of <a href="https://innotel.us">Innotel Labs</a> · Unity theme · <a href="https://innotelinc.github.io/sage">innotelinc.github.io/sage</a></sub>
 </div>

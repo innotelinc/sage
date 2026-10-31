@@ -402,6 +402,18 @@ dialog h3 { margin-bottom: 14px; }
 }
 .toast.error { border-color: rgba(248, 113, 113, 0.5); background: #2a1214; }
 
+.study-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; margin: 12px 0 4px;
+  border: 1px solid rgba(110, 231, 183, 0.28);
+  background: linear-gradient(180deg, rgba(110, 231, 183, 0.09), rgba(110, 231, 183, 0.02));
+  border-radius: var(--radius);
+}
+.study-bar .btn { flex: none; }
+.study-note { font-size: 12px; color: var(--muted); max-width: 46ch; }
+.relay-row input { flex: 1; }
+#relayStatus { margin: 6px 2px 0; }
+
 @media (min-width: 720px) {
   .live-grid { grid-template-columns: 1fr 1fr; }
   .capture-grid { grid-template-columns: repeat(4, 1fr); }

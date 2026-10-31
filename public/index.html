@@ -67,6 +67,11 @@
           </button>
         </div>
 
+        <div class="study-bar">
+          <button class="btn primary" id="btnStudy">Start study mode</button>
+          <span class="study-note" id="studyNote">Listens and watches at the same time, answers when a question appears.</span>
+        </div>
+
         <div class="statusline">
           <span id="captureStatus">Idle. Nothing is being recorded.</span>
           <span class="counters" id="counters"></span>
@@ -94,6 +99,12 @@
           <button class="btn" id="btnSay">What do I say?</button>
           <label class="switch"><input type="checkbox" id="ttsToggle" checked /> speak answers</label>
         </div>
+
+        <div class="ask-row relay-row">
+          <input id="relayCode" type="text" maxlength="12" placeholder="Relay code from your computer…" />
+          <button class="btn" id="btnRelayJoin">Join</button>
+        </div>
+        <p class="mini muted" id="relayStatus" hidden></p>
 
         <div class="ask-row">
           <input id="liveAskInput" type="text" placeholder="Ask it anything about what's on screen…" />

@@ -215,6 +215,7 @@ const cap = {
   listenOn: false,
   watchOn: false,
   cameraOn: false,
+  study: false,
 };
 
 function recLang() {
@@ -263,6 +264,7 @@ function pushTranscript(text, meta = {}) {
   feed.appendChild(div);
   while (feed.children.length > 200) feed.firstElementChild.remove();
   scrollFeed(feed);
+  maybeAutoAnswer(text);
   if (state.settings.autoNotes) {
     cap.queue.push(text);
     if (cap.queue.join(' ').length > 700) flushTranscript();
@@ -801,6 +803,153 @@ async function whatDoISay() {
   }
 }
 
+/* ── study mode: listen + watch, answer without being asked ── */
+let studyTimer = null;
+let lastAutoAnswer = 0;
+const QUESTION_HINT = /(\?\s*$)|(\b(what|why|how|which|who|when|where|define|explain|describe|calculate|solve|state|name|list|compare|true or false|fill in the blank)\b)/i;
+
+function setStudyUi(on) {
+  cap.study = on;
+  const button = $('btnStudy');
+  if (!button) return;
+  button.textContent = on ? 'Stop study mode' : 'Start study mode';
+  button.classList.toggle('danger', on);
+  $('studyNote').textContent = on
+    ? 'Listening and watching. Answers arrive on their own when a question appears.'
+    : 'Listens and watches at the same time, answers when a question appears.';
+}
+
+async function toggleStudyMode() {
+  if (cap.study) return stopStudyMode();
+  setStudyUi(true);
+  if (!cap.listenOn) await startListening();
+  if (!cap.watchOn && !cap.cameraOn) {
+    if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) await toggleWatch();
+    else await toggleCamera();
+  }
+  stopStudyTimer();
+  studyTimer = setInterval(studyTick, 20000);
+  toast('Study mode on. It will answer questions as they appear.');
+}
+
+function stopStudyTimer() {
+  if (studyTimer) {
+    clearInterval(studyTimer);
+    studyTimer = null;
+  }
+}
+
+function stopStudyMode() {
+  stopStudyTimer();
+  setStudyUi(false);
+  stopListening();
+  stopWatch();
+  stopCamera();
+  toast('Study mode off.');
+}
+
+async function studyTick() {
+  if (!cap.study) return;
+  await flushTranscript();
+  if (cap.frame) await analyseFrame(cap.frame);
+}
+
+function maybeAutoAnswer(text) {
+  if (!cap.study) return;
+  if (!QUESTION_HINT.test(text)) return;
+  if (Date.now() - lastAutoAnswer < 45000) return;
+  lastAutoAnswer = Date.now();
+  autoAnswer(text);
+}
+
+async function autoAnswer(trigger) {
+  try {
+    const transcript = state.session.transcript.slice(-8).map(function (t) { return t.text; }).join(' ');
+    const notes = state.session.notes.slice(-3).map(function (n) { return n.text; }).join('\n');
+    const res = await agent('answer', {
+      text:
+        'A question was just asked in class. Answer it before the pause ends.\n\n' +
+        'Just said:\n' + transcript.slice(-2500) +
+        '\n\nNotes so far:\n' + notes.slice(-900) +
+        '\n\nTrigger: ' + String(trigger).slice(0, 200),
+      images: cap.frame ? [cap.frame] : [],
+    });
+    renderAnswer(res, $('liveAnswer'));
+  } catch (error) {
+    console.warn('auto answer failed', error.message);
+  }
+}
+
+/* ── relay: another device captures, this one thinks ── */
+const relay = { code: '', timer: null, lastAt: 0 };
+
+async function joinRelay() {
+  const input = $('relayCode');
+  const code = (input.value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!/^[a-z0-9]{4,12}$/.test(code)) {
+    toast('Enter the code shown on the relay page.');
+    return;
+  }
+  stopRelay();
+  relay.code = code;
+  relay.lastAt = 0;
+  $('relayStatus').hidden = false;
+  $('relayStatus').textContent = 'Waiting for frames from ' + code + '…';
+  try {
+    const first = await api('/api/relay/' + code + '/latest?since=0');
+    relay.lastAt = first.at || 0;
+    if (first.image) {
+      cap.frame = first.image;
+      cap.frames += 1;
+    }
+  } catch (error) {
+    $('relayStatus').textContent = error.message;
+  }
+  relay.timer = setInterval(relayTick, 4000);
+  input.readOnly = true;
+  $('btnRelayJoin').textContent = 'Leave';
+}
+
+function stopRelay() {
+  if (relay.timer) {
+    clearInterval(relay.timer);
+    relay.timer = null;
+  }
+  relay.code = '';
+  relay.lastAt = 0;
+  const input = $('relayCode');
+  const status = $('relayStatus');
+  if (input) input.readOnly = false;
+  if (input) input.value = '';
+  if (status) status.hidden = true;
+  const button = $('btnRelayJoin');
+  if (button) button.textContent = 'Join';
+}
+
+async function relayTick() {
+  if (!relay.code) return;
+  try {
+    const res = await api('/api/relay/' + relay.code + '/latest?since=' + relay.lastAt);
+    if (res.at) relay.lastAt = res.at;
+    if (!res.image) return;
+    cap.frame = res.image;
+    cap.frames += 1;
+    $('relayStatus').textContent = 'Relay ' + relay.code + ' · ' + res.frames + ' frames received · live';
+    updateStatus();
+    if (state.settings.autoNotes) analyseFrame(res.image);
+  } catch (error) {
+    const message = String(error.message || '');
+    if (message.indexOf('Nothing is sharing') !== -1) {
+      $('relayStatus').textContent = 'Relay ' + relay.code + ' is not sharing yet.';
+    }
+  }
+}
+
+function toggleRelay() {
+  if (relay.timer) stopRelay();
+  else joinRelay();
+}
+
 /* ── image/file utilities ──────────────────────────────────── */
 function readAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -1156,12 +1305,18 @@ function bind() {
   $('btnScreen').onclick = toggleWatch;
   $('btnCamera').onclick = toggleCamera;
   $('btnStopAll').onclick = () => {
+    stopStudyTimer();
+    setStudyUi(false);
+    stopRelay();
     stopListening();
     stopWatch();
     stopCamera();
     showInterim('');
     toast('All capture stopped.');
   };
+
+  $('btnStudy').onclick = toggleStudyMode;
+  $('btnRelayJoin').onclick = toggleRelay;
 
   $('ttsToggle').onchange = (event) => {
     state.settings.tts = event.target.checked;

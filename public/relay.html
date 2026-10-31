@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b0f19" />
+    <title>Relay · Sage</title>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+      .relay-wrap { max-width: 760px; margin: 0 auto; padding: 20px 16px 60px; }
+      .relay-head { display: flex; align-items: center; gap: 10px; margin: 6px 0 18px; }
+      .relay-head a { color: var(--text); font-weight: 650; text-decoration: none; letter-spacing: 0.02em; }
+      .code-box {
+        display: flex; align-items: center; justify-content: space-between; gap: 14px;
+        border: 1px solid rgba(110, 231, 183, 0.3); border-radius: var(--radius);
+        background: linear-gradient(180deg, rgba(110, 231, 183, 0.1), rgba(110, 231, 183, 0.03));
+        padding: 16px 18px; margin-bottom: 18px; flex-wrap: wrap;
+      }
+      .code-box .code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 30px; letter-spacing: 0.22em; font-weight: 700; color: var(--accent);
+      }
+      .code-box .hint { font-size: 12px; color: var(--muted); max-width: 34ch; }
+      .preview {
+        border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+        background: #05070c; min-height: 220px; display: grid; place-items: center;
+      }
+      .preview img { width: 100%; display: block; }
+      .preview .idle { color: var(--muted); font-size: 13px; padding: 40px 20px; text-align: center; }
+      .stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+      .stats b { color: var(--text); font-weight: 600; }
+      ol.steps { margin: 26px 0 0; padding-left: 20px; color: var(--muted); font-size: 13.5px; line-height: 1.7; }
+      ol.steps b { color: var(--text); }
+      ol.steps code { background: var(--panel-2); padding: 1px 5px; border-radius: 5px; font-size: 12.5px; }
+    </style>
+  </head>
+  <body>
+    <div class="relay-wrap">
+      <div class="relay-head">
+        <span class="dot ok"></span>
+        <a href="/">SAGE</a>
+        <span class="tag">relay</span>
+      </div>
+
+      <div class="code-box">
+        <div>
+          <div class="mini muted" style="margin-bottom: 4px">JOIN THIS CODE ON YOUR PHONE</div>
+          <div class="code" id="code">······</div>
+        </div>
+        <div class="hint">
+          Frames go only to this computer's Sage server, in memory, and expire after ten idle minutes.
+        </div>
+      </div>
+
+      <div class="actions" style="margin-top: 0">
+        <button class="btn primary" id="btnStart">Start sharing</button>
+        <button class="btn ghost" id="btnStop" disabled>Stop</button>
+        <label class="inline-field">every
+          <select id="rate">
+            <option value="2000">2s</option>
+            <option value="3000" selected>3s</option>
+            <option value="6000">6s</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="preview" id="preview"><div class="idle">Nothing shared yet. Start sharing and pick the mirrored phone window or the TV.</div></div>
+      <div class="stats">
+        <span><b id="statFrames">0</b> frames sent</span>
+        <span><b id="statStatus">idle</b></span>
+        <span id="statError"></span>
+      </div>
+
+      <ol class="steps">
+        <li><b>Mirror the phone</b> to this computer — AirPlay / Screen Mirroring on a Mac, or QuickTime movie recording from an iPhone on Windows.</li>
+        <li><b>Start sharing</b> and choose the mirroring window, or a TV cast window.</li>
+        <li>On the phone, open Sage → <b>Live</b> → paste the code → <b>Join</b>. It reads frames from here while your course app stays in front.</li>
+        <li>Turn on <b>study mode</b> on the phone to have it answer questions as they appear.</li>
+      </ol>
+
+      <p class="mini muted" style="margin-top: 22px">
+        Relay needs the single Node server, because frames live in its memory. Android Chrome can capture its own
+        screen directly, so it does not need this page.
+      </p>
+    </div>
+
+    <video id="src" playsinline muted hidden></video>
+    <script type="module" src="/relay.js"></script>
+  </body>
+</html>

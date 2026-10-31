@@ -3,6 +3,7 @@
  * Cloudflare Worker entry. No dependencies, standard Request/Response only.
  */
 import { buildSystemPrompt, parseMemory, parseStructured, MODES } from './persona.mjs';
+import { handleRelay } from './relay.mjs';
 
 const MAX_IMAGES = 6;
 const MAX_TEXT = 24000;
@@ -193,6 +194,10 @@ export async function handleRequest(request, env = {}) {
 
   if (!authorised(request, cfg)) {
     return json({ error: 'unauthorised', message: 'Wrong or missing access code.' }, 401);
+  }
+
+  if (url.pathname.startsWith('/api/relay/')) {
+    return handleRelay(request, url, json);
   }
 
   if (url.pathname === '/api/chat' && request.method === 'POST') {
