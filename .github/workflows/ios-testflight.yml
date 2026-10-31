@@ -1,0 +1,122 @@
+name: iOS TestFlight
+
+# TestFlight needs macOS + Xcode. This workflow is the route from this repo to
+# App Store Connect with no Mac of your own and no certificate files stored
+# anywhere: signing is automatic, driven by the App Store Connect API key.
+#
+# Required repository secrets:
+#   APPLE_TEAM_ID   10-character team id
+#   ASC_KEY_ID      App Store Connect API key id
+#   ASC_ISSUER_ID   App Store Connect issuer id
+#   ASC_PRIVATE_KEY contents of AuthKey_<KEY_ID>.p8 (raw text)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'ios-v*'
+
+jobs:
+  testflight:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install ASC API key
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_PRIVATE_KEY" ]; then
+            echo "ASC_KEY_ID / ASC_PRIVATE_KEY secrets are missing"; exit 1
+          fi
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+
+      - name: Configure project
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_TEAM_ID" ]; then echo "APPLE_TEAM_ID secret is missing"; exit 1; fi
+          cp deploy/ios/capacitor.config.json capacitor.config.json
+          npm install --no-audit --no-fund --no-save @capacitor/core @capacitor/cli @capacitor/ios
+          if [ ! -d ios ]; then npx cap add ios; fi
+          npx cap sync ios
+
+      - name: Merge usage descriptions into Info.plist
+        run: |
+          PLIST=ios/App/App/Info.plist
+          set_key() { /usr/libexec/PlistBuddy -c "Set :$1 $2" "$PLIST" 2>/dev/null \
+                      || /usr/libexec/PlistBuddy -c "Add :$1 string $2" "$PLIST"; }
+          set_key NSMicrophoneUsageDescription "Sage listens to your lecture so it can follow along and answer questions."
+          set_key NSCameraUsageDescription "Sage uses the camera to read slides and the whiteboard during class."
+          set_key NSPhotoLibraryUsageDescription "Sage can read a photo of a slide or handout you choose to share."
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}" "$PLIST"
+
+      - name: Install CocoaPods dependencies
+        run: pod install --project-directory=ios/App
+
+      - name: Archive
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Sage.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            archive
+
+      - name: Export .ipa
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          sed -i '' "s/REPLACE_TEAM_ID/${APPLE_TEAM_ID}/" deploy/ios/ExportOptions.plist
+          xcodebuild -exportArchive \
+            -archivePath build/Sage.xcarchive \
+            -exportOptionsPlist deploy/ios/ExportOptions.plist \
+            -exportPath build/ipa \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          IPA=$(ls build/ipa/*.ipa | head -1)
+          echo "uploading $IPA"
+          xcrun altool --upload-app --type ios --file "$IPA" \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --verbose
+
+      - name: Keep the archive for debugging
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sage-ios-archive
+          path: |
+            build/Sage.xcarchive
+            build/ipa
+          if-no-files-found: warn

@@ -701,6 +701,11 @@ function exportMemory() {
   setTimeout(() => URL.revokeObjectURL(link.href), 2000);
 }
 
+/* Native shell has no same-origin server, so absolute calls go to the API host. */
+function apiUrl(pathname) {
+  return (window.__SAGE_API__ || "") + pathname;
+}
+
 /* ── speech ────────────────────────────────────────────────── */
 let voices = [];
 function loadVoices() {
@@ -712,7 +717,7 @@ async function speakLocal(text) {
   try {
     const headers = { 'content-type': 'application/json' };
     if (state.settings.accessCode) headers['x-access-code'] = state.settings.accessCode;
-    const res = await fetch('/api/tts', {
+    const res = await fetch(apiUrl('/api/tts'), {
       method: 'POST',
       headers,
       body: JSON.stringify({ text: text.slice(0, 1500), voice: state.settings.ttsVoice || '' }),

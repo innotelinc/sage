@@ -102,10 +102,28 @@ async function sendAbout(req, res, pathname) {
   await sendStatic(req, res, relative, aboutDir);
 }
 
+// The bundled iOS shell runs on capacitor://localhost (or ionic://), a
+// different origin from this server, so API calls need explicit CORS.
+const NATIVE_ORIGINS = new Set(['capacitor://localhost', 'ionic://localhost']);
+
+function applyCors(req, res) {
+  const origin = req.headers.origin;
+  if (!origin || !NATIVE_ORIGINS.has(origin)) return;
+  res.setHeader('access-control-allow-origin', origin);
+  res.setHeader('vary', 'origin');
+  res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+  res.setHeader('access-control-allow-headers', 'content-type, x-access-code');
+  res.setHeader('access-control-max-age', '600');
+}
 async function handler(req, res) {
   const url = new URL(req.url, 'http://localhost');
 
   if (url.pathname.startsWith('/api/')) {
+    applyCors(req, res);
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204).end();
+      return;
+    }
     try {
       const body = await readBody(req);
       const response = await handleRequest(toRequest(req, body.length ? body : undefined), process.env);

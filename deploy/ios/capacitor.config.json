@@ -1,0 +1,11 @@
+{
+  "appId": "us.innotel.sage",
+  "appName": "Sage",
+  "webDir": "public",
+  "bundledWebRuntime": false,
+  "ios": {
+    "contentInset": "always",
+    "limitsNavigationsToAppBoundDomains": false,
+    "backgroundColor": "#080b12"
+  }
+}

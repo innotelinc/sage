@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Merge these keys into ios/App/App/Info.plist after `npx cap add ios`.
+
+  Sage listens to a lecture and watches the board, so both the microphone and
+  the camera are load-bearing: without these strings iOS terminates the app the
+  moment getUserMedia is called, and App Review rejects a build whose usage
+  description is missing or vague.
+-->
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Sage listens to your lecture so it can follow along and answer questions.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Sage uses the camera to read slides and the whiteboard during class.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Sage can read a photo of a slide or handout you choose to share.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Sage connects to your relay device on the local network.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+</dict>

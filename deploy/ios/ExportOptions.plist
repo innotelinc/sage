@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<!-- Export only. The upload is a separate altool step so a failed upload
+	     does not force a re-archive, and so key-based auth is explicit. -->
+	<key>destination</key>
+	<string>export</string>
+	<key>teamID</key>
+	<string>REPLACE_TEAM_ID</string>
+	<!-- Automatic signing: Xcode Cloud-style cert + profile creation driven by
+	     the App Store Connect API key, so no .p12 or .mobileprovision is stored
+	     in repository secrets. -->
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>signingCertificate</key>
+	<string>Apple Distribution</string>
+	<key>stripSwiftSymbols</key>
+	<true/>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>compileBitcode</key>
+	<false/>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>
