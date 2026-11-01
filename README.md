@@ -217,7 +217,7 @@ live in the device's `localStorage`; the server keeps no state. If you expose th
 - **v1.1** — shipped: hands-free study mode with automatic question detection, and the cross-device relay for mirrored phones, tablets and cast windows.
 - **v1.2** — shipped: automatic model choice — the app ranks the models the key in use can actually call, uses the best one, and falls back to the configured default if the gateway refuses it; and sessions bought at Magnate that install themselves from the receipt, with no key to copy.
 - **v1.3** — shipped: per-task model routing — running notes and spoken phrasing take the fastest model the key can call, while answers, quizzes and essays take the strongest; both chosen automatically, no setting to get wrong.
-- A session clock that pauses capture when a bought session's window closes, instead of spending turns on 401s.
+- **v1.4** — shipped: the session clock — a bought session's remaining minutes are shown, and capture stops by itself when the window closes instead of spending turns on 401s.
 - Native iOS capture, which no web page can do.
 
 ---

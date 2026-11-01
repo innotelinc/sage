@@ -19,6 +19,8 @@ const defaultState = () => ({
     ttsVoice: '',
     gatewayKey: '',
     gatewayBase: 'https://gateway.innotel.us/v1',
+    // Set only for a key bought as a session: the moment its window closes.
+    keyExpiresAt: '',
   },
   memory: [],
   evolution: [],
@@ -174,6 +176,10 @@ function recentContext() {
 }
 
 async function agent(mode, { text = '', images = [], maxTokens } = {}) {
+  const left = sessionRemainingMs();
+  if (left !== null && left <= 0) {
+    throw new Error('Your session ended. Buy another at magnate.innotel.us/sage and claim it in Settings.');
+  }
   const res = await api('/api/chat', {
     body: {
       mode,
@@ -1300,6 +1306,68 @@ async function runRead() {
 
 /* ── settings ──────────────────────────────────────────────── */
 /* ── gateway admin ─────────────────────────────────────────── */
+/* ── the session clock ─────────────────────────────────────── */
+/* A bought key stops working when its window closes. The clock is read from the
+   expiry the claim returned rather than from a guess, and when it runs out the
+   capture loops stop with it — otherwise every note interval and frame keeps
+   firing at the gateway and every one comes back 401. */
+function parseUtcStamp(stamp) {
+  if (!stamp) return null;
+  const raw = String(stamp).trim();
+  const iso = /(Z|[+-]\d\d:?\d\d)$/.test(raw) ? raw : raw.replace(' ', 'T') + 'Z';
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/** Milliseconds left on a bought session, or null when the key is not one. */
+function sessionRemainingMs() {
+  const ends = parseUtcStamp(state.settings.keyExpiresAt);
+  return ends === null ? null : ends - Date.now();
+}
+
+function renderSessionClock() {
+  const el = $('sessionClock');
+  if (!el) return;
+  const left = sessionRemainingMs();
+  if (left === null) {
+    el.textContent = '';
+    el.removeAttribute('data-state');
+    return;
+  }
+  if (left <= 0) {
+    el.textContent = 'Session ended — capture is paused. Buy another at magnate.innotel.us/sage.';
+    el.setAttribute('data-state', 'over');
+    return;
+  }
+  const mins = Math.floor(left / 60000);
+  const secs = Math.floor((left % 60000) / 1000);
+  el.textContent = 'Session key: ' + mins + ':' + String(secs).padStart(2, '0') + ' left on this device.';
+  el.setAttribute('data-state', 'live');
+}
+
+let sessionEndedHandled = false;
+
+function checkSessionClock() {
+  renderSessionClock();
+  const left = sessionRemainingMs();
+  if (left === null) return;
+  if (left > 0) {
+    sessionEndedHandled = false;
+    return;
+  }
+  if (sessionEndedHandled) return;
+  sessionEndedHandled = true;
+  try { stopListening(); } catch { /* already stopped */ }
+  try { stopWatch(); } catch { /* already stopped */ }
+  try { stopCamera(); } catch { /* already stopped */ }
+  if (cap.study) {
+    try { stopStudyMode(); } catch { /* already stopped */ }
+  }
+  toast('Your session ended — capture paused. Buy another session to keep going.', 'error');
+  updateStatus();
+  checkHealth();
+}
+
 /* ── keys bought at Magnate ────────────────────────────────── */
 /* The receipt page opens this app at /#claim=<code>. The code is traded for the
    key on our own server, so the browser never needs CORS access to billing, and
@@ -1320,7 +1388,14 @@ async function claimGatewayKey(token, options) {
   }
   state.settings.gatewayKey = data.key;
   state.settings.gatewayBase = base;
+  state.settings.keyExpiresAt = data.expiresAt
+    ? String(data.expiresAt)
+    : Number(data.secondsLeft)
+      ? new Date(Date.now() + Number(data.secondsLeft) * 1000).toISOString()
+      : '';
+  sessionEndedHandled = false;
   persist();
+  renderSessionClock();
   renderGatewayChips(check.models);
   showAutoModel();
   if ($('setGatewayKey')) $('setGatewayKey').value = data.key;
@@ -1370,6 +1445,13 @@ function takeClaimFromUrl() {
   }
   return found[1];
 }
+
+/* One ticker for the whole app: it redraws the clock and stops capture the
+   moment a session runs out. */
+(function startSessionClock() {
+  renderSessionClock();
+  setInterval(checkSessionClock, 1000);
+})();
 
 (function claimOnLoad() {
   const token = takeClaimFromUrl();
@@ -1480,7 +1562,11 @@ async function saveGatewayKey() {
     }
     state.settings.gatewayKey = key;
     state.settings.gatewayBase = base;
+    // A key pasted by hand carries no window; only a claim knows one.
+    state.settings.keyExpiresAt = '';
+    sessionEndedHandled = false;
     persist();
+    renderSessionClock();
     status.textContent = result.message;
     renderGatewayChips(result.models);
     showAutoModel();
