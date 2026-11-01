@@ -16,17 +16,18 @@ issuer and validity window.
 | `mail.innotel.us` | `CN=mail.innotel.us` | `mail.innotel.us` | 9 Jan 2027 | OK |
 | `onyx.innotel.us` | `CN=onyx.innotel.us` | `*.onyx.innotel.us`, `onyx.innotel.us` | 14 Dec 2026 | OK |
 | `sage.lab.innotel.us` | `CN=lab.innotel.us` | `*.lab.innotel.us`, `lab.innotel.us` | 14 Dec 2026 | OK (wildcard) |
-| `sage.innotel.tech` | `CN=lab.innotel.us` | `*.lab.innotel.us`, `lab.innotel.us` | 14 Dec 2026 | **BROKEN** |
+| `sage.innotel.tech` | `CN=innotel.tech` | `*.innotel.tech`, `innotel.tech` | 23 Jan 2027 | Fixed 1 Nov 2026 |
 
 ### Findings
 
-1. **`sage.innotel.tech` serves the wrong certificate.** It presents the
-   `*.lab.innotel.us` wildcard, which does not cover the name, so every verified
-   client fails — browsers show an interstitial, and iOS (App Transport
-   Security) refuses the connection outright. This is the one host that needs a
-   certificate issued for it; the SAGE container's `.env` already points at
-   `/opt/sage/certs/{fullchain,privkey}.pem`, so installing a correct pair is
-   the whole fix.
+1. **`sage.innotel.tech` served the wrong certificate — resolved 1 Nov 2026.**
+   It presented the `*.lab.innotel.us` wildcard, which does not cover the name,
+   so every verified client failed: browsers showed an interstitial and iOS
+   (App Transport Security) refused the connection outright. Cerulean already
+   held a valid `*.innotel.tech` certificate from ACME (id 70), so nothing had
+   to be issued or replaced — the pair was installed into the container and
+   verified live. The staging copy on `dev` now holds the same pair, so a
+   re-provision reproduces the working state instead of the lab wildcard.
 2. **The Let's Encrypt batch from 15 September 2026 expires 14 December 2026.**
    `innotel.us` and its wildcard, `cerulean.innotel.us` and `onyx.innotel.us`
    all share that window. They are valid today; renewal should happen in the
@@ -37,13 +38,23 @@ issuer and validity window.
 4. **Reissuing everything is not required and is actively risky.** Only the SAGE
    name is wrong; replacing the gateway, mail, proxy and Cerulean certificates
    would put working services through an unnecessary handover.
-5. **The staging copy of certificates on `dev` is the lab wildcard.** Anything
+5. **The staging copy of certificates on `dev` used to be the lab wildcard.** Anything
    that copies `/opt/sage/certs` into a container inherits this, which is how
    the SAGE name broke. `deploy/i4-provision.sh` now refuses to overwrite a
    certificate that already covers `innotel.tech`, and `deploy/i4-cert.sh`
    verifies the SAN of a candidate pair before installing it.
 
-### Installing the replacement
+### Resolution
+
+The `*.innotel.tech` pair was installed with `deploy/i4-cert.sh`, which now
+matches wildcards properly: an earlier version compared the SAN list as text and
+rejected `*.innotel.tech` for `sage.innotel.tech`. The service restarted, and a
+client-verified request to `https://sage.innotel.tech/api/health` returns 200
+with `ssl_verify_result=0`. No application rebuild was required — the
+certificate is deployment material, and the released build already contains the
+capture fix.
+
+### Installing a replacement in future
 
 ```bash
 bash deploy/i4-cert.sh /path/fullchain.pem /path/privkey.pem sage.innotel.tech
