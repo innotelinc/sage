@@ -1,0 +1,41 @@
+# ci.yml — the checks this repository can actually make.
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    name: Compose file is valid
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # `config` parses the file, resolves env and fails on a bad reference —
+      # the class of mistake that otherwise only shows up on a deploy.
+      - run: docker compose -f docker-compose.yml config -q
+
+  syntax:
+    name: Server parses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: node --check
+        run: |
+          set -euo pipefail
+          n=0
+          while IFS= read -r f; do
+            node --check "$f"; n=$((n + 1))
+          done < <(git ls-files '*.mjs' '*.js' | grep -v node_modules || true)
+          echo "checked $n file(s)"
+      - name: The entry point exists
+        run: test -f server.mjs

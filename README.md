@@ -5,6 +5,9 @@
 [![Pages](https://github.com/innotelinc/sage/actions/workflows/pages.yml/badge.svg)](https://innotelinc.github.io/sage/)
 [![Theme: Unity](https://img.shields.io/badge/theme-Unity-6366f1)](https://github.com/innotelinc/innotel-platform-stack/blob/main/standards/unity/README.md)
 
+[![CI](https://github.com/innotelinc/sage/actions/workflows/ci.yml/badge.svg)](https://github.com/innotelinc/sage/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 # 🎓 SAGE — Course-Taking Agent
 
 **It sits in the lecture, watches the slides, reads the material, answers quizzes and writes essays — in your voice.**
@@ -220,3 +223,26 @@ live in the device's `localStorage`; the server keeps no state. If you expose th
 <div align="center">
 <sub>A product of <a href="https://innotel.us">Innotel Labs</a> · Unity theme · <a href="https://sage.innotel.tech">sage.innotel.tech</a></sub>
 </div>
+
+## Documentation
+
+| Doc | What it covers |
+| --- | --- |
+| [docs/stack.md](docs/stack.md) | SAGE's role in the Innotel Platform Stack (LearningOps) |
+| [README.md#architecture](README.md) | how capture, memory and routing fit together |
+
+## License
+
+MIT — see [LICENSE](LICENSE). No vendored upstream code.
+
+*SAGE — listens, watches, reads, evaluates. © 2026 Darnel Hunter*
+
+## 🏛️ Platform stack
+
+SAGE is the ecosystem's **LearningOps** platform in the
+[**Innotel Platform Stack**](https://github.com/innotelinc/innotel-platform-stack) —
+the canonical single-responsibility architecture where Authentik owns identity,
+Cerulean Vault owns secrets, Cerulean owns trust, ONYX owns storage, Magnate owns
+revenue, NPM Edge owns the edge, and every other platform is a business function
+that consumes them. See [docs/stack.md](docs/stack.md) for this platform's
+owns/consumes boundaries.
