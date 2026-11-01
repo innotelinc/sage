@@ -65,6 +65,24 @@ into `/opt/sage/certs`, ensures `TLS_CERT`/`TLS_KEY`/`PORT` exist in the
 container's `.env`, restarts the unit, and then re-checks the name the way a
 client would.
 
+## Proxy certificate store (source-side audit, 1 November 2026)
+
+The external sweep only sees what each public name presents. Reading the store
+on the proxy host (`192.168.1.71`, nginx proxy manager under `/data/custom_ssl`)
+covers every certificate the estate actually holds:
+
+- **87 certificates, 0 expired.**
+- **2 inside 30 days:** `CN=acme.innotel.us` (29d) and `*.innotel.us` (29d, the
+  one serving `innotel.us`, `www` and `subscribe`), then `monarch.innotel.us`
+  at 30d and the September batch behind it at 32-35d.
+- Every ACME certificate carries `autoRenew: true`, and `*.innotel.tech` was
+  reissued by ACME on 25 October 2026 — renewal is running, not stalled. These
+  renew themselves; forcing a reissue by hand would only churn working names.
+
+DNS was confirmed at the source as well: Cerulean DNS answers
+`sage.innotel.tech -> 192.168.1.94`, and `192.168.1.94` in turn serves the
+container. `gateway.innotel.us` resolves to the public proxy `73.68.203.71`.
+
 ## Dependencies
 
 The application itself has **no runtime dependencies**: `package.json` declares
