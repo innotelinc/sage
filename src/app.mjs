@@ -151,6 +151,9 @@ async function handleChat(body, cfg) {
   // Nothing to pick: the best model this credential can call is chosen here, and
   // a model the gateway then refuses falls back to the configured default rather
   // than failing the turn.
+  // Notes and spoken phrasing run every few seconds and take the cheapest model
+  // that answers; answers, quizzes, essays and the self-review take the best.
+  const tier = mode === 'note' || mode === 'phrase' ? 'fast' : 'best';
   let model = cfg.autoModel ? '' : images.length ? cfg.visionModel : cfg.chatModel;
 
   const ask = (candidate) =>
@@ -175,11 +178,11 @@ async function handleChat(body, cfg) {
   let upstream;
   try {
     if (cfg.autoModel) {
-      for (const candidate of await modelCandidates(cfg)) {
+      for (const candidate of await modelCandidates(cfg, tier)) {
         upstream = await ask(candidate);
         model = candidate;
         if (upstream.ok) {
-          rememberModel(cfg, candidate);
+          rememberModel(cfg, candidate, tier);
           break;
         }
       }
@@ -257,12 +260,14 @@ async function handleModels(cfg) {
 
   // `verified` is what makes this honest: the ranking is a guess until a turn
   // has actually come back from the model it names.
-  const preferred = modelCache.get(credentialKey(cfg))?.preferred;
+  const cached = modelCache.get(credentialKey(cfg)) || {};
   return json({
     models: models.slice(0, 200),
     model: cfg.chatModel,
-    best: preferred || pickBestModel(models),
-    verified: Boolean(preferred),
+    best: cached.preferred || pickBestModel(models),
+    fast: cached.preferredFast || pickFastModel(models),
+    verified: Boolean(cached.preferred),
+    fastVerified: Boolean(cached.preferredFast),
     auto: Boolean(cfg.autoModel),
     visionModel: cfg.visionModel,
   });
@@ -303,6 +308,31 @@ function pickBestModel(models) {
     .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))[0].id;
 }
 
+/**
+ * The cheap end of the same list.
+ *
+ * Running notes are digested every twenty seconds for the length of a lecture,
+ * so the model behind them should be the fastest thing the key can call rather
+ * than the strongest. An essay is the opposite trade.
+ */
+function rankFastModel(id) {
+  const name = String(id || '').toLowerCase();
+  let score = 50;
+  if (/flash|fast|mini|lite|small|haiku/.test(name)) score = 85;
+  else if (/gemini.*pro|sonnet|gpt-5|gpt-6|opus|reasoning/.test(name)) score = 40;
+  if (/cheap|thrifty/.test(name)) score += 10;
+  if (/^auto\//.test(name)) score -= 10;
+  return score;
+}
+
+function pickFastModel(models) {
+  const usable = models.filter((id) => id && !NON_CHAT.test(id));
+  if (!usable.length) return '';
+  return usable
+    .map((id) => ({ id, score: rankFastModel(id) }))
+    .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))[0].id;
+}
+
 const modelCache = new Map();
 const MODEL_TTL_MS = 10 * 60_000;
 
@@ -334,11 +364,14 @@ function credentialKey(cfg) {
   return `${cfg.baseUrl}|${cfg.key.slice(-12)}`;
 }
 
-/** Remember the model that actually answered, so later turns skip the failures. */
-function rememberModel(cfg, id) {
+/** Remember the model that actually answered, per tier, so later turns skip the
+    failures. A cheap model that works is worth remembering separately: paying
+    the essay model for the running notes is the whole thing this avoids. */
+function rememberModel(cfg, id, tier) {
   const key = credentialKey(cfg);
   const entry = modelCache.get(key) || { models: [], at: Date.now() };
-  modelCache.set(key, { ...entry, preferred: id });
+  const field = tier === 'fast' ? 'preferredFast' : 'preferred';
+  modelCache.set(key, { ...entry, [field]: id });
 }
 
 /**
@@ -350,20 +383,23 @@ function rememberModel(cfg, id) {
  * and then refuses it. So the ranking is a first guess, and the turn keeps the
  * first candidate that answers.
  */
-async function modelCandidates(cfg) {
+async function modelCandidates(cfg, tier = 'best') {
   const models = await modelsForKey(cfg);
+  const score = tier === 'fast' ? rankFastModel : rankModel;
   const ranked = models
     .filter((id) => id && !NON_CHAT.test(id))
-    .map((id) => ({ id, score: rankModel(id) }))
+    .map((id) => ({ id, score: score(id) }))
     .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
     .map((entry) => entry.id);
-  const preferred = modelCache.get(credentialKey(cfg))?.preferred;
 
+  const cached = modelCache.get(credentialKey(cfg)) || {};
+  const preferred = tier === 'fast' ? cached.preferredFast : cached.preferred;
   // The configured default goes in before the long tail: it is the one id known
   // to be served, so a first turn answers even when every ranked candidate turns
-  // out to be a listed model the gateway refuses. `auto/best-chat` is the last
-  // resort the gateway itself routes.
-  const ordered = [preferred, ...ranked.slice(0, 2), cfg.chatModel, 'auto/best-chat'].filter(Boolean);
+  // out to be a listed model the gateway refuses. The gateway's own meta-route is
+  // the last resort — `best-fast` for the cheap tier, `best-chat` otherwise.
+  const route = tier === 'fast' ? 'auto/best-fast' : 'auto/best-chat';
+  const ordered = [preferred, ...ranked.slice(0, 2), cfg.chatModel, route].filter(Boolean);
   return [...new Set(ordered)].slice(0, 5);
 }
 

@@ -1432,11 +1432,14 @@ async function showAutoModel() {
   try {
     const data = await api('/api/models');
     const count = (data.models || []).length;
-    if (data.best && data.verified) {
-      status.textContent = 'Using ' + data.best + ' — chosen automatically from ' + count + ' models this key can call.';
-    } else if (data.best) {
-      status.textContent =
-        'Trying ' + data.best + ' first, from ' + count + ' models this key can call — the next answer confirms it.';
+    const best = data.best ? String(data.best).split('/').pop() : '';
+    const fast = data.fast ? String(data.fast).split('/').pop() : '';
+    if (best && fast && best !== fast) {
+      status.textContent = data.verified
+        ? best + ' for answers, ' + fast + ' for running notes — chosen automatically from ' + count + ' models this key can call.'
+        : 'Trying ' + best + ' for answers and ' + fast + ' for notes, out of ' + count + ' models this key can call.';
+    } else if (best) {
+      status.textContent = 'Using ' + best + ' — chosen automatically from ' + count + ' models this key can call.';
     } else {
       status.textContent = 'Using the gateway default' + (data.model ? ' (' + data.model + ')' : '') + '.';
     }
