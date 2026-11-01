@@ -3,10 +3,11 @@
 #
 #   bash deploy/i4-cert.sh /path/fullchain.pem /path/privkey.pem [public.name]
 #
-# Run from the host holding the i4move: remote. The certificate is checked
-# against the public name before anything is replaced, so a wildcard for the
-# wrong zone (the *.lab.innotel.us file staged in /opt/sage/certs) cannot be
-# installed by accident and take the site down.
+# Run from the host holding the i4move: remote. Coverage is checked before
+# anything is replaced, so a certificate for the wrong zone (such as the staged
+# *.lab.innotel.us wildcard) cannot be installed by accident and take the site
+# down. A wildcard is accepted only when it matches the host's exact label
+# count: *.innotel.tech covers sage.innotel.tech, never a.b.innotel.tech.
 set -uo pipefail
 
 R=i4move:
@@ -19,13 +20,35 @@ log() { echo "[$(date +%H:%M:%S)] $*"; }
 die() { echo "FAIL: $*" >&2; exit 1; }
 bx() { for _ in 1 2 3 4 5 6 7 8; do timeout 30 incus exec "$R$NAME" -- "$@" 2>/dev/null && return 0; sleep 3; done; return 1; }
 
+# Does $1 cover host $2? OpenSSL's own matcher first, then a SAN scan that
+# understands a one-label wildcard.
+covers_host() {
+  local crt=$1 host=$2 san parent labels plabels
+  if openssl x509 -in "$crt" -noout -checkhost "$host" >/dev/null 2>&1; then
+    return 0
+  fi
+  san=$(openssl x509 -in "$crt" -noout -ext subjectAltName 2>/dev/null | tr -d ' \r')
+  case ",$san," in
+    *",DNS:$host,"*) return 0 ;;
+  esac
+  parent=${host#*.}
+  case ",$san," in
+    *",DNS:*.$parent,"*)
+      labels=$(printf '%s' "$host" | awk -F. '{print NF}')
+      plabels=$(printf '%s' "$parent" | awk -F. '{print NF}')
+      [ "$labels" -eq $((plabels + 1)) ] && return 0
+      ;;
+  esac
+  return 1
+}
+
 [ -f "$CRT" ] || die "no certificate at $CRT"
 [ -f "$KEY" ] || die "no private key at $KEY"
 openssl x509 -in "$CRT" -noout >/dev/null 2>&1 || die "not a certificate: $CRT"
-if ! openssl x509 -in "$CRT" -noout -ext subjectAltName 2>/dev/null | grep -q "$HOST"; then
+if ! covers_host "$CRT" "$HOST"; then
   die "certificate does not cover $HOST (SAN: $(openssl x509 -in "$CRT" -noout -ext subjectAltName 2>/dev/null | tail -1 | tr -d ' '))"
 fi
-log "certificate covers $HOST, expires $(openssl x509 -in "$CRT" -noout -enddate | cut -d= -f2)"
+log "covers $HOST — $(openssl x509 -in "$CRT" -noout -subject | sed 's/subject=//'), expires $(openssl x509 -in "$CRT" -noout -enddate | cut -d= -f2)"
 
 log "1. copy material"
 base64 -w0 "$CRT" | timeout 90 incus exec "$R$NAME" -- bash -c 'base64 -d > /opt/sage/certs/fullchain.pem && chmod 644 /opt/sage/certs/fullchain.pem' 2>/dev/null \
