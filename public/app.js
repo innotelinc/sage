@@ -1300,6 +1300,84 @@ async function runRead() {
 
 /* ── settings ──────────────────────────────────────────────── */
 /* ── gateway admin ─────────────────────────────────────────── */
+/* ── keys bought at Magnate ────────────────────────────────── */
+/* The receipt page opens this app at /#claim=<code>. The code is traded for the
+   key on our own server, so the browser never needs CORS access to billing, and
+   the key is checked with the gateway before it replaces anything stored. */
+async function claimGatewayKey(token, options) {
+  const code = String(token || '').trim();
+  if (!code) return { ok: false, message: 'No claim code was given.' };
+  let data;
+  try {
+    data = await api('/api/claim', { body: { token: code } });
+  } catch (error) {
+    return { ok: false, message: error.message };
+  }
+  const base = (data.baseUrl || GATEWAY_DEFAULT).replace(/\/+$/, '');
+  const check = await verifyGatewayKey(data.key, base);
+  if (!check.ok) {
+    return { ok: false, message: 'The gateway refused the key Magnate issued: ' + check.message };
+  }
+  state.settings.gatewayKey = data.key;
+  state.settings.gatewayBase = base;
+  persist();
+  renderGatewayChips(check.models);
+  if ($('setGatewayKey')) $('setGatewayKey').value = data.key;
+  if ($('setGatewayBase')) $('setGatewayBase').value = base;
+  if ($('gatewayStatus')) {
+    $('gatewayStatus').textContent = (data.planName || 'Purchased session') + ' · ' + check.message;
+  }
+  const minutes = Math.floor((Number(data.secondsLeft) || 0) / 60);
+  if (!options || !options.silent) {
+    toast('Session key added' + (minutes ? ' — ' + minutes + ' minutes left.' : '.'));
+  }
+  checkHealth();
+  return { ok: true, session: data };
+}
+
+async function claimFromSettings() {
+  const input = $('setClaimCode');
+  const status = $('claimStatus');
+  const button = $('btnClaim');
+  if (!input || !status) return;
+  busy(button, true);
+  status.textContent = 'Claiming…';
+  try {
+    const result = await claimGatewayKey(input.value, { silent: true });
+    status.textContent = result.ok
+      ? 'Claimed · ' + (result.session.planName || 'session') + ' key installed.'
+      : result.message;
+    if (result.ok) input.value = '';
+  } finally {
+    busy(button, false);
+  }
+}
+
+/* Read the claim out of the address bar once, then strip it: a screenshot or a
+   reload should not replay a code that is only good for the minutes left. */
+function takeClaimFromUrl() {
+  const pattern = /(?:^|[#&?])claim=([A-Za-z0-9_-]{8,64})/;
+  const found = pattern.exec(location.hash || '') || pattern.exec(location.search || '');
+  if (!found) return '';
+  try {
+    const clean = (location.pathname + location.search + location.hash)
+      .replace(/([#&?])claim=[A-Za-z0-9_-]{8,64}&?/, '$1')
+      .replace(/[#&?]$/, '');
+    history.replaceState(null, '', clean);
+  } catch {
+    /* a native shell may refuse history changes; the code is read once a load */
+  }
+  return found[1];
+}
+
+(function claimOnLoad() {
+  const token = takeClaimFromUrl();
+  if (!token) return;
+  const run = () => claimGatewayKey(token);
+  if (document.readyState === 'complete') setTimeout(run, 500);
+  else window.addEventListener('load', () => setTimeout(run, 500));
+})();
+
 function gatewayBase() {
   return (state.settings.gatewayBase || GATEWAY_DEFAULT).replace(/\/+$/, '');
 }

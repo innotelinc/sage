@@ -26,6 +26,9 @@ export function resolveConfig(env = {}) {
     visionModel: env.AI_VISION_MODEL || chatModel,
     transcribeModel: env.AI_TRANSCRIBE_MODEL || 'whisper-1',
     accessCode: env.ACCESS_CODE || '',
+    // Where a bought session key is claimed from. Magnate mints the OmniRoute
+    // key and hands back a token; this server trades the token for it.
+    magnateUrl: String(env.MAGNATE_URL || 'https://magnate.innotel.us').replace(/\/+$/, ''),
   };
 }
 
@@ -230,6 +233,52 @@ async function handleTranscribe(request, cfg) {
   return json({ text: String(data.text || '').trim(), model: cfg.transcribeModel });
 }
 
+const MAX_CLAIM_LENGTH = 64;
+
+/**
+ * A key bought at Magnate arrives as a claim code: the receipt page opens the
+ * app at `#claim=…`, and this endpoint trades that code for the key. The trade
+ * runs server-side so the browser never needs CORS access to a billing origin,
+ * and only the key crosses back — the claim token is not stored anywhere here.
+ */
+async function handleClaim(request, cfg) {
+  const body = await request.json().catch(() => null);
+  const token = String((body && body.token) || '').trim();
+  if (!token || token.length > MAX_CLAIM_LENGTH || !/^[A-Za-z0-9_-]+$/.test(token)) {
+    return json({ error: 'bad_claim', message: 'That is not a claim code.' }, 400);
+  }
+
+  let upstream;
+  try {
+    upstream = await fetch(`${cfg.magnateUrl}/api/sage/claim?token=${encodeURIComponent(token)}`, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (error) {
+    return json({ error: 'claim_unreachable', message: `Cannot reach ${cfg.magnateUrl} (${error.message}).` }, 502);
+  }
+
+  const data = await upstream.json().catch(() => ({}));
+  if (!upstream.ok) {
+    const message = String(data.error || `The claim was refused (${upstream.status}).`);
+    return json({ error: 'claim_rejected', message }, upstream.status === 410 ? 410 : 400);
+  }
+
+  const key = String(data.key || '').trim();
+  if (!key || key.length > MAX_KEY_LENGTH || /\s/.test(key)) {
+    return json({ error: 'bad_key', message: 'Magnate issued a key the gateway will not accept.' }, 502);
+  }
+
+  return json({
+    key,
+    code: String(data.code || ''),
+    planName: String(data.planName || ''),
+    expiresAt: data.expiresAt || null,
+    secondsLeft: Number(data.secondsLeft) || 0,
+    baseUrl: DEFAULT_BASE_URL,
+  });
+}
+
 export async function handleRequest(request, env = {}) {
   const url = new URL(request.url);
   let cfg = resolveConfig(env);
@@ -293,6 +342,10 @@ export async function handleRequest(request, env = {}) {
     } catch (error) {
       return json({ error: 'voice_failed', message: error.message, fallback: 'browser' }, 502);
     }
+  }
+
+  if (url.pathname === '/api/claim' && request.method === 'POST') {
+    return handleClaim(request, cfg);
   }
 
   if (url.pathname === '/api/chat' && request.method === 'POST') {
