@@ -19,8 +19,6 @@ const defaultState = () => ({
     ttsVoice: '',
     gatewayKey: '',
     gatewayBase: 'https://gateway.innotel.us/v1',
-    // Empty = whatever the server or the gateway defaults to.
-    chatModel: '',
   },
   memory: [],
   evolution: [],
@@ -148,8 +146,6 @@ async function api(path, options = {}) {
   if (gatewayKey) headers['x-ai-key'] = gatewayKey;
   const gatewayUrl = String(state.settings.gatewayBase || '').trim();
   if (gatewayUrl && gatewayUrl !== GATEWAY_DEFAULT) headers['x-ai-base'] = gatewayUrl;
-  const chosenModel = String(state.settings.chatModel || '').trim();
-  if (chosenModel) headers['x-ai-model'] = chosenModel;
   let body;
   if (options.form) body = options.form;
   else if (options.body) {
@@ -201,13 +197,7 @@ async function checkHealth() {
     const ok = health.configured;
     $('statusDot').className = `dot ${ok ? 'ok' : 'warn'}`;
     $('statusDot').title = ok ? `connected to ${health.provider}` : 'no model key configured';
-    $('modelTag').textContent = state.settings.chatModel
-      ? state.settings.chatModel.split('/').pop()
-      : state.settings.gatewayKey
-        ? 'gateway'
-        : ok
-          ? health.chatModel
-          : 'no key';
+    $('modelTag').textContent = ok ? String(health.chatModel || 'auto').split('/').pop() : 'no key';
     $('setupCard').classList.toggle('hidden', ok);
     if (health.authRequired && !state.settings.accessCode) {
       toast('This server is protected. Enter the access code in Settings.', 'error');
@@ -1332,6 +1322,7 @@ async function claimGatewayKey(token, options) {
   state.settings.gatewayBase = base;
   persist();
   renderGatewayChips(check.models);
+  showAutoModel();
   if ($('setGatewayKey')) $('setGatewayKey').value = data.key;
   if ($('setGatewayBase')) $('setGatewayBase').value = base;
   if ($('gatewayStatus')) {
@@ -1388,18 +1379,7 @@ function takeClaimFromUrl() {
   else window.addEventListener('load', () => setTimeout(run, 500));
 })();
 
-/* Picking a model is a per-device choice, so it saves the moment it changes. */
-(function initModelPicker() {
-  const select = $('setGatewayModel');
-  if (!select) return;
-  select.addEventListener('change', function () {
-    state.settings.chatModel = select.value;
-    persist();
-    updateStatus();
-    checkHealth();
-    toast(select.value ? 'Model set to ' + select.value + '.' : 'Using the gateway default model.');
-  });
-})();
+
 
 function gatewayBase() {
   return (state.settings.gatewayBase || GATEWAY_DEFAULT).replace(/\/+$/, '');
@@ -1443,50 +1423,25 @@ function renderGatewayChips(models) {
   }
 }
 
-/* The picker lists what this key can actually call, read back from the gateway
-   with the same credential the next turn will use. */
-function renderModelOptions(models) {
-  const select = $('setGatewayModel');
-  if (!select) return;
-  const keep = String(state.settings.chatModel || '');
-  select.innerHTML = '';
-  const fallback = document.createElement('option');
-  fallback.value = '';
-  fallback.textContent = 'gateway default';
-  select.appendChild(fallback);
-  const seen = new Set();
-  for (const id of models) {
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const option = document.createElement('option');
-    option.value = id;
-    option.textContent = id;
-    select.appendChild(option);
-  }
-  select.value = seen.has(keep) ? keep : '';
-  if (keep && !seen.has(keep)) {
-    // A stored model this key cannot call would 403 on every turn; fall back
-    // loudly instead of failing quietly.
-    state.settings.chatModel = '';
-    persist();
-    $('modelStatus').textContent = keep + ' is not offered to this key — using the gateway default.';
-  }
-  return seen.size;
-}
-
-async function loadModels() {
+/* Nothing to choose: the server ranks the models this key can call and uses the
+   best one. This line just says which, so a weak answer is explainable. */
+async function showAutoModel() {
   const status = $('modelStatus');
-  if (status) status.textContent = 'Reading the models this key can call…';
+  if (!status) return;
+  status.textContent = 'Choosing the best model this key can call…';
   try {
     const data = await api('/api/models');
-    const count = renderModelOptions(Array.isArray(data.models) ? data.models : []);
-    if (status && !/not offered/.test(status.textContent)) {
-      status.textContent = count
-        ? count + ' models available' + (data.model ? ' · default ' + data.model : '') + '.'
-        : 'This key has no model list to choose from — the gateway default applies.';
+    const count = (data.models || []).length;
+    if (data.best && data.verified) {
+      status.textContent = 'Using ' + data.best + ' — chosen automatically from ' + count + ' models this key can call.';
+    } else if (data.best) {
+      status.textContent =
+        'Trying ' + data.best + ' first, from ' + count + ' models this key can call — the next answer confirms it.';
+    } else {
+      status.textContent = 'Using the gateway default' + (data.model ? ' (' + data.model + ')' : '') + '.';
     }
   } catch (error) {
-    if (status) status.textContent = error.message;
+    status.textContent = error.message;
   }
 }
 
@@ -1525,7 +1480,7 @@ async function saveGatewayKey() {
     persist();
     status.textContent = result.message;
     renderGatewayChips(result.models);
-    loadModels();
+    showAutoModel();
     $('modelTag').textContent = 'gateway';
     toast('Gateway key accepted.');
     checkHealth();
@@ -1584,8 +1539,7 @@ function openSettings() {
     : '';
   $('setGatewayKey').value = state.settings.gatewayKey || '';
   $('setGatewayBase').value = state.settings.gatewayBase || GATEWAY_DEFAULT;
-  renderModelOptions([]);
-  loadModels();
+  showAutoModel();
   $('gatewayStatus').textContent = state.settings.gatewayKey
     ? 'Key stored on this device. Use the mic check if capture is refusing.'
     : '';

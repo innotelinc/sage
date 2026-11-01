@@ -29,6 +29,9 @@ export function resolveConfig(env = {}) {
     // Where a bought session key is claimed from. Magnate mints the OmniRoute
     // key and hands back a token; this server trades the token for it.
     magnateUrl: String(env.MAGNATE_URL || 'https://magnate.innotel.us').replace(/\/+$/, ''),
+    // No model is configured per device: the best one this key can call is
+    // chosen per request unless AI_CHAT_MODEL pins the default explicitly.
+    autoModel: true,
   };
 }
 
@@ -87,7 +90,7 @@ function withClientCredentials(request, env, cfg) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:\/-]{1,79}$/.test(model)) {
       return { error: json({ error: 'bad_model', message: 'That does not look like a model id.' }, 400) };
     }
-    next = { ...next, chatModel: model, visionModel: model };
+    next = { ...next, chatModel: model, visionModel: model, autoModel: false };
   }
 
   return { cfg: next };
@@ -144,19 +147,21 @@ async function handleChat(body, cfg) {
       ]
     : text;
 
-  const model = images.length ? cfg.visionModel : cfg.chatModel;
   const spec = MODES[mode];
+  // Nothing to pick: the best model this credential can call is chosen here, and
+  // a model the gateway then refuses falls back to the configured default rather
+  // than failing the turn.
+  let model = cfg.autoModel ? '' : images.length ? cfg.visionModel : cfg.chatModel;
 
-  let upstream;
-  try {
-    upstream = await fetch(`${cfg.baseUrl}/chat/completions`, {
+  const ask = (candidate) =>
+    fetch(`${cfg.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         ...(cfg.key ? { authorization: `Bearer ${cfg.key}` } : {}),
       },
       body: JSON.stringify({
-        model,
+        model: candidate,
         temperature: typeof body.temperature === 'number' ? body.temperature : spec.temperature,
         max_tokens: Number(body.maxTokens) > 0 ? Math.min(Number(body.maxTokens), 4000) : 1600,
         messages: [
@@ -166,6 +171,25 @@ async function handleChat(body, cfg) {
       }),
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
+
+  let upstream;
+  try {
+    if (cfg.autoModel) {
+      for (const candidate of await modelCandidates(cfg)) {
+        upstream = await ask(candidate);
+        model = candidate;
+        if (upstream.ok) {
+          rememberModel(cfg, candidate);
+          break;
+        }
+      }
+      if (!upstream) {
+        upstream = await ask(cfg.chatModel);
+        model = cfg.chatModel;
+      }
+    } else {
+      upstream = await ask(model);
+    }
   } catch (error) {
     return json({ error: 'upstream_unreachable', message: `Could not reach ${cfg.baseUrl}: ${error.message}` }, 502);
   }
@@ -211,33 +235,136 @@ async function handleChat(body, cfg) {
  */
 async function handleModels(cfg) {
   if (!cfg.key) {
-    return json({ models: [], model: cfg.chatModel, message: 'No key is configured yet, so there is nothing to list.' });
-  }
-
-  let upstream;
-  try {
-    upstream = await fetch(`${cfg.baseUrl}/models`, {
-      headers: { authorization: `Bearer ${cfg.key}`, accept: 'application/json' },
-      signal: AbortSignal.timeout(20000),
+    return json({
+      models: [],
+      model: cfg.chatModel,
+      best: '',
+      auto: Boolean(cfg.autoModel),
+      message: 'No key is configured yet, so there is nothing to list.',
     });
-  } catch (error) {
-    return json({ error: 'upstream_unreachable', message: `Could not reach ${cfg.baseUrl}: ${error.message}` }, 502);
   }
 
-  if (!upstream.ok) {
-    const detail = await upstream.text().catch(() => '');
-    if (upstream.status === 401 || upstream.status === 403) return keyRejected(upstream.status, detail);
-    return json({ error: 'upstream_error', message: `The gateway returned ${upstream.status} for its model list.` }, 502);
+  const models = await modelsForKey(cfg);
+  if (!models.length) {
+    return json({
+      models: [],
+      model: cfg.chatModel,
+      best: '',
+      auto: Boolean(cfg.autoModel),
+      message: 'The gateway returned no model list for this key.',
+    });
   }
 
-  const body = await upstream.json().catch(() => ({}));
-  const list = Array.isArray(body.data) ? body.data : Array.isArray(body.models) ? body.models : [];
-  const models = list
-    .map((entry) => String((entry && (entry.id || entry.name)) || entry))
-    .filter(Boolean)
-    .slice(0, 200);
+  // `verified` is what makes this honest: the ranking is a guess until a turn
+  // has actually come back from the model it names.
+  const preferred = modelCache.get(credentialKey(cfg))?.preferred;
+  return json({
+    models: models.slice(0, 200),
+    model: cfg.chatModel,
+    best: preferred || pickBestModel(models),
+    verified: Boolean(preferred),
+    auto: Boolean(cfg.autoModel),
+    visionModel: cfg.visionModel,
+  });
+}
 
-  return json({ models, model: cfg.chatModel, visionModel: cfg.visionModel });
+/* ── automatic model choice ───────────────────────────────── */
+/* The gateway lists what a key *can* call, not which is best, and the list
+   contains non-chat ids. Rank by capability keywords, prefer a concrete model
+   over a meta-router (a router can point at a target its own filter then skips),
+   and cache per credential so an ordinary turn costs no extra round trip. */
+const NON_CHAT = /embed|whisper|tts|speech|audio|transcribe|rerank|moderation|guard|dall|sdxl|stable-diffusion|flux|image-gen/i;
+
+function rankModel(id) {
+  const name = String(id || '').toLowerCase();
+  let score = 50;
+  if (/opus/.test(name)) score = 100;
+  else if (/gpt-6|gpt-5/.test(name)) score = 98;
+  else if (/sonnet/.test(name)) score = 95;
+  else if (/(^|[-_/])o[34](\b|-)/.test(name)) score = 93;
+  else if (/gemini.*pro/.test(name)) score = 92;
+  else if (/reasoning/.test(name)) score = 82;
+  else if (/gemini.*flash/.test(name)) score = 80;
+  else if (/coding/.test(name)) score = 68;
+  else if (/fast|mini|flash|small/.test(name)) score = 60;
+  // The billable edge of the catalogue: cheap and free tiers are fallbacks, not
+  // what a paid session should be spending its cap on.
+  if (/cheap|thrifty|free|chaos/.test(name)) score -= 25;
+  if (/no-think|nothink/.test(name)) score -= 10;
+  if (/^auto\//.test(name)) score -= 12;
+  return score;
+}
+
+function pickBestModel(models) {
+  const usable = models.filter((id) => id && !NON_CHAT.test(id));
+  if (!usable.length) return '';
+  return usable
+    .map((id) => ({ id, score: rankModel(id) }))
+    .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))[0].id;
+}
+
+const modelCache = new Map();
+const MODEL_TTL_MS = 10 * 60_000;
+
+/** The model ids a credential may call, remembered for ten minutes. */
+async function modelsForKey(cfg) {
+  if (!cfg.key) return [];
+  const cacheKey = `${cfg.baseUrl}|${cfg.key.slice(-12)}`;
+  const hit = modelCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < MODEL_TTL_MS) return hit.models;
+  try {
+    const res = await fetch(`${cfg.baseUrl}/models`, {
+      headers: { authorization: `Bearer ${cfg.key}`, accept: 'application/json' },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return hit ? hit.models : [];
+    const body = await res.json().catch(() => ({}));
+    const list = Array.isArray(body.data) ? body.data : Array.isArray(body.models) ? body.models : [];
+    const models = list.map((entry) => String((entry && (entry.id || entry.name)) || entry)).filter(Boolean);
+    // Keep the model that last answered across a refresh: the list changes far
+    // less often than the ranking's first guess turns out to be wrong.
+    modelCache.set(cacheKey, { models, at: Date.now(), preferred: hit ? hit.preferred : undefined });
+    return models;
+  } catch {
+    return hit ? hit.models : [];
+  }
+}
+
+function credentialKey(cfg) {
+  return `${cfg.baseUrl}|${cfg.key.slice(-12)}`;
+}
+
+/** Remember the model that actually answered, so later turns skip the failures. */
+function rememberModel(cfg, id) {
+  const key = credentialKey(cfg);
+  const entry = modelCache.get(key) || { models: [], at: Date.now() };
+  modelCache.set(key, { ...entry, preferred: id });
+}
+
+/**
+ * Candidates in the order they should be tried: the model that last answered,
+ * then the ranked list, then the configured default.
+ *
+ * A gateway's model list is what a key is *allowed* to call, not what the
+ * gateway can currently serve — a fresh key lists `agy/claude-opus-4-6-thinking`
+ * and then refuses it. So the ranking is a first guess, and the turn keeps the
+ * first candidate that answers.
+ */
+async function modelCandidates(cfg) {
+  const models = await modelsForKey(cfg);
+  const ranked = models
+    .filter((id) => id && !NON_CHAT.test(id))
+    .map((id) => ({ id, score: rankModel(id) }))
+    .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
+    .map((entry) => entry.id);
+  const preferred = modelCache.get(credentialKey(cfg))?.preferred;
+
+  // The configured default goes in before the long tail: it is the one id known
+  // to be served, so a first turn answers even when every ranked candidate turns
+  // out to be a listed model the gateway refuses. `auto/best-chat` is the last
+  // resort the gateway itself routes.
+  const ordered = [preferred, ...ranked.slice(0, 2), cfg.chatModel, 'auto/best-chat'].filter(Boolean);
+  return [...new Set(ordered)].slice(0, 5);
 }
 
 async function handleTranscribe(request, cfg) {
@@ -346,6 +473,7 @@ export async function handleRequest(request, env = {}) {
     return json({
       ok: true,
       configured: Boolean(cfg.key),
+      autoModel: Boolean(cfg.autoModel),
       provider: host,
       gateway: gatewayHosts(env),
       acceptsClientKey: true,
