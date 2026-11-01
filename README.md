@@ -215,7 +215,9 @@ live in the device's `localStorage`; the server keeps no state. If you expose th
 
 - **v1.0** — shipped: listening, watching, reading, quiz and essay surfaces, self-evolution memory, gateway wiring, PWA install.
 - **v1.1** — shipped: hands-free study mode with automatic question detection, and the cross-device relay for mirrored phones, tablets and cast windows.
-- In-app model picker that lists what a key can actually call.
+- **v1.2** — shipped: the in-app model picker, which lists the models the key in use can actually call and remembers the choice per device; and sessions bought at Magnate that install themselves from the receipt, with no key to copy.
+- Per-task model routing — a cheap model for the running notes, the strongest one for an essay.
+- A session clock that pauses capture when a bought session's window closes, instead of spending turns on 401s.
 - Native iOS capture, which no web page can do.
 
 ---

@@ -54,7 +54,8 @@ function gatewayHosts(env = {}) {
 function withClientCredentials(request, env, cfg) {
   const key = String(request.headers.get('x-ai-key') || '').trim();
   const base = String(request.headers.get('x-ai-base') || '').trim();
-  if (!key && !base) return { cfg };
+  const model = String(request.headers.get('x-ai-model') || '').trim();
+  if (!key && !base && !model) return { cfg };
 
   let next = cfg;
 
@@ -77,6 +78,16 @@ function withClientCredentials(request, env, cfg) {
       return { error: json({ error: 'bad_base', message: `Base URL must be https://${allowed.join(' or https://')}.` }, 400) };
     }
     next = { ...next, baseUrl: `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}` };
+  }
+
+  // The model chosen in the app, from the list that key can actually call. It
+  // rides on the request like the key does, so a shared instance keeps serving
+  // its own default to everyone else.
+  if (model) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:\/-]{1,79}$/.test(model)) {
+      return { error: json({ error: 'bad_model', message: 'That does not look like a model id.' }, 400) };
+    }
+    next = { ...next, chatModel: model, visionModel: model };
   }
 
   return { cfg: next };
@@ -189,6 +200,44 @@ async function handleChat(body, cfg) {
     usedVision: images.length > 0,
     usage: data?.usage || null,
   });
+}
+
+/**
+ * The models the credential in play can actually call.
+ *
+ * Read back from the gateway with the same key the next chat turn will use, so
+ * the picker offers what this key can reach rather than a catalogue listing
+ * that may not apply to it — a key's connection allowlist is the real contract.
+ */
+async function handleModels(cfg) {
+  if (!cfg.key) {
+    return json({ models: [], model: cfg.chatModel, message: 'No key is configured yet, so there is nothing to list.' });
+  }
+
+  let upstream;
+  try {
+    upstream = await fetch(`${cfg.baseUrl}/models`, {
+      headers: { authorization: `Bearer ${cfg.key}`, accept: 'application/json' },
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (error) {
+    return json({ error: 'upstream_unreachable', message: `Could not reach ${cfg.baseUrl}: ${error.message}` }, 502);
+  }
+
+  if (!upstream.ok) {
+    const detail = await upstream.text().catch(() => '');
+    if (upstream.status === 401 || upstream.status === 403) return keyRejected(upstream.status, detail);
+    return json({ error: 'upstream_error', message: `The gateway returned ${upstream.status} for its model list.` }, 502);
+  }
+
+  const body = await upstream.json().catch(() => ({}));
+  const list = Array.isArray(body.data) ? body.data : Array.isArray(body.models) ? body.models : [];
+  const models = list
+    .map((entry) => String((entry && (entry.id || entry.name)) || entry))
+    .filter(Boolean)
+    .slice(0, 200);
+
+  return json({ models, model: cfg.chatModel, visionModel: cfg.visionModel });
 }
 
 async function handleTranscribe(request, cfg) {
@@ -342,6 +391,10 @@ export async function handleRequest(request, env = {}) {
     } catch (error) {
       return json({ error: 'voice_failed', message: error.message, fallback: 'browser' }, 502);
     }
+  }
+
+  if (url.pathname === '/api/models' && request.method === 'GET') {
+    return handleModels(cfg);
   }
 
   if (url.pathname === '/api/claim' && request.method === 'POST') {

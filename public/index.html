@@ -246,6 +246,12 @@
                    placeholder="OmniRoute key from gateway.innotel.us" />
           </label>
           <label>Base URL <input id="setGatewayBase" type="text" inputmode="url" value="https://gateway.innotel.us/v1" /></label>
+          <label>Model
+            <select id="setGatewayModel">
+              <option value="">gateway default</option>
+            </select>
+          </label>
+          <p class="mini muted" id="modelStatus"></p>
           <div class="dialog-actions">
             <button type="button" class="btn ghost" id="btnVerifyKey">Verify &amp; save</button>
             <button type="button" class="btn ghost" id="btnMicCheck">Check microphone</button>
@@ -261,6 +267,7 @@
             <button type="button" class="btn ghost" id="btnClaim">Claim key</button>
           </div>
           <p class="mini muted" id="claimStatus"></p>
+          <p class="mini muted">Keys: <strong>magnate.innotel.us/sage</strong> — a bought session installs itself from its claim code.</p>
         </fieldset>
 
         <div class="grid2">

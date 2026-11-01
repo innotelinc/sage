@@ -112,7 +112,7 @@ function applyCors(req, res) {
   res.setHeader('access-control-allow-origin', origin);
   res.setHeader('vary', 'origin');
   res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
-  res.setHeader('access-control-allow-headers', 'content-type, x-access-code, x-ai-key, x-ai-base');
+  res.setHeader('access-control-allow-headers', 'content-type, x-access-code, x-ai-key, x-ai-base, x-ai-model');
   res.setHeader('access-control-max-age', '600');
 }
 async function handler(req, res) {
