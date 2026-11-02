@@ -28,6 +28,7 @@ const ATTACH = /^(1|true|yes)$/i.test(String(process.env.ATTACH || ''));
 
 /** The listing pass: copy, category, privacy URL, review contact, screenshots. */
 const LISTING = /^(1|true|yes)$/i.test(String(process.env.LISTING || ''));
+const PROBE = /^(1|true|yes)$/i.test(String(process.env.PROBE || ''));
 const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+$/, '');
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
 const SHOT_DIR_IPAD = (process.env.APP_STORE_SHOTS_IPAD || '').trim();
@@ -916,6 +917,29 @@ async function ensureAgeRating(app) {
   console.log(`  age rating · answered ${blanks.length} fields, nothing above NONE`);
 }
 
+/**
+ * App Privacy is the one thing App Review demands that the published API documents
+ * nothing for: the refusal names /v1/appDataUsages, and the schema has no such
+ * resource. Ask the endpoint directly and print whatever it answers.
+ */
+async function probePrivacy(app) {
+  const listing = await soft('/v1/appDataUsages?limit=10');
+  console.log(`  privacy · collection: ${listing ? JSON.stringify(listing).slice(0, 400) : 'unreadable'}`);
+  try {
+    const made = await call('POST', '/v1/appDataUsages', {
+      data: {
+        type: 'appDataUsages',
+        attributes: {},
+        relationships: { app: { data: { type: 'apps', id: app } } },
+      },
+    });
+    console.log(`  privacy · created: ${JSON.stringify(made).slice(0, 500)}`);
+  } catch (error) {
+    console.log(`  privacy · refused: ${error.message}`);
+    if (error.data) console.log(`  privacy · it said: ${JSON.stringify(error.data).slice(0, 2500)}`);
+  }
+}
+
 /** Everything App Review needs, then the version joins the products in the draft. */
 async function ensureListing(app) {
   const version = await iosVersion(app);
@@ -936,6 +960,7 @@ await report(app);
 if (ATTACH) await attachVersion(app);
 if (LISTING) await ensureListing(app);
 await readiness(app);
+if (PROBE) await probePrivacy(app);
 const iap = await existingProducts(app);
 
 const failed = [];

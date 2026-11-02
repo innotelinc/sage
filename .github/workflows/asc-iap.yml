@@ -9,6 +9,10 @@ on:
         description: Submit the products for review (the first consumable needs an app version in the submission)
         type: boolean
         default: false
+      probe:
+        description: Ask the undocumented app data usage endpoint what it wants
+        type: boolean
+        default: false
       listing:
         description: Fill the 1.0 listing, category, privacy URL, review contact and screenshots, then add the version to the draft
         type: boolean
@@ -41,6 +45,7 @@ jobs:
           SUBMIT: ${{ inputs.submit }}
           ATTACH: ${{ inputs.attach }}
           LISTING: ${{ inputs.listing }}
+          PROBE: ${{ inputs.probe }}
           SAGE_SITE: https://sage.innotel.tech
           APP_STORE_SHOTS: deploy/ios/store
           APP_STORE_SHOTS_IPAD: deploy/ios/store-ipad
