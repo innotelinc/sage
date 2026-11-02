@@ -1,0 +1,136 @@
+name: iOS certificate cleanup
+
+# App Store Connect caps how many signing certificates a team may hold. Signing
+# on a fresh runner is automatic, and the runner has no local private key, so it
+# cannot reuse an existing certificate: every archive mints a new one until the
+# cap is reached and archiving fails with "Choose a certificate to revoke".
+#
+# This workflow frees slots through the App Store Connect API. It lists the
+# team's certificates, keeps the newest of each type, and revokes the rest.
+# Dry run by default: nothing is revoked unless dry_run is false.
+#
+# Secrets used: ASC_KEY_ID, ASC_ISSUER_ID, ASC_PRIVATE_KEY
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List certificates only, revoke nothing'
+        type: boolean
+        default: true
+      keep:
+        description: 'How many certificates to keep per type (newest first)'
+        type: string
+        default: '1'
+      types:
+        description: 'Certificate types to clean; any other type is left untouched'
+        type: string
+        default: 'IOS_DISTRIBUTION,IOS_DEVELOPMENT,DEVELOPMENT'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install signing key and JWT library
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_PRIVATE_KEY" ]; then
+            echo "ASC_KEY_ID / ASC_ISSUER_ID / ASC_PRIVATE_KEY secrets are missing"; exit 1
+          fi
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          python3 -m pip install --quiet --disable-pip-version-check pyjwt cryptography
+
+      - name: List and revoke stale certificates
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          KEEP: ${{ inputs.keep }}
+          TYPES: ${{ inputs.types }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, time, urllib.error, urllib.request
+          from collections import defaultdict
+          import jwt
+
+          key_id = os.environ['ASC_KEY_ID']
+          issuer = os.environ['ASC_ISSUER_ID']
+          dry_run = os.environ.get('DRY_RUN', 'true').lower() == 'true'
+          keep = max(0, int(os.environ.get('KEEP', '1')))
+          wanted = {t.strip().upper() for t in os.environ.get('TYPES', '').split(',') if t.strip()}
+
+          with open(os.path.expanduser(f'~/.appstoreconnect/private_keys/AuthKey_{key_id}.p8')) as fh:
+              key = fh.read()
+          now = int(time.time())
+          token = jwt.encode(
+              {'iss': issuer, 'iat': now, 'exp': now + 600, 'aud': 'appstoreconnect-v1'},
+              key, algorithm='ES256', headers={'kid': key_id, 'typ': 'JWT'},
+          )
+          API = 'https://api.appstoreconnect.apple.com'
+
+          def call(method, path):
+              req = urllib.request.Request(API + path, method=method)
+              req.add_header('Authorization', f'Bearer {token}')
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as r:
+                      body = r.read().decode()
+                      return r.status, (json.loads(body) if body.strip() else {})
+              except urllib.error.HTTPError as e:
+                  return e.code, {'error': e.read().decode()[:400]}
+
+          fields = 'fields%5Bcertificates%5D=name,displayName,certificateType,expirationDate,serialNumber'
+          status, payload = call('GET', f'/v1/certificates?limit=200&{fields}')
+          if status != 200:
+              print(f'listing certificates failed: {status} {payload}')
+              sys.exit(1)
+
+          by_type = defaultdict(list)
+          for item in payload.get('data', []):
+              a = item.get('attributes', {})
+              by_type[a.get('certificateType', 'UNKNOWN')].append({
+                  'id': item['id'],
+                  'name': a.get('displayName') or a.get('name') or '(unnamed)',
+                  'expires': (a.get('expirationDate') or '')[:10],
+                  'serial': a.get('serialNumber') or '',
+              })
+
+          print(f"{'type':<22}{'expires':<12}{'serial':<12}id")
+          for ctype in sorted(by_type):
+              for c in sorted(by_type[ctype], key=lambda c: c['expires'], reverse=True):
+                  print(f"{ctype:<22}{c['expires']:<12}{c['serial']:<12}{c['id']}")
+
+          revoke = []
+          for ctype, items in by_type.items():
+              ordered = sorted(items, key=lambda c: c['expires'], reverse=True)
+              if ctype in wanted:
+                  revoke += [(ctype, c) for c in ordered[keep:]]
+              else:
+                  print(f'leaving {ctype} alone ({len(ordered)} held)')
+
+          print(f'\n{"would revoke" if dry_run else "revoking"} {len(revoke)} certificate(s), keeping {keep} per type')
+          failed = 0
+          for ctype, c in revoke:
+              if dry_run:
+                  print(f'  dry run: {ctype} {c["serial"]} expires {c["expires"]}')
+                  continue
+              status, payload = call('DELETE', f'/v1/certificates/{c["id"]}')
+              ok = status in (200, 204)
+              failed += 0 if ok else 1
+              print(f'  {"revoked" if ok else "FAILED " + str(status)} {ctype} {c["serial"]} expires {c["expires"]}')
+              time.sleep(1)
+
+          if failed:
+              print(f'{failed} revocation(s) failed')
+              sys.exit(1)
+          print('done')
+          PY
