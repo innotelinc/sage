@@ -26,7 +26,7 @@
     <title>Sage · course agent</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=2.2.0" />
+    <link rel="stylesheet" href="/styles.css?v=2.3.0" />
   </head>
   <body>
     <header class="topbar">
@@ -229,6 +229,18 @@
           <button class="btn ghost" id="btnExport">Export</button>
           <button class="btn ghost" id="btnClearMemory">Wipe</button>
         </div>
+        <div class="actions">
+          <button class="btn ghost" id="btnPackExport">Study pack ↓</button>
+          <button class="btn ghost" id="btnPackImport">Import pack</button>
+          <button class="btn ghost" id="btnRevision">Revision sheet</button>
+          <input type="file" id="packFile" accept=".json,application/json" hidden />
+        </div>
+        <p class="mini muted" id="packStatus"></p>
+        <p class="mini muted">
+          A study pack is one file: what was said in class, what it learned and corrected, every answer and quiz
+          item with the reasoning, and the material it relied on. Import it on another device to carry the course
+          across, or print the revision sheet the night before.
+        </p>
         <div class="ask-row">
           <input id="memoryAdd" type="text" placeholder="Teach it something durable…" />
           <button class="btn" id="btnMemoryAdd">Add</button>
@@ -341,6 +353,6 @@
 
     <div class="toast" id="toast" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=2.2.0"></script>
+    <script type="module" src="/app.js?v=2.3.0"></script>
   </body>
 </html>

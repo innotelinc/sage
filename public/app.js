@@ -24,6 +24,8 @@ const defaultState = () => ({
   },
   memory: [],
   evolution: [],
+  // The record a revision sheet and a study pack are built from.
+  history: { answers: [], quizzes: [], essays: [], sources: [] },
   session: { transcript: [], notes: [] },
   ui: { tab: 'live' },
 });
@@ -44,6 +46,7 @@ function loadState() {
       session: { transcript: [], notes: [], ...(saved.session || {}) },
       memory: Array.isArray(saved.memory) ? saved.memory : [],
       evolution: Array.isArray(saved.evolution) ? saved.evolution : [],
+      history: normalizeHistory(saved.history),
     };
   } catch {
     state = defaultState();
@@ -58,6 +61,7 @@ function persist() {
       state.session.transcript = state.session.transcript.slice(-300);
       state.session.notes = state.session.notes.slice(-120);
       state.memory = state.memory.slice(-400);
+      trimHistory();
       localStorage.setItem(LS_KEY, JSON.stringify(state));
     } catch {
       /* storage full — keep running */
@@ -972,6 +976,234 @@ function exportMemory() {
   setTimeout(() => URL.revokeObjectURL(link.href), 2000);
 }
 
+/* ── study packs ───────────────────────────────────────────── */
+/* A course is one file. Everything that makes the next class easier travels in
+   it: what was said, what it learned and got wrong, what it answered and why,
+   and the material it was told to rely on — so the same course carries from the
+   phone to the browser and back, and prints as a revision sheet.
+   The server keeps no state, so a pack is written and read in the browser. */
+const PACK_KIND = 'sage.study-pack';
+const PACK_VERSION = 1;
+const HISTORY_LIMITS = { answers: 200, quizzes: 200, essays: 40, sources: 40 };
+const HISTORY_KEYS = Object.keys(HISTORY_LIMITS);
+
+function normalizeHistory(raw) {
+  const out = { answers: [], quizzes: [], essays: [], sources: [] };
+  if (!raw || typeof raw !== 'object') return out;
+  for (const key of HISTORY_KEYS) {
+    out[key] = Array.isArray(raw[key])
+      ? raw[key].filter((entry) => entry && typeof entry === 'object').slice(-HISTORY_LIMITS[key])
+      : [];
+  }
+  return out;
+}
+
+function trimHistory() {
+  state.history = normalizeHistory(state.history);
+}
+
+function recordHistory(kind, entry) {
+  if (!Array.isArray(state.history?.[kind])) return;
+  state.history[kind].push({ ...entry, at: Date.now() });
+  trimHistory();
+  persist();
+  renderPackStatus();
+}
+
+/* Merge, never replace: the device being imported into may already know things
+   this pack does not, and losing a class of notes to a stale pack is worse than
+   keeping a duplicate. */
+function mergeList(existing, incoming, { key = (v) => String(v).toLowerCase().trim(), limit = 400 } = {}) {
+  const seen = new Set(existing.map((v) => key(v)));
+  for (const item of incoming) {
+    const k = key(item);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    existing.push(item);
+  }
+  return existing.slice(-limit);
+}
+
+function packCounts(pack) {
+  const history = pack.history || {};
+  const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  return [
+    count((pack.corrections || []).length, 'note'),
+    count((history.answers || []).length, 'answer'),
+    count((history.quizzes || []).length, 'quiz answer'),
+    count((history.essays || []).length, 'essay'),
+    count((history.sources || []).length, 'source'),
+  ].join(' · ');
+}
+
+function buildPack() {
+  return {
+    kind: PACK_KIND,
+    version: PACK_VERSION,
+    app: 'sage',
+    exportedAt: new Date().toISOString(),
+    course: (state.persona.course || '').trim(),
+    persona: state.persona,
+    notes: state.session.notes,
+    corrections: state.memory,
+    evolution: state.evolution,
+    history: state.history,
+  };
+}
+
+function slugFile(text, fallback) {
+  const clean = String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  return clean || fallback;
+}
+
+function downloadText(name, text, type) {
+  const blob = new Blob([text], { type });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+}
+
+function exportPack() {
+  const pack = buildPack();
+  const day = new Date().toISOString().slice(0, 10);
+  downloadText(`sage-${slugFile(pack.course, 'course')}-${day}.sagepack.json`, JSON.stringify(pack, null, 2), 'application/json');
+  toast(`Study pack saved · ${packCounts(pack)}`);
+}
+
+function importPack(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onerror = () => toast('Could not read that file.', 'error');
+  reader.onload = () => {
+    let pack;
+    try {
+      pack = JSON.parse(String(reader.result || ''));
+    } catch {
+      toast('That file is not a study pack.', 'error');
+      return;
+    }
+    if (pack?.kind !== PACK_KIND) {
+      toast('Not a Sage study pack.', 'error');
+      return;
+    }
+    if (Number(pack.version) > PACK_VERSION) {
+      toast('That pack was made by a newer Sage — update this device first.', 'error');
+      return;
+    }
+    const incomingHistory = normalizeHistory(pack.history);
+    const historyKey = (entry) => `${entry.at || ''}|${String(entry.question || '').toLowerCase().trim()}`;
+
+    state.session.notes = mergeList(
+      state.session.notes,
+      (Array.isArray(pack.notes) ? pack.notes : []).filter((n) => n && typeof n.text === 'string'),
+      { key: (n) => `${n.at || ''}|${String(n.text || '').toLowerCase().trim()}`, limit: 400 }
+    );
+    state.memory = mergeList(state.memory, (Array.isArray(pack.corrections) ? pack.corrections : []).map(String), { limit: 400 });
+    for (const entry of Array.isArray(pack.evolution) ? pack.evolution : []) {
+      if (entry?.summary && !state.evolution.some((seen) => String(seen.summary) === String(entry.summary))) state.evolution.push(entry);
+    }
+    state.evolution = state.evolution.slice(-40);
+    state.persona.traits = mergeList(
+      state.persona.traits,
+      (Array.isArray(pack.persona?.traits) ? pack.persona.traits : []).map(String),
+      { limit: 12 }
+    );
+    if (!state.persona.course && pack.course) state.persona.course = String(pack.course).slice(0, 120);
+    for (const kind of HISTORY_KEYS) {
+      state.history[kind] = mergeList(state.history[kind], incomingHistory[kind], { key: historyKey, limit: HISTORY_LIMITS[kind] });
+    }
+
+    trimHistory();
+    persist();
+    hydrateFeeds();
+    renderMemory();
+    updateStatus();
+    renderPackStatus(`Last import: ${packCounts(pack)}.`);
+    toast(`Imported ${packCounts(pack)}${pack.course ? ` from ${pack.course}` : ''}.`);
+  };
+  reader.readAsText(file);
+}
+
+function renderPackStatus(extra = '') {
+  const el = $('packStatus');
+  if (!el) return;
+  const pack = buildPack();
+  el.textContent = `${pack.course || 'No course set'} · ${packCounts(pack)} — one file for another device, or a sheet to print.${extra ? ' ' + extra : ''}`;
+}
+
+/* A sheet is for the night before, not for scrolling: reasoning first, no
+   buttons, page breaks that keep a question and its answer together. */
+function revisionSheet() {
+  const pack = buildPack();
+  const esc = escapeHtml;
+  const bullets = (items) => items.map((item) => `<li>${esc(String(item))}</li>`).join('');
+  const notes = pack.notes.slice(-40).map((n) => `<li>${esc(String(n.text || ''))}</li>`).join('');
+  const corrections = pack.corrections.slice(-40).map((m) => `<li>${esc(String(m))}</li>`).join('');
+  const quizzes = pack.history.quizzes.slice(-25).map((q) => `
+    <div class="q">
+      <p class="qt">${esc(String(q.question || ''))}</p>
+      <p class="qa"><strong>${q.choice ? `${esc(String(q.choice))} — ` : ''}${esc(String(q.answer || ''))}</strong></p>
+      ${Array.isArray(q.points) && q.points.length ? `<ul class="why">${bullets(q.points)}</ul>` : ''}
+    </div>`).join('');
+  const answers = pack.history.answers.slice(-20).map((a) => `
+    <div class="q">
+      <p class="qt">${esc(String(a.question || ''))}</p>
+      <p class="qa"><strong>${esc(String(a.answer || ''))}</strong></p>
+      ${a.working ? `<p class="work">${esc(String(a.working))}</p>` : ''}
+    </div>`).join('');
+  const essays = pack.history.essays.slice(-10).map((e) => {
+    const body = String(e.answer || '').replace(/\s+/g, ' ').trim();
+    return `<li><strong>${esc(String(e.question || 'Essay'))}</strong> — ${esc(body.slice(0, 220))}${body.length > 220 ? '…' : ''}</li>`;
+  }).join('');
+  const sources = pack.history.sources.slice(-10).map((s) => `<li>${esc(String(s.question || 'Material read'))}</li>`).join('');
+  const traits = pack.persona.traits.length ? `<ul>${bullets(pack.persona.traits)}</ul>` : '<p class="muted">Nothing learned yet.</p>';
+
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8" />
+<title>${esc(pack.course || 'Sage')} — revision sheet</title>
+<style>
+  @page { margin: 16mm; }
+  :root { color-scheme: light; }
+  body { margin: 0; font: 12pt/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; color: #111; background: #fff; }
+  h1 { font-size: 21pt; margin: 0 0 2px; }
+  h2 { font-size: 11pt; text-transform: uppercase; letter-spacing: .08em; margin: 22px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+  .meta { color: #555; font-size: 10pt; margin: 0 0 6px; }
+  .muted { color: #777; }
+  ul { margin: 0; padding-left: 18px; }
+  li { margin: 0 0 6px; break-inside: avoid; }
+  .q { break-inside: avoid; margin: 0 0 12px; }
+  .qt { margin: 0 0 3px; color: #444; }
+  .qa { margin: 0 0 4px; }
+  .work { margin: 0 0 0 10px; padding-left: 8px; border-left: 2px solid #ddd; color: #333; }
+  .why { margin: 4px 0 0; color: #333; }
+  .foot { margin-top: 26px; color: #666; font-size: 9pt; }
+  @media screen { body { max-width: 720px; margin: 24px auto; padding: 0 16px 48px; } .bar { margin: 18px 0; } .bar button { font: inherit; padding: 7px 14px; } }
+  @media print { .bar { display: none; } }
+</style></head><body>
+<div class="bar"><button onclick="window.print()">Print, or save as PDF</button></div>
+<h1>${esc(pack.course || 'Course')} — revision sheet</h1>
+<p class="meta">${esc(new Date().toLocaleDateString())} · made by Sage</p>
+<h2>How it behaves for you</h2>${traits}
+${notes ? `<h2>What was said in class</h2><ul>${notes}</ul>` : ''}
+${corrections ? `<h2>What it learned and corrected</h2><ul>${corrections}</ul>` : ''}
+${quizzes ? `<h2>Quiz, with the reasoning</h2>${quizzes}` : ''}
+${answers ? `<h2>Answers, with the reasoning</h2>${answers}` : ''}
+${essays ? `<h2>Essays written</h2><ul>${essays}</ul>` : ''}
+${sources ? `<h2>Material relied on</h2><ul>${sources}</ul>` : ''}
+<p class="foot">SAGE — Innotel Labs · innotel.us</p>
+</body></html>`;
+
+  const sheet = window.open('', '_blank');
+  if (!sheet) {
+    toast('The browser blocked the sheet — allow pop-ups for this site.', 'error');
+    return;
+  }
+  sheet.document.write(html);
+  sheet.document.close();
+}
+
 /* Native shell has no same-origin server, so absolute calls go to the API host. */
 function apiUrl(pathname) {
   return (window.__SAGE_API__ || "") + pathname;
@@ -1038,7 +1270,7 @@ async function speak(text) {
 }
 
 /* ── answer rendering ──────────────────────────────────────── */
-function renderAnswer(res, container) {
+function renderAnswer(res, container, question = '') {
   const structured = res.structured;
   const confidence = structured && typeof structured.confidence === 'number'
     ? Math.max(0, Math.min(1, structured.confidence))
@@ -1065,6 +1297,7 @@ function renderAnswer(res, container) {
     ${confidence !== null ? `<div class="conf"><span>confidence</span><div class="conf-bar"><div class="conf-fill" style="width:${Math.round(confidence * 100)}%"></div></div><span>${Math.round(confidence * 100)}%</span></div>` : ''}
   `;
   container.dataset.plain = [answer, working, why].filter(Boolean).join('\n');
+  recordHistory('answers', { question: question || 'Answer given in class', answer, working, why });
   if (state.settings.tts && say) speak(say);
 }
 
@@ -1084,7 +1317,7 @@ async function answerNow() {
       .join('\n\n');
     const images = cap.frame ? [cap.frame] : [];
     const res = await agent('answer', { text, images });
-    renderAnswer(res, $('liveAnswer'));
+    renderAnswer(res, $('liveAnswer'), state.session.transcript.slice(-1)[0]?.text || 'Question asked in class');
   } catch (error) {
     toast(`Answer failed: ${error.message}`, 'error');
   } finally {
@@ -1378,7 +1611,7 @@ async function answerQuestion() {
   busy(button, true);
   try {
     const res = await agent('answer', { text: text || 'Answer the question shown in the image.', images: answerFiles.map((f) => f.preview) });
-    renderAnswer(res, $('answerResult'));
+    renderAnswer(res, $('answerResult'), text || 'Question shown in a photo');
   } catch (error) {
     toast(`Answer failed: ${error.message}`, 'error');
   } finally {
@@ -1431,6 +1664,7 @@ function quizCard(question, res, index) {
     ${points.length ? `<div class="answer-work">${md(points.map((p) => `- ${p}`).join('\n'))}</div>` : ''}
     ${structured.why ? `<div class="answer-why">${escapeHtml(structured.why)}</div>` : ''}
   `;
+  recordHistory('quizzes', { question, choice, answer, points, why: structured.why || '', confidence });
   return card;
 }
 
@@ -1496,6 +1730,7 @@ async function writeEssay() {
       .join('\n\n');
     const res = await agent('essay', { text: brief, maxTokens: Math.min(3800, Math.round(words * 2.2)) });
     lastEssay = res.reply;
+    recordHistory('essays', { question: topic, answer: res.reply });
     $('essayOutput').innerHTML = md(res.reply);
     $('essayResult').hidden = false;
     $('essayResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1550,6 +1785,10 @@ async function runRead() {
       maxTokens: 2000,
     });
     $('readOutput').innerHTML = md(res.reply);
+    recordHistory('sources', {
+      question: readFiles.map((f) => f.name).filter(Boolean).join(', ') || pasted.slice(0, 120) || 'Material read',
+      answer: res.reply,
+    });
     $('readResult').hidden = false;
     $('readResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {
@@ -2074,6 +2313,14 @@ function bind() {
 
   $('btnEvolve').onclick = evolve;
   $('btnExport').onclick = exportMemory;
+  $('btnPackExport').onclick = exportPack;
+  $('btnPackImport').onclick = () => $('packFile').click();
+  $('packFile').onchange = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    importPack(file);
+  };
+  $('btnRevision').onclick = revisionSheet;
   $('btnClearMemory').onclick = () => {
     if (!confirm('Forget every note and evolved trait?')) return;
     state.memory = [];
@@ -2149,6 +2396,7 @@ $('ttsToggle').checked = state.settings.tts;
 renderMemory();
 hydrateFeeds();
 updateStatus();
+renderPackStatus();
 // Come back to the tab the user left, not to whatever boot defaults to.
 if (state.ui?.tab && state.ui.tab !== 'live') openTab(state.ui.tab);
 checkHealth();
