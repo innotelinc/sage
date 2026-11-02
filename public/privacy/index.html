@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#080b12" />
+    <title>Privacy · Sage</title>
+    <meta name="description" content="What Sage does with your audio, your screen and your notes." />
+    <style>
+      :root {
+        --bg: #080b12;
+        --panel: #0e1420;
+        --line: #1e283a;
+        --text: #e7edf7;
+        --muted: #8b98ad;
+        --accent: #6ee7b7;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-text-size-adjust: 100%;
+      }
+      .wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 72px; }
+      header { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+      .brand {
+        display: inline-flex; align-items: center; gap: 8px;
+        color: var(--text); text-decoration: none; font-weight: 700; letter-spacing: 0.02em;
+      }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+      .back { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 14px; }
+      .back:hover { color: var(--accent); }
+      h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.02em; }
+      .lede { color: var(--muted); margin: 0 0 6px; }
+      .updated { color: var(--muted); font-size: 13px; margin: 0 0 32px; }
+      h2 { font-size: 18px; margin: 34px 0 10px; letter-spacing: -0.01em; }
+      p, li { color: #d5deec; }
+      ul { padding-left: 20px; }
+      li { margin: 6px 0; }
+      a { color: var(--accent); }
+      .card {
+        background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+        padding: 18px 20px; margin: 22px 0;
+      }
+      .card p:last-child { margin-bottom: 0; }
+      code {
+        background: #131b2a; border: 1px solid var(--line); border-radius: 6px;
+        padding: 1px 5px; font-size: 13px;
+      }
+      footer { margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <a class="brand" href="/"><span class="dot"></span>Sage</a>
+        <a class="back" href="/">Open the app →</a>
+      </header>
+
+      <h1>Privacy</h1>
+      <p class="lede">Sage is a course-taking agent. This page says exactly what leaves your device, what stays on it, and what we keep.</p>
+      <p class="updated">Last updated 2 November 2026 · Innotel Labs</p>
+
+      <div class="card">
+        <p><strong>The short version.</strong> Your audio, your screen frames and the text you send are forwarded to the AI model provider your key points at, because that is what answers the question. They are not kept by us. Your notes, transcripts and course memory live on your own device. We run no analytics, no advertising and no tracking SDKs.</p>
+      </div>
+
+      <h2>What leaves your device</h2>
+      <ul>
+        <li><strong>Audio</strong> — while you are listening, short clips are sent for transcription to the speech service configured for your instance.</li>
+        <li><strong>Screen frames and photos</strong> — while you are watching, aiming the camera, or sharing a screen, still frames are sent for reading.</li>
+        <li><strong>Your text</strong> — questions, essay briefs and follow-ups are sent to be answered.</li>
+        <li><strong>A session key</strong> — the credential that authorises those calls, sent with each request and never logged.</li>
+      </ul>
+      <p>These requests go to the model gateway your key was issued for. That provider's own terms govern how it handles the request. Sage's server passes the request through and does not archive it.</p>
+
+      <h2>What stays on your device</h2>
+      <ul>
+        <li>Transcripts, notes, answers, quiz results and essays — kept in the app's local storage on the device.</li>
+        <li>Course memory and your persona settings — also local.</li>
+        <li>Your gateway key — stored on the device only, unless you run Sage's own server and choose to keep a workspace there.</li>
+      </ul>
+      <p>Clearing the app's storage, or using <strong>Settings → Clear workspace</strong>, removes it. There is no copy on our side to delete.</p>
+
+      <h2>If you turn on the server workspace</h2>
+      <p>On an instance you run yourself, or one you are given access to, Sage can keep one workspace document per identity so your phone and your browser agree. That document is written only when the app has been given an access code or you have signed in to the operator panel, and it is removed when you delete the workspace. It holds your notes and course records — not your audio, and not your key.</p>
+
+      <h2>Payments</h2>
+      <ul>
+        <li><strong>On iPhone and iPad</strong>, a session is bought as an in-app purchase. Apple processes the payment; we receive only the confirmation that a purchase completed, and we never see your card.</li>
+        <li><strong>On the web and Android</strong>, checkout is handled by our payment provider. We receive a confirmation and the email address you give for the receipt; card details never reach us.</li>
+        <li>Your email address is used to send the receipt and to match a purchase to a session. It is not used for marketing.</li>
+      </ul>
+
+      <h2>What we do not do</h2>
+      <ul>
+        <li>No analytics, advertising or attribution SDKs.</li>
+        <li>No selling or renting of personal information.</li>
+        <li>No reading of your notes for any purpose other than answering you.</li>
+      </ul>
+
+      <h2>Children</h2>
+      <p>Sage is a study tool for higher and continuing education. It is not directed at children under 13, and we do not knowingly collect information from them.</p>
+
+      <h2>Your choices</h2>
+      <p>Stop any capture with the <strong>Stop</strong> button; nothing is sent while capture is off. Delete your data on the device at any time from Settings. For a workspace kept on a server, use the delete action in the app, or write to us and we will remove it.</p>
+
+      <h2>Contact</h2>
+      <p>Questions about this policy, or a deletion request: <a href="mailto:dhunter@innotel.us">dhunter@innotel.us</a>. We answer within two business days.</p>
+      <p>We will update this page when the way Sage handles data changes, and the date above will change with it.</p>
+
+      <footer>
+        SAGE — a course-taking agent. A product of <a href="https://innotel.us">Innotel Labs</a>.
+        See also <a href="/support">Support</a> and <a href="/terms">Terms</a>.
+      </footer>
+    </div>
+  </body>
+</html>

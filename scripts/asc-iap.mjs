@@ -14,7 +14,8 @@
  * from the same bundle id the server uses instead of being written down twice.
  */
 import { createHash, createPrivateKey, sign } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 
 const API = 'https://api.appstoreconnect.apple.com';
 const BUNDLE = (process.env.APPLE_BUNDLE_ID || 'us.innotel.sage').trim();
@@ -24,6 +25,47 @@ const SCREENSHOT = (process.env.IAP_SCREENSHOT || '').trim();
 
 /** Only edits things when asked: it attaches a build and touches a submission. */
 const ATTACH = /^(1|true|yes)$/i.test(String(process.env.ATTACH || ''));
+
+/** The listing pass: copy, category, privacy URL, review contact, screenshots. */
+const LISTING = /^(1|true|yes)$/i.test(String(process.env.LISTING || ''));
+const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+$/, '');
+const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
+const CATEGORY = (process.env.APPLE_CATEGORY || 'EDUCATION').trim();
+const REVIEW = {
+  firstName: (process.env.APPLE_REVIEW_FIRST_NAME || 'Daren').trim(),
+  lastName: (process.env.APPLE_REVIEW_LAST_NAME || 'Hunter').trim(),
+  email: (process.env.APPLE_REVIEW_EMAIL || 'dhunter@innotel.us').trim(),
+  // App Review telephones this number before rejecting, so it has to be one that is
+  // answered. It is a repository secret: never written into the repo.
+  phone: (process.env.APPLE_REVIEW_PHONE || '').trim(),
+};
+
+/* The store page, written from what the app actually does. Every claim here names
+   a surface that exists in the build. */
+const COPY = {
+  description: [
+    'Sage is a course-taking agent. It sits in your lecture, follows along, and answers when it matters.',
+    'LISTEN — Sage transcribes the room as it happens, so a lecture becomes notes you can search instead of a recording you never go back to.',
+    'WATCH — read the slides, the board, or a cast screen. On iPhone the broadcast extension keeps reading while you are in another app.',
+    'AIM — point the camera at the board or the screen at the front; Sage reads what is written there.',
+    'ANSWER — ask anything about the material. Every answer arrives with the reasoning behind it, so you can check it and explain it afterwards instead of trusting it.',
+    'QUIZ — photograph a question and get the answer with why each of the other options was ruled out.',
+    'ESSAY — a brief comes back as an argument, in the voice you set, with a note on how to defend it in your own words.',
+    'MEMORY — Sage keeps a record per course: the corrections you gave it, the sources it used, what you have already covered. A study pack exports the lot so another device picks up where you left off.',
+    'SESSIONS — access is sold in fifteen-minute sessions. One price, no subscription, no auto-renewal. Buy in the app and the clock stops capture for you when the window closes.',
+    'Sage does not replace your reading or your judgement. It is a study aid: check what it tells you.',
+  ].join('\n\n'),
+  keywords: 'study aid,lecture notes,quiz help,essay outline,transcript,tutor,exam prep',
+  supportUrl: `${SITE}/support`,
+  marketingUrl: `${SITE}/about`,
+  privacyUrl: `${SITE}/privacy`,
+  reviewNotes: [
+    'Sage answers using an AI model reached through a session key. Sessions are the in-app purchase: three consumable plans, fifteen minutes of access each, no subscription.',
+    'No login or demo account is needed. Open Settings (the gear, top right) then Session, choose a plan and complete the purchase with a sandbox Apple Account; the key installs itself when Apple confirms.',
+    'Capture is opt-in and each source asks for permission the first time it is used: Listen (microphone), Watch (screen broadcast) and Aim (camera). Nothing leaves the device until one of those is pressed.',
+  ].join('\n\n'),
+};
+
 
 const issuer = (process.env.ASC_ISSUER_ID || '').trim();
 const keyId = (process.env.ASC_KEY_ID || '').trim();
@@ -471,10 +513,197 @@ async function attachVersion(app) {
   console.log(`  submission state · ${after?.data?.attributes?.state || 'unknown'}`);
 }
 
+/** The iOS version record the listing hangs off. */
+async function iosVersion(app) {
+  const list = await call('GET', `/v1/apps/${app}/appStoreVersions?limit=10&include=build`);
+  const version = (list?.data || []).find((item) => item.attributes?.platform === 'IOS');
+  if (!version) throw new Error('no iOS app version exists');
+  return version;
+}
+
+/** The en-US listing text, created when the version has none yet. */
+async function ensureListingText(versionId) {
+  const list = await call('GET', `/v1/appStoreVersions/${versionId}/appStoreVersionLocalizations?limit=10`);
+  let localization = (list?.data || []).find((item) => String(item.attributes?.locale || '').toLowerCase() === 'en-us');
+  if (!localization) {
+    const made = await call('POST', '/v1/appStoreVersionLocalizations', {
+      data: {
+        type: 'appStoreVersionLocalizations',
+        attributes: { locale: 'en-US' },
+        relationships: { appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } } },
+      },
+    });
+    localization = made.data;
+    console.log('  listing · en-US created');
+  }
+  await call('PATCH', `/v1/appStoreVersionLocalizations/${localization.id}`, {
+    data: {
+      type: 'appStoreVersionLocalizations',
+      id: localization.id,
+      attributes: {
+        description: COPY.description,
+        keywords: COPY.keywords,
+        supportUrl: COPY.supportUrl,
+        marketingUrl: COPY.marketingUrl,
+      },
+    },
+  });
+  console.log(`  listing · description, keywords, ${COPY.supportUrl}`);
+  return localization;
+}
+
+/** Where App Review writes and telephones. Both are required before submitting. */
+async function ensureReviewContact(versionId) {
+  const current = await optional(`/v1/appStoreVersions/${versionId}/appStoreReviewDetail`);
+  if (current?.data?.attributes?.contactEmail) {
+    console.log('  review contact · already there');
+    return;
+  }
+  if (!REVIEW.phone) {
+    console.log('  review contact · SKIPPED — APPLE_REVIEW_PHONE is not set, and Apple requires a number');
+    return;
+  }
+  await call('POST', '/v1/appStoreReviewDetails', {
+    data: {
+      type: 'appStoreReviewDetails',
+      attributes: {
+        contactFirstName: REVIEW.firstName,
+        contactLastName: REVIEW.lastName,
+        contactEmail: REVIEW.email,
+        contactPhone: REVIEW.phone,
+        demoAccountRequired: false,
+        notes: COPY.reviewNotes,
+      },
+      relationships: { appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } } },
+    },
+  });
+  console.log(`  review contact · ${REVIEW.firstName} ${REVIEW.lastName} <${REVIEW.email}>`);
+}
+
+/** The privacy policy URL and the store category live on the app info, not the version. */
+async function ensureAppInfo(app) {
+  const infos = await call('GET', `/v1/apps/${app}/appInfos?include=appInfoLocalizations,primaryCategory&limit=5`);
+  const info = infos?.data?.[0];
+  if (!info) throw new Error('no app info record');
+  const localization = (infos.included || []).find((item) => item.type === 'appInfoLocalizations');
+  if (localization) {
+    await call('PATCH', `/v1/appInfoLocalizations/${localization.id}`, {
+      data: {
+        type: 'appInfoLocalizations',
+        id: localization.id,
+        attributes: { privacyPolicyUrl: COPY.privacyUrl },
+      },
+    });
+    console.log(`  privacy policy · ${COPY.privacyUrl}`);
+  }
+  if (info.relationships?.primaryCategory?.data?.id) {
+    console.log('  category · already set');
+  } else {
+    await call('PATCH', `/v1/appInfos/${info.id}`, {
+      data: {
+        type: 'appInfos',
+        id: info.id,
+        relationships: { primaryCategory: { data: { type: 'appCategories', id: CATEGORY } } },
+      },
+    });
+    console.log(`  category · ${CATEGORY}`);
+  }
+}
+
+/**
+ * Store screenshots take two calls each — reserve the record, push the bytes to the
+ * URLs Apple hands back, then confirm the checksum — because App Store Connect never
+ * takes an image inline.
+ */
+async function ensureStoreShots(localizationId) {
+  if (!SHOT_DIR) return 'skipped (no APP_STORE_SHOTS)';
+  const sets = await call('GET', `/v1/appStoreVersionLocalizations/${localizationId}/appScreenshotSets?limit=10`);
+  let set = (sets?.data || []).find((item) => item.attributes?.screenshotDisplayType === 'APP_IPHONE_67');
+  if (!set) {
+    const made = await call('POST', '/v1/appScreenshotSets', {
+      data: {
+        type: 'appScreenshotSets',
+        attributes: { screenshotDisplayType: 'APP_IPHONE_67' },
+        relationships: {
+          appStoreVersionLocalization: { data: { type: 'appStoreVersionLocalizations', id: localizationId } },
+        },
+      },
+    });
+    set = made.data;
+    console.log('  screenshots · 6.7 inch set created');
+  }
+  const existing = await call('GET', `/v1/appScreenshotSets/${set.id}/appScreenshots?limit=20`);
+  if ((existing?.data || []).length) return 'already uploaded';
+  let names = [];
+  try {
+    names = (await readdir(SHOT_DIR)).filter((name) => /\.(png|jpe?g)$/i.test(name)).sort();
+  } catch {
+    return `missing (${SHOT_DIR} is not in the repository)`;
+  }
+  if (!names.length) return `missing (${SHOT_DIR} holds no images)`;
+  for (const name of names) {
+    const bytes = await readFile(join(SHOT_DIR, name));
+    const reserved = await call('POST', '/v1/appScreenshots', {
+      data: {
+        type: 'appScreenshots',
+        attributes: { fileName: name, fileSize: bytes.length },
+        relationships: { appScreenshotSet: { data: { type: 'appScreenshotSets', id: set.id } } },
+      },
+    });
+    const record = reserved.data;
+    for (const operation of record.attributes?.uploadOperations || []) {
+      const chunk = bytes.subarray(operation.offset, operation.offset + operation.length);
+      const headers = {};
+      for (const header of operation.requestHeaders || []) headers[header.name] = header.value;
+      const res = await fetch(operation.url, { method: operation.method, headers, body: chunk });
+      if (!res.ok) throw new Error(`${name} upload failed (${res.status})`);
+    }
+    await call('PATCH', `/v1/appScreenshots/${record.id}`, {
+      data: {
+        type: 'appScreenshots',
+        id: record.id,
+        attributes: { uploaded: true, sourceFileChecksum: createHash('md5').update(bytes).digest('hex') },
+      },
+    });
+    console.log(`  screenshot · ${name}`);
+  }
+  return `${names.length} uploaded`;
+}
+
+/** Everything App Review needs, then the version joins the products in the draft. */
+async function ensureListing(app) {
+  const version = await iosVersion(app);
+  const localization = await ensureListingText(version.id);
+  await ensureReviewContact(version.id);
+  await ensureAppInfo(app);
+  console.log(`  screenshots · ${await ensureStoreShots(localization.id)}`);
+  try {
+    const subs = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&limit=10`);
+    const open = (subs?.data || []).find((item) => item.attributes?.state === 'READY_FOR_REVIEW');
+    if (!open) {
+      console.log('  submission · none open');
+      return;
+    }
+    await call('POST', '/v1/reviewSubmissionItems', {
+      data: {
+        type: 'reviewSubmissionItems',
+        relationships: {
+          reviewSubmission: { data: { type: 'reviewSubmissions', id: open.id } },
+          appStoreVersion: { data: { type: 'appStoreVersions', id: version.id } },
+        },
+      },
+    });
+    console.log(`  submission · version ${version.attributes?.versionString} added — ready to submit`);
+  } catch (error) {
+    console.log(`  submission · version not added yet: ${error.message}`);
+  }
+}
+
 const app = await resolveAppId();
 console.log(`App ${BUNDLE} (${app}) · base territory ${TERRITORY}`);
 await report(app);
 if (ATTACH) await attachVersion(app);
+if (LISTING) await ensureListing(app);
 await readiness(app);
 const iap = await existingProducts(app);
 

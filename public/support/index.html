@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#080b12" />
+    <title>Support · Sage</title>
+    <meta name="description" content="Getting Sage working: keys, sessions, capture and refunds." />
+    <style>
+      :root {
+        --bg: #080b12;
+        --panel: #0e1420;
+        --line: #1e283a;
+        --text: #e7edf7;
+        --muted: #8b98ad;
+        --accent: #6ee7b7;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-text-size-adjust: 100%;
+      }
+      .wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 72px; }
+      header { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+      .brand {
+        display: inline-flex; align-items: center; gap: 8px;
+        color: var(--text); text-decoration: none; font-weight: 700; letter-spacing: 0.02em;
+      }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+      .back { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 14px; }
+      .back:hover { color: var(--accent); }
+      h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.02em; }
+      .lede { color: var(--muted); margin: 0 0 32px; }
+      h2 { font-size: 18px; margin: 34px 0 10px; letter-spacing: -0.01em; }
+      p, li { color: #d5deec; }
+      ol, ul { padding-left: 20px; }
+      li { margin: 7px 0; }
+      a { color: var(--accent); }
+      .card {
+        background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+        padding: 18px 20px; margin: 22px 0;
+      }
+      .card p:last-child { margin-bottom: 0; }
+      .q { font-weight: 600; margin: 20px 0 4px; color: var(--text); }
+      footer { margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <a class="brand" href="/"><span class="dot"></span>Sage</a>
+        <a class="back" href="/">Open the app →</a>
+      </header>
+
+      <h1>Support</h1>
+      <p class="lede">Sage is a course-taking agent: it listens, watches, reads, and answers in your voice. Here is how to get it working, and how to reach us.</p>
+
+      <div class="card">
+        <p><strong>Reach a person:</strong> <a href="mailto:dhunter@innotel.us">dhunter@innotel.us</a> — we answer within two business days. Tell us the device, what you were doing, and what you saw; that is usually enough to fix it in one reply.</p>
+      </div>
+
+      <h2>Start a session</h2>
+      <ol>
+        <li>Open <strong>Settings → Session</strong>.</li>
+        <li>Choose a plan. On iPhone and iPad the purchase is handled by the App Store; on the web and Android it opens the payment page.</li>
+        <li>When Apple confirms the purchase, or the payment page returns you to the app, the key installs itself. The session clock shows the minutes left.</li>
+        <li>Go to <strong>Live</strong> and press <strong>Listen</strong>, <strong>Watch</strong> or <strong>Aim</strong>.</li>
+      </ol>
+      <p>A session is fifteen minutes of model access with one key. Capture stops by itself when the window closes, so a session is never spent on failed requests.</p>
+
+      <h2>Common questions</h2>
+
+      <p class="q">I bought a session but the app still says it needs a key.</p>
+      <p>Reopen Sage and wait for the confirmation to arrive. On iPhone the purchase is tied to the Apple Account on that device — if you bought it with a different account, the key installs on that one. If it still does not appear, write to us with the date of purchase and we will find it.</p>
+
+      <p class="q">A call was refused or the answer never came.</p>
+      <p>That is almost always the key, not the app. Open <strong>Settings → Session</strong> to check the minutes left; an expired window is refused by the gateway, which is what you would see. Start a fresh session and try again.</p>
+
+      <p class="q">Listening stops when I switch to another app.</p>
+      <p>On iPhone, use <strong>Watch</strong> with the broadcast extension: start the screen broadcast from Control Centre and Sage keeps reading frames while you are in another app. On Android, <strong>Watch</strong> runs its own foreground service and shows a notification while it is capturing.</p>
+
+      <p class="q">My notes disappeared.</p>
+      <p>Notes live on the device. Clearing the browser or app storage removes them, and so does <strong>Settings → Clear workspace</strong>. If you export a study pack first (<strong>Memory → Export</strong>), importing it on another device brings the course back.</p>
+
+      <p class="q">Refunds.</p>
+      <p>Purchases made in the App Store are refunded by Apple — request it at <a href="https://reportaproblem.apple.com">reportaproblem.apple.com</a>. Purchases made on the web or Android are refunded by us: write to the address above within fourteen days, and tell us the email the receipt went to.</p>
+
+      <p class="q">How do I delete my data?</p>
+      <p><strong>Settings → Clear workspace</strong> removes what the app has stored on the device. Nothing else is kept by us; see the <a href="/privacy">privacy policy</a> for the detail.</p>
+
+      <h2>Running your own instance</h2>
+      <p>Sage is open source. The server, the Dockerfile and the deployment notes are in the repository, including the environment variables for the model gateway, the speech service and the operator panel. Write to us if you are stuck on a deployment and we will point you at the right file.</p>
+
+      <footer>
+        SAGE — a course-taking agent. A product of <a href="https://innotel.us">Innotel Labs</a>.
+        See also <a href="/privacy">Privacy</a> and <a href="/terms">Terms</a>.
+      </footer>
+    </div>
+  </body>
+</html>

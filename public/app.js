@@ -2807,6 +2807,21 @@ function renderStore() {
   const note = $('storeNote');
   const buy = $('btnBuy');
   const page = $('btnStorePage');
+  // Apple's rule for a digital good is absolute: on iOS the App Store is the only
+  // way to pay, so the web storefront appears there in no form at all — not as a
+  // button, not as a link, not as a line of copy pointing at one. When the server
+  // cannot mint a key yet, the phone says so rather than selling something it
+  // cannot deliver and calling it a fallback.
+  const ios = Boolean(NATIVE_STORE);
+  if ($('stripeNote')) $('stripeNote').hidden = ios;
+  if (ios && !store.iap) {
+    if (note) {
+      note.textContent = 'Sessions cannot be bought on this device right now. Nothing has been charged — please try again later.';
+    }
+    if (buy) buy.hidden = true;
+    if (page) page.hidden = true;
+    return;
+  }
   const plan = chosenPlan();
 
   if (!plan) {
@@ -2814,12 +2829,12 @@ function renderStore() {
       note.textContent = 'Sessions are priced on Magnate, which runs the payment; the receipt carries a claim code that installs the key here.';
     }
     if (buy) buy.hidden = true;
-    if (page) page.hidden = false;
+    if (page) page.hidden = ios;
     return;
   }
   if (buy) {
     buy.hidden = false;
-    buy.textContent = store.iap && NATIVE_STORE ? 'Buy with the App Store' : 'Buy a session';
+    buy.textContent = NATIVE_STORE ? 'Buy with the App Store' : 'Buy a session';
   }
   if (page) page.hidden = true;
   if ($('iapNote')) $('iapNote').hidden = !(store.iap && NATIVE_STORE);
@@ -2842,6 +2857,9 @@ function renderStore() {
 }
 
 async function startPurchase() {
+  // Guard as well as hide: a web checkout opened on iOS is the rejection, and the
+  // button is not the only way in here.
+  if (NATIVE_STORE) return buyWithApple(chosenPlan());
   const status = $('buyStatus');
   const button = $('btnBuy');
   const email = String($('setReceiptEmail')?.value || '').trim();
@@ -2905,6 +2923,11 @@ async function buyWithApple(plan) {
 }
 
 function openStorePage() {
+  if (NATIVE_STORE) {
+    const status = $('buyStatus');
+    if (status) status.textContent = 'Sessions on this device are bought through the App Store.';
+    return;
+  }
   openStoreUrl(store.page || 'https://magnate.innotel.us/sage');
 }
 

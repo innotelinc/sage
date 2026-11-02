@@ -26,7 +26,7 @@
     <title>Sage · course agent</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=2.7.1" />
+    <link rel="stylesheet" href="/styles.css?v=2.7.2" />
   </head>
   <body>
     <header class="topbar">
@@ -331,7 +331,7 @@
             On iPhone the purchase goes through the App Store: Apple charges the Apple ID on this phone,
             and the key installs here the moment Apple confirms it.
           </p>
-          <p class="mini muted">
+          <p class="mini muted" id="stripeNote">
             Payment is Stripe's, run by Magnate; the key is minted the moment it confirms and installs itself here.
             Lost the receipt? Claim the code from it below.
           </p>
@@ -408,6 +408,6 @@
 
     <div class="toast" id="toast" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=2.7.1"></script>
+    <script type="module" src="/app.js?v=2.7.2"></script>
   </body>
 </html>
