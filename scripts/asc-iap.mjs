@@ -403,6 +403,14 @@ async function readiness(app) {
   const infoLoc = included.find((item) => item.type === 'appInfoLocalizations')?.attributes || {};
   line('app info', !info ? 'MISSING' : [infoLoc.name || 'name MISSING', infoLoc.privacyPolicyUrl ? 'privacy policy' : 'privacy policy MISSING'].join(' · '));
   line('age rating', included.some((item) => item.type === 'ageRatingDeclarations') ? 'set' : 'MISSING');
+  const declaration = included.find((item) => item.type === 'ageRatingDeclarations');
+  if (declaration) {
+    const rating = declaration.attributes || {};
+    const unfilled = Object.keys(rating).filter((name) => rating[name] === null);
+    line('age rating id', declaration.id);
+    line('age rating blanks', unfilled.length ? unfilled.join(', ') : 'none');
+    line('age rating sample', JSON.stringify(rating).slice(0, 700));
+  }
   line('primary category', info?.relationships?.primaryCategory?.data?.id ? 'set' : 'MISSING');
   line('version state', version.attributes?.appStoreState || 'unknown');
   const full = await soft(`/v1/appStoreVersions/${version.id}?include=build`);
@@ -747,7 +755,7 @@ async function placeInSubmission(app, version) {
   });
   const explain = (error) => {
     console.log(`  submission · ${error.message}`);
-    if (error.data) console.log(`  submission · it said: ${JSON.stringify(error.data).slice(0, 900)}`);
+    if (error.data) console.log(`  submission · it said: ${JSON.stringify(error.data).slice(0, 6000)}`);
   };
   for (const draft of drafts) {
     try {
