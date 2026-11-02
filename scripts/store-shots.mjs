@@ -57,12 +57,14 @@ const STATES = [
   {
     file: '09-watching.png',
     label: 'Watching the screen',
-    run: `${tab('live')} document.getElementById('btnScreen').click();`,
+    run: `document.getElementById('screenDialog').showModal();`,
   },
   {
-    file: '10-memory-notes.png',
-    label: 'Memory · notes and timetable',
-    run: `${tab('memory')} document.getElementById('memoryList').scrollIntoView({ block: 'center' });`,
+    // Scrolling the page slides content under the translucent header, which reads as a
+    // glitch in a still. The dialog scrolls inside itself instead.
+    file: '10-settings-you.png',
+    label: 'Settings · you',
+    run: `${CLOSE_DIALOGS} document.getElementById('btnSettings').click(); const d = document.getElementById('settingsDialog'); d.scrollTop = d.scrollHeight;`,
   },
 ];
 

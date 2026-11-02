@@ -30,6 +30,9 @@ const ATTACH = /^(1|true|yes)$/i.test(String(process.env.ATTACH || ''));
 const LISTING = /^(1|true|yes)$/i.test(String(process.env.LISTING || ''));
 const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+$/, '');
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
+const CREATIVE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_CREATIVE || ''));
+const HEADER_ASSET = (process.env.APP_STORE_HEADER || 'deploy/ios/store-header/header-universal.png').trim();
+const CREATIVE_TYPES = ['PRODUCT_PAGE_HEADER_ASSET', 'APP_STORE_SEARCH_RESULTS_ASSET'];
 const REPLACE_SHOTS = /^(1|true|yes)$/i.test(String(process.env.REPLACE_SHOTS || ''));
 const SHOT_DIR_PHONE = (process.env.APP_STORE_SHOTS_PHONE || '').trim();
 const SHOT_DIR_IPAD = (process.env.APP_STORE_SHOTS_IPAD || '').trim();
@@ -910,12 +913,17 @@ async function placeInSubmission(app, version) {
       placed = true;
       console.log(`  submission · version ${version.attributes?.versionString} added to draft ${draft.id}`);
     } catch (error) {
-      // Already being in the draft is the outcome we want, not a failure: the run is
-      // repeatable and the version goes in on the first pass.
-      if (/STATE_ERROR|ENTITY_STATE_INVALID|already/i.test(error.message)) {
+      // Being in the draft already is the outcome we want, but a refusal is not proof of
+      // it: a submission without the version looks complete and never goes to review.
+      const check = await call('GET', `/v1/reviewSubmissions/${draft.id}/items?include=appStoreVersion&limit=50`).catch(() => null);
+      const held = (check?.data || []).some(
+        (row) => (row.relationships?.appStoreVersion?.data?.id || (check?.included || []).find((x) => x.type === 'appStoreVersions')?.id) === version.id,
+      );
+      if (held) {
         placed = true;
         console.log(`  submission · version ${version.attributes?.versionString} is already in draft ${draft.id}`);
       } else {
+        console.log('  submission · the draft does not hold the version');
         explain(error);
       }
     }
@@ -993,6 +1001,86 @@ async function ensureAgeRating(app) {
  * Review appScreenshotSets". The version therefore leaves the draft for the upload and
  * goes back in afterwards. Deleting an item is permitted; the submission is not.
  */
+/**
+ * The product page header and the search result creative are not screenshots: they live
+ * in the app's asset library and reach the page through a placement. One 16:9 PNG of
+ * 5244x2950 is what Apple's universal slot is for, so the same file fills both.
+ */
+async function ensureCreative(app, localizationId) {
+  const library = await call('GET', `/v1/apps/${app}/assetLibrary`).catch(() => null);
+  const libraryId = library?.data?.id;
+  if (!libraryId) return 'no asset library on this app';
+  const ref = await call('GET', `/v1/appAssetLibraryRefData?filter[placementTypes]=${CREATIVE_TYPES.join(',')}&limit=5`).catch(() => null);
+  for (const datum of ref?.data || []) {
+    for (const spec of datum.attributes?.imageSpecs || []) {
+      if (!CREATIVE_TYPES.some((type) => (spec.compatiblePlacementTypes || []).includes(type))) continue;
+      const size = spec.dimensions || {};
+      console.log(`  header · ${spec.shortName || spec.specId} · ${size.minWidth}-${size.maxWidth}x${size.minHeight}-${size.maxHeight} · ${spec.aspectRatio} · alpha ${spec.alphaAllowed}`);
+    }
+  }
+  let bytes;
+  try {
+    bytes = await readFile(HEADER_ASSET);
+  } catch {
+    return `missing (${HEADER_ASSET})`;
+  }
+  const name = HEADER_ASSET.split(/[\\/]/).pop();
+  const listed = await call('GET', `/v1/appAssetLibraries/${libraryId}/images?limit=100`).catch(() => null);
+  let image = (listed?.data || []).find((item) => item.attributes?.referenceName === 'Sage universal header');
+  if (!image || REPLACE_SHOTS) {
+    const reserved = await call('POST', '/v1/appAssetLibraryImages', {
+      data: {
+        type: 'appAssetLibraryImages',
+        attributes: { category: 'CREATIVE_ASSETS', fileName: name, fileSize: bytes.length, referenceName: 'Sage universal header' },
+        relationships: { assetLibrary: { data: { type: 'appAssetLibraries', id: libraryId } } },
+      },
+    });
+    image = reserved.data;
+    for (const operation of image.attributes?.uploadOperations || []) {
+      const headers = {};
+      for (const header of operation.requestHeaders || []) headers[header.name] = header.value;
+      const res = await fetch(operation.url, {
+        method: operation.method,
+        headers,
+        body: bytes.subarray(operation.offset, operation.offset + operation.length),
+      });
+      if (!res.ok) throw new Error(`header upload failed (${res.status})`);
+    }
+    await call('PATCH', `/v1/appAssetLibraryImages/${image.id}`, {
+      data: { type: 'appAssetLibraryImages', id: image.id, attributes: { uploaded: true } },
+    });
+    console.log('  header · uploaded to the asset library');
+  } else {
+    console.log('  header · already in the asset library');
+  }
+  // A placement on an image that Apple is still processing is refused, so the state is
+  // watched until the file stops asking for an upload.
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const fresh = await call('GET', `/v1/appAssetLibraryImages/${image.id}`).catch(() => null);
+    const state = fresh?.data?.attributes?.state || fresh?.data?.attributes?.assetState || '';
+    if (!/UPLOAD|AWAITING/i.test(String(state))) break;
+    await new Promise((done) => setTimeout(done, 2500));
+  }
+  const placed = await call('GET', `/v1/appAssetLibraryImages/${image.id}/placements?limit=20`).catch(() => null);
+  const have = placed?.data || [];
+  const missing = CREATIVE_TYPES.filter((type) => !have.some((item) => item.attributes?.placementType === type));
+  if (!missing.length) return `both slots already carry it (${have.length} placement(s))`;
+  for (const type of missing) {
+    await call('POST', '/v1/appAssetLibraryPlacements', {
+      data: {
+        type: 'appAssetLibraryPlacements',
+        attributes: { placementType: type },
+        relationships: {
+          image: { data: { type: 'appAssetLibraryImages', id: image.id } },
+          appStoreVersionLocalization: { data: { type: 'appStoreVersionLocalizations', id: localizationId } },
+        },
+      },
+    });
+    console.log(`  header · placed as ${type}`);
+  }
+  return `${missing.length} slot(s) filled`;
+}
+
 async function draftsFor(app) {
   const filtered = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&filter[platform]=IOS&limit=10`).catch(() => null);
   if (filtered?.data) return filtered.data;
@@ -1059,6 +1147,7 @@ async function ensureListing(app) {
   console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_61', SHOT_DIR_PHONE)}`);
   if (SHOT_DIR) console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_67', SHOT_DIR)}`);
   console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPAD_PRO_3GEN_129', SHOT_DIR_IPAD)}`);
+  if (CREATIVE) console.log(`  header · ${await ensureCreative(app, localization.id)}`);
   await placeInSubmission(app, version);
 }
 
