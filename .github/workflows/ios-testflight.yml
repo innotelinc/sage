@@ -102,6 +102,22 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}" "$PLIST"
 
+      - name: Add the screen-broadcast extension
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          IOS_BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          # An in-app recorder is suspended with the app, so the thing that keeps
+          # recording in another app has to be a ReplayKit broadcast extension —
+          # a second target, which the generated project does not have.
+          mkdir -p ios/App/SageBroadcast
+          cp deploy/ios/broadcast/SageBroadcast/SampleHandler.swift              deploy/ios/broadcast/SageBroadcast/Info.plist              deploy/ios/broadcast/SageBroadcast/SageBroadcast.entitlements              ios/App/SageBroadcast/
+          cp deploy/ios/broadcast/SageBroadcastPlugin.swift ios/App/App/
+          cp deploy/ios/broadcast/App.entitlements ios/App/App/App.entitlements
+          IOS_MARKETING_VERSION=$(node -p "require('./package.json').version")             gem install xcodeproj --no-document > /dev/null
+          IOS_MARKETING_VERSION=$(node -p "require('./package.json').version")             ruby deploy/ios/add-broadcast-target.rb
+          /usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" ios/App/SageBroadcast/Info.plist
+
       - name: Install native dependencies
         run: |
           # Capacitor 7 shipped a Podfile; Capacitor 8 (what we install) moved
@@ -150,6 +166,15 @@ jobs:
           test "$ICONS" -ge 1 || { echo "no AppIcon resources were compiled into the app"; exit 1; }
           test -f "$APP/Assets.car"
           ls -1 "$APP" | grep -i '^AppIcon'
+
+      - name: Verify the extension is inside the app
+        run: |
+          APP=build/Sage.xcarchive/Products/Applications/App.app
+          EXTS=$(ls -1 "$APP/PlugIns" 2>/dev/null | wc -l | tr -d " ")
+          echo "embedded extensions: $EXTS"
+          ls -1 "$APP/PlugIns" 2>/dev/null || true
+          test -d "$APP/PlugIns/SageBroadcast.appex" || { echo "the broadcast extension was not embedded"; exit 1; }
+          /usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier"             "$APP/PlugIns/SageBroadcast.appex/Info.plist"
 
       - name: Export .ipa
         env:

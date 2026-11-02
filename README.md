@@ -120,7 +120,8 @@ A web page cannot read an iPhone screen or a cast stream. This is what actually 
 | Android Chrome — whole phone screen | **yes** | *Watch* → pick the screen. Chrome ends the capture when it leaves the foreground; the app does not |
 | Desktop browser — tab, window or screen | **yes** | *Watch* → pick the surface |
 | Mirrored iPhone (AirPlay to a Mac/PC) | **yes** | *Watch* the mirroring window |
-| iPhone screen directly | **no** | iOS has no capture API — mirror it to a computer and use the **relay**, or upload a screen recording in *Read* |
+| iPhone screen directly | **yes, from the app** | *Watch* → the system broadcast sheet → start it, then switch to the course app. A ReplayKit broadcast extension keeps recording; notes are waiting when you return |
+| iPhone screen from a browser | **no** | A web page cannot start a broadcast — use the app, mirror it and use the **relay**, or upload a screen recording in *Read* |
 | Camera — board, projector, TV | **yes** | *Aim* |
 | TV cast stream (Chromecast / AirPlay) | **no** | The stream never reaches the page — aim the camera, or capture on the receiving computer |
 | Worksheet, textbook page | **yes** | Photo → *Answer* or *Read* |
@@ -254,7 +255,7 @@ expose the app publicly, set `ACCESS_CODE` so only you can spend your credits.
 - **v2.5** — shipped: course memory on the server — the workspace follows you between the phone and the browser under one identity (a panel session, or the access code), saved whole and renamed into place so a half-written copy is never read back, the newer save winning when two devices disagree, and nothing kept
 at all on an instance with no code and no sign-in.
 - **v2.5.1** — shipped: watching the screen after you leave the app — the Android build now captures through its own foreground service (a MediaProjection of the whole display) instead of the browser's, so *Watch* keeps sampling when the course app comes to the front, and an ongoing notification says it is still running so it is never silent.
-- **v3.0** — planned: native capture — a broadcast extension that records the screen while a lesson video plays, an on-device fallback that keeps working when the network drops, and hands-free study that survives a locked phone.
+- **v3.0** — started: native capture — the iOS broadcast extension now records while another app is in front (notes are waiting when you come back; an extension cannot raise a notification), the Android build captures through its own foreground service, and an on-device fallback that keeps working when the network drops is still to come.
 - Native iOS capture, which no web page can do.
 
 ---

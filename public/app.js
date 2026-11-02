@@ -17,6 +17,18 @@ const NATIVE_SCREEN = (() => {
     return null;
   }
 })();
+// iOS has no in-app capture at all: an RPScreenRecorder is suspended with the
+// app. A ReplayKit broadcast extension runs in its own process instead, so Watch
+// hands the recording to one and collects what it read.
+const NATIVE_BROADCAST = (() => {
+  const bridge = window.Capacitor;
+  if (!bridge?.isNativePlatform?.() || bridge.getPlatform?.() !== 'ios') return null;
+  try {
+    return (bridge.registerPlugin ? bridge.registerPlugin('SageBroadcast') : bridge.Plugins?.SageBroadcast) || null;
+  } catch {
+    return null;
+  }
+})();
 const GATEWAY_DEFAULT = 'https://gateway.innotel.us/v1';
 
 /* ── state ─────────────────────────────────────────────────── */
@@ -551,6 +563,8 @@ const cap = {
   recTimer: null,
   screenStream: null,
   nativeFrames: null,
+  broadcastPoll: null,
+  broadcastSeen: false,
   cameraStream: null,
   screenVideo: null,
   cameraVideo: null,
@@ -819,6 +833,7 @@ function stopListening() {
 async function toggleWatch() {
   if (cap.watchOn) return stopWatch();
   if (NATIVE_SCREEN) return startNativeWatch();
+  if (NATIVE_BROADCAST) return startBroadcastWatch();
   if (!navigator.mediaDevices?.getDisplayMedia) {
     offerScreenFallback();
     return;
@@ -905,8 +920,50 @@ async function startNativeWatch() {
   toast('Watching the screen — switch to the course app; the notification keeps it running.');
 }
 
+// The system sheet is the only way a broadcast can start, and the recording then
+// belongs to the extension rather than to this app — which is why it survives the
+// app going to the background. Notes are collected as they arrive.
+async function startBroadcastWatch() {
+  try {
+    await NATIVE_BROADCAST.configure({ code: state.settings.accessCode || '' });
+    await NATIVE_BROADCAST.start();
+  } catch (error) {
+    toast(`Could not open the broadcast sheet: ${error?.message || error}`, 'error');
+    return;
+  }
+  cap.watchOn = true;
+  clearInterval(cap.broadcastPoll);
+  cap.broadcastPoll = setInterval(drainBroadcast, 6000);
+  await drainBroadcast();
+  updateStatus();
+  toast('Choose Sage in the sheet and start the broadcast, then switch apps — it keeps recording.');
+}
+
+async function drainBroadcast() {
+  let out;
+  try {
+    out = await NATIVE_BROADCAST.drain();
+  } catch {
+    return;
+  }
+  for (const note of out?.notes || []) addNote(note.text, 'broadcast');
+  if (out && out.running === false && cap.broadcastSeen) {
+    // Stopped from Control Center or the status bar, not by tapping Watch.
+    cap.broadcastSeen = false;
+    stopWatch();
+    toast('The screen broadcast stopped.');
+    return;
+  }
+  if (out?.running) cap.broadcastSeen = true;
+  if (out?.error) aimStatus(`broadcast: ${out.error}`);
+}
+
 function stopWatch() {
   cap.watchOn = false;
+  if (cap.broadcastPoll) {
+    clearInterval(cap.broadcastPoll);
+    cap.broadcastPoll = null;
+  }
   if (cap.nativeFrames || NATIVE_SCREEN) {
     try {
       cap.nativeFrames?.remove?.();
