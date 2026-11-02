@@ -13,6 +13,8 @@ name: iOS certificate cleanup
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * *'
     inputs:
       dry_run:
         description: 'List certificates only, revoke nothing'
