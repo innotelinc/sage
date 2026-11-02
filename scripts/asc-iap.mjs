@@ -328,7 +328,7 @@ async function report(app) {
     line('app versions', `unreadable: ${error.message}`);
   }
   try {
-    const builds = await call('GET', `/v1/apps/${app}/builds?limit=5&sort=-uploadedDate&fields[builds]=version,processingState,uploadedDate,expired`);
+    const builds = await call('GET', `/v1/apps/${app}/builds?limit=5&fields[builds]=version,processingState,uploadedDate,expired`);
     for (const build of builds?.data || []) {
       line('build', `${build.attributes?.version} · ${build.attributes?.processingState}${build.attributes?.expired ? ' · expired' : ''}`);
     }
@@ -339,7 +339,19 @@ async function report(app) {
     const subs = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&limit=10&fields[reviewSubmissions]=state,platform,submittedDate`);
     const rows = subs?.data || [];
     if (!rows.length) line('submission', 'none open');
-    for (const sub of rows) line('submission', `${sub.attributes?.platform} · ${sub.attributes?.state}`);
+    for (const sub of rows) {
+      line('submission', `${sub.attributes?.platform} · ${sub.attributes?.state}`);
+      try {
+        const items = await call('GET', `/v1/reviewSubmissions/${sub.id}/items?limit=50`);
+        for (const item of items?.data || []) {
+          const rel = item.relationships || {};
+          const kinds = Object.keys(rel).filter((name) => rel[name]?.data);
+          line('  item', `${kinds.join(' + ') || item.type} · ${item.attributes?.state || 'no state'}`);
+        }
+      } catch (error) {
+        line('  items', `unreadable: ${error.message}`);
+      }
+    }
   } catch (error) {
     line('submissions', `unreadable: ${error.message}`);
   }
