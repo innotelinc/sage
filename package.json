@@ -1,6 +1,6 @@
 {
   "name": "sage-course-agent",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "A course-taking agent: listens, watches, reads, evaluates, answers quizzes and writes essays in your voice. A product of Innotel Labs (innotel.us).",

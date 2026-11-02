@@ -204,6 +204,23 @@ A key's connection allowlist, not the 1,249-model list, is the real contract. Be
 reachable here, server transcription answers 403; SAGE detects that once and falls back to on-device speech
 recognition instead of retrying. Enable the `openrouter` connection for the key to turn server transcription back on.
 
+## Operator panel (`/admin`)
+
+The access code, and what the instance is doing, sit behind Cerulean SSO instead of an `.env` edit and a restart:
+
+| Step | What to do |
+| --- | --- |
+| 1 | In Authentik, create an OIDC provider and application for Sage with the redirect URI `https://sage.innotel.tech/admin/callback` |
+| 2 | Set `CERULEAN_ISSUER`, `CERULEAN_CLIENT_ID`, `CERULEAN_CLIENT_SECRET`, `SAGE_ADMIN_SECRET` (`openssl rand -base64 48`) and `SAGE_ADMIN_EMAILS` |
+| 3 | Open `/admin`, sign in with Cerulean, then set or replace the access code |
+
+The code is kept as a salted SHA-256 digest in `data/settings.json` (mode 0600, on the `sage-data` volume), never in
+plain text, and it beats `ACCESS_CODE` from the environment once set here — including an explicit *remove the code*,
+which reopens the instance even while `ACCESS_CODE` is still in the container's environment. Sign-in is authorization
+code + PKCE with a state and nonce bound to a short-lived cookie; the session cookie is HMAC-signed for eight hours;
+every write is same-origin and CSRF-checked; an account signed in to Cerulean but absent from `SAGE_ADMIN_EMAILS` gets
+a 403, not a session. The panel also reports the instance's model routing and a seven-day tally of the calls it answered.
+
 ## Privacy
 
 The key lives in `.env`, gitignored and never served — static files come only from `public/`, and traversal is
@@ -219,6 +236,11 @@ live in the device's `localStorage`; the server keeps no state. If you expose th
 - **v1.3** — shipped: per-task model routing — running notes and spoken phrasing take the fastest model the key can call, while answers, quizzes and essays take the strongest; both chosen automatically, no setting to get wrong.
 - **v1.4** — shipped: the session clock — a bought session's remaining minutes are shown, and capture stops by itself when the window closes instead of spending turns on 401s.
 - **v1.5** — shipped: capture that survives playback — the microphone is taken back by itself when a lesson video interrupts it, Apple's own screen recorder can be imported and read in one tap, Settings closes with an ✕ and never opens itself when you return to the app, and an answered question's photo is cleared rather than reused for the next one.
+- **v2.0** — shipped: the operator panel — the access code, model routing and a seven-day usage tally behind Cerulean SSO, changed live with no restart, so the code is set from a phone instead of a shell.
+- **v2.1** — planned: course memory on the server, so notes, corrections and the learned persona follow you between the phone and the browser instead of living in one browser's storage.
+- **v2.2** — planned: study packs — a course exported as one file (notes, corrections, quiz history, sources) and imported on another device, plus a print-ready revision sheet.
+- **v2.3** — planned: several courses in one workspace, each with its own persona and a timetable that decides which course an answer belongs to.
+- **v3.0** — planned: native capture — a broadcast extension that records the screen while a lesson video plays, an on-device fallback that keeps working when the network drops, and hands-free study that survives a locked phone.
 - Native iOS capture, which no web page can do.
 
 ---

@@ -14,7 +14,9 @@ COPY src ./src
 COPY public ./public
 
 # Transcripts live under /app/threads; the relay keeps frames in memory only.
-RUN mkdir -p /app/threads && chown -R node:node /app
+# /app/data holds the operator panel's settings, so it has to exist in the image
+# for the volume to inherit node's ownership.
+RUN mkdir -p /app/threads /app/data && chown -R node:node /app
 
 USER node
 

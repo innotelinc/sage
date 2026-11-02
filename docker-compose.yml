@@ -13,6 +13,9 @@ services:
     # plain HTTP locally and HTTPS where a certificate is mounted.
     volumes:
       - sage-threads:/app/threads
+      # Operator-panel settings, including the access code. A named volume is
+      # seeded from the image, so it arrives owned by node (uid 1000).
+      - sage-data:/app/data
       - ./certs:/app/certs:ro
     restart: unless-stopped
     # Run exactly one replica: the relay stores frames in this process's memory,
@@ -22,3 +25,4 @@ services:
 
 volumes:
   sage-threads:
+  sage-data:
