@@ -7,11 +7,13 @@
  * reused, a localization or price that already exists is left alone — so re-running
  * it after fixing one thing does not create duplicates.
  *
- * Product ids cannot be edited once saved, so they are read from the same
- * configuration the server uses (`IAP_PRODUCTS`, or the bundle-id default) rather
- * than being hard-coded twice.
+ * Endpoints and payloads come from Apple's published OpenAPI specification, not
+ * from memory: an in-app purchase is created through `app`, its display text hangs
+ * off an `inAppPurchaseVersion`, and prices are referenced through
+ * `inAppPurchaseV2`. Product ids cannot be edited once saved, so they are derived
+ * from the same bundle id the server uses instead of being written down twice.
  */
-import { createPrivateKey, sign, createHash } from 'node:crypto';
+import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
 const API = 'https://api.appstoreconnect.apple.com';
@@ -28,7 +30,7 @@ if (!issuer || !keyId || !pem) {
   process.exit(1);
 }
 
-/** The plans, in the order they are shown, priced to match Magnate exactly. */
+/** The plans, priced to match what Magnate charges. */
 const PLANS = [
   {
     productId: `${BUNDLE}.session.trial`,
@@ -108,7 +110,7 @@ async function optional(path) {
   }
 }
 
-async function appId() {
+async function resolveAppId() {
   const fixed = (process.env.ASC_APP_ID || '').trim();
   if (fixed) return fixed;
   const found = await call('GET', `/v1/apps?filter[bundleId]=${encodeURIComponent(BUNDLE)}&limit=5`);
@@ -117,15 +119,15 @@ async function appId() {
   return app.id;
 }
 
-async function existingProducts(id) {
-  const list = await call('GET', `/v2/apps/${id}/inAppPurchasesV2?limit=200`);
+async function existingProducts(app) {
+  const list = await call('GET', `/v1/apps/${app}/inAppPurchasesV2?limit=200`);
   return new Map((list?.data || []).map((item) => [item.attributes?.productId, item]));
 }
 
-async function ensureProduct(iap, plan) {
+async function ensureProduct(app, iap, plan) {
   const known = iap.get(plan.productId);
   if (known) {
-    console.log(`  ${plan.productId} · already exists (${known.attributes?.state || 'no state'})`);
+    console.log(`  ${plan.productId} · already there (${known.attributes?.state || 'no state'})`);
     return known.id;
   }
   const made = await call('POST', '/v2/inAppPurchases', {
@@ -136,24 +138,46 @@ async function ensureProduct(iap, plan) {
         productId: plan.productId,
         inAppPurchaseType: 'CONSUMABLE',
       },
+      relationships: { app: { data: { type: 'apps', id: app } } },
     },
   });
   console.log(`  ${plan.productId} · created`);
   return made.data.id;
 }
 
+/** Display text lives on a version, and a new product may not have one yet. */
+async function ensureVersion(id) {
+  const list = await optional(`/v2/inAppPurchases/${id}/versions?limit=50`);
+  const versions = list?.data || [];
+  const editable = versions.find((item) => item.attributes?.state === 'PREPARE_FOR_SUBMISSION');
+  if (editable) return editable.id;
+  if (versions.length) {
+    const newest = versions.slice().sort((a, b) => (b.attributes?.version || 0) - (a.attributes?.version || 0))[0];
+    return newest.id;
+  }
+  const made = await call('POST', '/v1/inAppPurchaseVersions', {
+    data: {
+      type: 'inAppPurchaseVersions',
+      relationships: { inAppPurchase: { data: { type: 'inAppPurchases', id } } },
+    },
+  });
+  console.log('    version · draft created');
+  return made.data.id;
+}
+
 async function ensureLocalization(id, plan) {
-  const list = await optional(`/v1/inAppPurchases/${id}/inAppPurchaseLocalizations?limit=50`);
+  const list = await optional(`/v2/inAppPurchases/${id}/inAppPurchaseLocalizations?limit=50`);
   const has = (list?.data || []).some((item) => String(item.attributes?.locale || '').toLowerCase() === 'en-us');
   if (has) {
     console.log('    localization · already there');
     return;
   }
-  await call('POST', '/v1/inAppPurchaseLocalizations', {
+  const version = await ensureVersion(id);
+  await call('POST', '/v2/inAppPurchaseLocalizations', {
     data: {
       type: 'inAppPurchaseLocalizations',
-      attributes: { name: plan.name, description: plan.description, locale: 'en-US' },
-      relationships: { inAppPurchaseV2: { data: { type: 'inAppPurchases', id } } },
+      attributes: { name: plan.name, locale: 'en-US', description: plan.description },
+      relationships: { version: { data: { type: 'inAppPurchaseVersions', id: version } } },
     },
   });
   console.log('    localization · en-US added');
@@ -169,9 +193,7 @@ async function pricePoint(id, target) {
   if (!points.length) throw new Error('Apple returned no price points for this product.');
   const exact = points.find((item) => Math.abs(item.price - wanted) < 0.005);
   if (exact) return { ...exact, exact: true };
-  const nearest = points.reduce((best, item) =>
-    Math.abs(item.price - wanted) < Math.abs(best.price - wanted) ? item : best,
-  );
+  const nearest = points.reduce((best, item) => (Math.abs(item.price - wanted) < Math.abs(best.price - wanted) ? item : best));
   return { ...nearest, exact: false };
 }
 
@@ -182,7 +204,6 @@ async function ensurePrice(id, plan) {
     return;
   }
   const point = await pricePoint(id, plan.price);
-  const note = point.exact ? `$${point.price.toFixed(2)}` : `$${point.price.toFixed(2)} (closest to $${plan.price})`;
   await call('POST', '/v1/inAppPurchasePriceSchedules', {
     data: {
       type: 'inAppPurchasePriceSchedules',
@@ -196,15 +217,18 @@ async function ensurePrice(id, plan) {
       {
         type: 'inAppPurchasePrices',
         id: '${price}',
-        attributes: { startDate: null },
         relationships: {
+          inAppPurchaseV2: { data: { type: 'inAppPurchases', id } },
           inAppPurchasePricePoint: { data: { type: 'inAppPurchasePricePoints', id: point.id } },
-          inAppPurchase: { data: { type: 'inAppPurchases', id } },
         },
       },
     ],
   });
-  console.log(`    price · ${note}`);
+  console.log(
+    point.exact
+      ? `    price · $${point.price.toFixed(2)} (exact match)`
+      : `    price · $${point.price.toFixed(2)} — no $${plan.price} point exists, this is the closest`,
+  );
 }
 
 async function ensureAvailability(id) {
@@ -230,21 +254,19 @@ async function ensureAvailability(id) {
 }
 
 /**
- * The review screenshot is uploaded in two steps — reserve the record, then push
- * the bytes to the URLs Apple hands back — because App Store Connect never accepts
- * an image inline.
+ * The review screenshot takes two calls — reserve the record, then push the bytes
+ * to the URLs Apple hands back — because App Store Connect never accepts an image
+ * inline. It is only needed to submit, so a missing file must not undo the rest.
  */
 async function ensureScreenshot(id) {
   if (!SCREENSHOT) return 'skipped (no IAP_SCREENSHOT supplied)';
-  const list = await optional(`/v1/inAppPurchases/${id}/appStoreReviewScreenshot`);
-  if (list?.data) return 'already uploaded';
+  const current = await optional(`/v2/inAppPurchases/${id}/appStoreReviewScreenshot`);
+  if (current?.data) return 'already uploaded';
   let bytes;
   try {
     bytes = await readFile(SCREENSHOT);
   } catch {
-    // Review information is only needed to submit, so its absence must not undo
-    // the product, price and availability that were just created.
-    return `missing (${SCREENSHOT} not in the repository)`;
+    return `missing (${SCREENSHOT} is not in the repository)`;
   }
   const reserved = await call('POST', '/v1/inAppPurchaseAppStoreReviewScreenshots', {
     data: {
@@ -265,10 +287,7 @@ async function ensureScreenshot(id) {
     data: {
       type: 'inAppPurchaseAppStoreReviewScreenshots',
       id: record.id,
-      attributes: {
-        uploaded: true,
-        sourceFileChecksum: createHash('md5').update(bytes).digest('hex'),
-      },
+      attributes: { uploaded: true, sourceFileChecksum: createHash('md5').update(bytes).digest('hex') },
     },
   });
   return 'uploaded';
@@ -288,20 +307,19 @@ async function submitForReview(id, plan) {
   }
 }
 
-const id = await appId();
-console.log(`App ${BUNDLE} (${id}) · base territory ${TERRITORY}`);
-const iap = await existingProducts(id);
+const app = await resolveAppId();
+console.log(`App ${BUNDLE} (${app}) · base territory ${TERRITORY}`);
+const iap = await existingProducts(app);
 
 const failed = [];
 for (const plan of PLANS) {
   console.log(`- ${plan.productId}`);
   try {
-    const product = await ensureProduct(iap, plan);
+    const product = await ensureProduct(app, iap, plan);
     await ensureLocalization(product, plan);
     await ensurePrice(product, plan);
     await ensureAvailability(product);
-    const shot = await ensureScreenshot(product);
-    console.log(`    screenshot · ${shot}`);
+    console.log(`    screenshot · ${await ensureScreenshot(product)}`);
     if (SUBMIT) await submitForReview(product, plan);
   } catch (error) {
     failed.push(`${plan.productId}: ${error.message}`);
@@ -309,15 +327,15 @@ for (const plan of PLANS) {
   }
 }
 
-const after = await existingProducts(id);
+const after = await existingProducts(app);
 console.log('\nState now:');
 for (const plan of PLANS) {
   const found = after.get(plan.productId);
-  console.log(`  ${plan.productId.padEnd(38)} ${found ? found.attributes?.state || 'unknown' : 'missing'}`);
+  console.log(`  ${plan.productId.padEnd(38)} ${found ? found.attributes?.state || 'unknown' : 'MISSING'}`);
 }
 
 if (failed.length) {
   console.error(`\n${failed.length} step failed:\n${failed.join('\n')}`);
   process.exit(1);
 }
-console.log('\nAll three products exist with metadata, price and availability.');
+console.log('\nAll three products exist with display text, a price and availability.');
