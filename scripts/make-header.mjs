@@ -54,21 +54,10 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.
 
     <rect x="1528" y="1852" width="1560" height="6" fill="url(#rule)"/>
 
-    <g fill="#8b98ad" font-size="126" font-weight="500">
-      <text x="1528" y="2030">Listen</text>
-      <text x="1798" y="2030">Watch</text>
-      <text x="2088" y="2030">Aim</text>
-      <text x="2340" y="2030">Answer</text>
-      <text x="2650" y="2030">Quiz</text>
-      <text x="2898" y="2030">Essay</text>
-    </g>
-    <g fill="#1e283a">
-      <circle cx="1748" cy="1988" r="9"/>
-      <circle cx="2046" cy="1988" r="9"/>
-      <circle cx="2298" cy="1988" r="9"/>
-      <circle cx="2596" cy="1988" r="9"/>
-      <circle cx="2848" cy="1988" r="9"/>
-    </g>
+    <!-- One measured line, not six hand-positioned labels: fixed x values collided
+         the moment the font fell back to a different metrics table. -->
+    <text x="1528" y="2030" fill="#8b98ad" font-size="126" font-weight="500"
+          letter-spacing="3">Listen · Watch · Aim · Answer · Quiz · Essay</text>
   </g>
 </svg>`;
 

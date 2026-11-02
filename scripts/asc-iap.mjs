@@ -1038,8 +1038,18 @@ async function ensureCreative(app, localizationId) {
   }
   const name = HEADER_ASSET.split(/[\\/]/).pop();
   const listed = await call('GET', `/v1/appAssetLibraries/${libraryId}/images?limit=100`).catch(() => null);
-  let image = (listed?.data || []).find((item) => item.attributes?.referenceName === 'Sage universal header');
-  if (!image || REPLACE_SHOTS) {
+  const stale = (listed?.data || []).filter((item) => item.attributes?.referenceName === 'Sage universal header');
+  let image = stale.find((item) => Number(item.attributes?.fileSize) === bytes.length) || null;
+  // The bytes cannot be replaced in place, so a changed file retires the old image and
+  // takes over its two slots. Comparing size keeps this cheap and automatic.
+  for (const old of stale) {
+    if (old.id === image?.id) continue;
+    await call('PATCH', `/v1/appAssetLibraryImages/${old.id}`, {
+      data: { type: 'appAssetLibraryImages', id: old.id, attributes: { archived: true } },
+    }).catch(() => null);
+    console.log('  header · retired the previous image');
+  }
+  if (!image) {
     const reserved = await call('POST', '/v1/appAssetLibraryImages', {
       data: {
         type: 'appAssetLibraryImages',
