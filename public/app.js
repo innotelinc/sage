@@ -605,8 +605,6 @@ function aimMarkup() {
     '<div class="aim-stage" id="aimMount"><span class="aim-wait">Waiting for the camera…</span></div>',
     '<div class="aim-bar"><button type="button" class="aim-read" id="aimRead">Read what is on screen</button>',
     '<span class="aim-count" id="aimCount">0 frames</span></div>',
-    '<div class="aim-still-wrap"><span class="aim-label">the frame it is sending</span>',
-    '<img id="aimStill" alt="Last frame sent to the model" hidden /></div>',
     '<div class="aim-result" id="aimResult" hidden><div class="aim-result-head">',
     '<span id="aimResultTag">result</span></div>',
     '<div class="aim-result-body" id="aimResultBody"></div></div>',
@@ -697,11 +695,6 @@ function aimCount() {
 
 function aimFrame(data) {
   aim.lastFrameAt = Date.now();
-  const still = aimEl('aimStill');
-  if (still) {
-    still.src = data;
-    still.hidden = false;
-  }
   aimCount();
   aimLiveStatus();
 }
@@ -756,6 +749,8 @@ async function aimReadNow() {
   }
 }
 
+// Deliberately detached: this element exists only so toJpeg() can read frames.
+// The one visible preview is the Aim panel; nothing else should show the camera.
 function attachVideo(stream, which) {
   const video = document.createElement('video');
   video.muted = true;
