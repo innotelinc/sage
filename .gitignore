@@ -6,3 +6,7 @@ node_modules/
 *.log
 threads/
 data/
+dist/
+node_modules/
+android/
+capacitor.config.json
