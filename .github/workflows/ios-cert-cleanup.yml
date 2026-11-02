@@ -26,6 +26,10 @@ on:
         description: 'Certificate types to clean; any other type is left untouched'
         type: string
         default: 'IOS_DISTRIBUTION,IOS_DEVELOPMENT,DEVELOPMENT'
+      revoke_ids:
+        description: 'Optional: revoke exactly these certificate ids, comma separated, whatever their type or age'
+        type: string
+        default: ''
 
 jobs:
   cleanup:
@@ -57,6 +61,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           KEEP: ${{ inputs.keep }}
           TYPES: ${{ inputs.types }}
+          REVOKE_IDS: ${{ inputs.revoke_ids }}
         run: |
           python3 - <<'PY'
           import json, os, sys, time, urllib.error, urllib.request
@@ -109,8 +114,15 @@ jobs:
               for c in sorted(by_type[ctype], key=lambda c: c['expires'], reverse=True):
                   print(f"{ctype:<22}{c['expires']:<12}{c['serial']:<12}{c['id']}")
 
-          revoke = []
-          for ctype, items in by_type.items():
+          explicit = {i.strip() for i in os.environ.get('REVOKE_IDS', '').split(',') if i.strip()}
+          by_id = {c['id']: (ctype, c) for ctype, items in by_type.items() for c in items}
+          revoke = [(by_id[cid][0], by_id[cid][1]) for cid in sorted(explicit) if cid in by_id]
+          if explicit:
+              missing = explicit - set(by_id)
+              if missing:
+                  print(f'not on this team: {", ".join(sorted(missing))}')
+              print(f'named explicitly: {len(revoke)} certificate(s)')
+          for ctype, items in ([] if explicit else by_type.items()):
               ordered = sorted(items, key=lambda c: c['expires'], reverse=True)
               if ctype in wanted:
                   revoke += [(ctype, c) for c in ordered[keep:]]
