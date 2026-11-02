@@ -154,6 +154,7 @@ function bind() {
   $('btnProfile')?.addEventListener('click', openProfile);
   $('btnCloseProfile')?.addEventListener('click', () => $('profileDialog')?.close());
   $('btnProfileClose')?.addEventListener('click', () => $('profileDialog')?.close());
+  $('btnProfileCloseFoot')?.addEventListener('click', () => $('profileDialog')?.close());
   $('btnSaveProfile')?.addEventListener('click', save);
   $('btnSaveProfileFoot')?.addEventListener('click', save);
 
