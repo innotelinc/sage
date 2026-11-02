@@ -1,0 +1,112 @@
+name: Issue distribution certificate
+
+# One-off: turn a certificate signing request into an Apple Distribution
+# certificate through the App Store Connect API. Run it once per certificate
+# (they last a year), then pair the printed certificate with the private key that
+# stayed on the operator's machine and store the result as IOS_DIST_P12 +
+# IOS_DIST_P12_PASSWORD. Once those secrets exist the release job imports that
+# identity, so it signs with the same certificate every time instead of minting a
+# new one per archive until Apple's cap blocks it.
+#
+# The CSR is public (it carries only a public key); the private key never leaves
+# the operator's machine.
+
+on:
+  workflow_dispatch:
+    inputs:
+      csr:
+        description: 'Base64 of the PEM certificate signing request'
+        required: true
+        type: string
+
+jobs:
+  issue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install signing key and JWT library
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_PRIVATE_KEY" ]; then
+            echo "ASC_KEY_ID / ASC_ISSUER_ID / ASC_PRIVATE_KEY secrets are missing"; exit 1
+          fi
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          python3 -m pip install --quiet --disable-pip-version-check pyjwt cryptography
+
+      - name: Request the certificate
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          CSR_B64: ${{ inputs.csr }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, sys, textwrap, time, urllib.error, urllib.request
+          import jwt
+
+          key_id = os.environ['ASC_KEY_ID']
+          issuer = os.environ['ASC_ISSUER_ID']
+          csr = base64.b64decode(os.environ['CSR_B64']).decode()
+          if 'BEGIN CERTIFICATE REQUEST' not in csr:
+              print('input is not a PEM certificate signing request'); sys.exit(1)
+
+          with open(os.path.expanduser(f'~/.appstoreconnect/private_keys/AuthKey_{key_id}.p8')) as fh:
+              key = fh.read()
+          now = int(time.time())
+          token = jwt.encode(
+              {'iss': issuer, 'iat': now, 'exp': now + 600, 'aud': 'appstoreconnect-v1'},
+              key, algorithm='ES256', headers={'kid': key_id, 'typ': 'JWT'},
+          )
+
+          def post(body):
+              req = urllib.request.Request('https://api.appstoreconnect.apple.com/v1/certificates', method='POST')
+              req.add_header('Authorization', f'Bearer {token}')
+              req.add_header('Content-Type', 'application/json')
+              data = json.dumps(body).encode()
+              try:
+                  with urllib.request.urlopen(req, data=data, timeout=90) as r:
+                      return r.status, json.loads(r.read().decode())
+              except urllib.error.HTTPError as e:
+                  return e.code, {'error': e.read().decode()[:600]}
+
+          created = None
+          # IOS_DISTRIBUTION is the iOS App Store type; older accounts only accept
+          # the legacy DISTRIBUTION name, so fall back rather than fail.
+          for cert_type in ('IOS_DISTRIBUTION', 'DISTRIBUTION'):
+              status, payload = post({'data': {'type': 'certificates', 'attributes': {
+                  'certificateType': cert_type, 'csrContent': csr}}})
+              print(f'{cert_type}: HTTP {status}')
+              if status in (200, 201):
+                  created = payload
+                  break
+              print(f'  {payload}')
+
+          if not created:
+              sys.exit(1)
+
+          attrs = created['data']['attributes']
+          der = base64.b64decode(attrs['certificateContent'])
+          pem = '-----BEGIN CERTIFICATE-----\n' + '\n'.join(textwrap.wrap(base64.b64encode(der).decode(), 64)) + '\n-----END CERTIFICATE-----\n'
+          print(f"id={created['data']['id']}")
+          print(f"type={attrs.get('certificateType')} name={attrs.get('displayName') or attrs.get('name')}")
+          print(f"expires={attrs.get('expirationDate')}")
+          print('--- certificate PEM (public; pair it with your local private key) ---')
+          print(pem)
+          with open('certificate.pem', 'w') as fh:
+              fh.write(pem)
+          PY
+
+      - name: Keep the certificate
+        uses: actions/upload-artifact@v4
+        with:
+          name: sage-distribution-certificate
+          path: certificate.pem
+          if-no-files-found: error
