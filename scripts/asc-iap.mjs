@@ -307,8 +307,48 @@ async function submitForReview(id, plan) {
   }
 }
 
+/**
+ * Read-only: what App Store Connect already holds for this app. A first consumable
+ * cannot be submitted without an app version in the same submission, so when the
+ * web UI says "add an app version" this is how we see why none is on offer.
+ */
+async function report(app) {
+  const line = (label, value) => console.log(`  ${label} · ${value}`);
+  try {
+    const versions = await call('GET', `/v1/apps/${app}/appStoreVersions?limit=20&include=build&fields[appStoreVersions]=versionString,platform,appStoreState,createdDate,releaseType`);
+    const rows = versions?.data || [];
+    if (!rows.length) line('app versions', 'NONE — nothing to attach to a submission');
+    for (const version of rows) {
+      const id = version.relationships?.build?.data?.id;
+      const build = (versions.included || []).find((item) => item.type === 'builds' && item.id === id);
+      const state = version.attributes?.appStoreState || 'unknown';
+      line('app version', `${version.attributes?.versionString} ${version.attributes?.platform} · ${state} · build ${build?.attributes?.version ?? 'none'}${build?.attributes?.processingState ? ` (${build.attributes.processingState})` : ''}`);
+    }
+  } catch (error) {
+    line('app versions', `unreadable: ${error.message}`);
+  }
+  try {
+    const builds = await call('GET', `/v1/apps/${app}/builds?limit=5&sort=-uploadedDate&fields[builds]=version,processingState,uploadedDate,expired`);
+    for (const build of builds?.data || []) {
+      line('build', `${build.attributes?.version} · ${build.attributes?.processingState}${build.attributes?.expired ? ' · expired' : ''}`);
+    }
+  } catch (error) {
+    line('builds', `unreadable: ${error.message}`);
+  }
+  try {
+    const subs = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&limit=10&fields[reviewSubmissions]=state,platform,submittedDate`);
+    const rows = subs?.data || [];
+    if (!rows.length) line('submission', 'none open');
+    for (const sub of rows) line('submission', `${sub.attributes?.platform} · ${sub.attributes?.state}`);
+  } catch (error) {
+    line('submissions', `unreadable: ${error.message}`);
+  }
+}
+
+
 const app = await resolveAppId();
 console.log(`App ${BUNDLE} (${app}) · base territory ${TERRITORY}`);
+await report(app);
 const iap = await existingProducts(app);
 
 const failed = [];
