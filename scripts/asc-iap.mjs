@@ -1103,6 +1103,7 @@ async function shotStates(localizationId) {
       const delivery = shot.attributes?.assetDeliveryState || {};
       const state = delivery.state || 'unknown';
       counts[state] = (counts[state] || 0) + 1;
+      if (state !== 'COMPLETE') console.log(`  shots · ${set.attributes?.screenshotDisplayType} · ${shot.attributes?.fileName} · ${state}`);
       const errors = (delivery.errors || []).map((e) => e.description || e.code).slice(0, 2);
       if (errors.length) console.log(`  shots · ${set.attributes?.screenshotDisplayType} · ${shot.attributes?.fileName} · ${errors.join(' / ')}`);
     }
