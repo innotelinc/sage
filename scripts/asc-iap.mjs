@@ -1044,10 +1044,20 @@ async function ensureCreative(app, localizationId) {
   // takes over its two slots. Comparing size keeps this cheap and automatic.
   for (const old of stale) {
     if (old.id === image?.id) continue;
-    await call('PATCH', `/v1/appAssetLibraryImages/${old.id}`, {
-      data: { type: 'appAssetLibraryImages', id: old.id, attributes: { archived: true } },
-    }).catch(() => null);
-    console.log('  header · retired the previous image');
+    try {
+      // Archiving alone keeps the name reserved, and the name is what the next upload
+      // needs: the retired copy is renamed out of the way in the same call.
+      await call('PATCH', `/v1/appAssetLibraryImages/${old.id}`, {
+        data: {
+          type: 'appAssetLibraryImages',
+          id: old.id,
+          attributes: { archived: true, referenceName: `Sage header retired ${Date.now()}` },
+        },
+      });
+      console.log('  header · retired the previous image');
+    } catch (error) {
+      console.log(`  header · could not retire ${old.id}: ${error.message}`);
+    }
   }
   if (!image) {
     const reserved = await call('POST', '/v1/appAssetLibraryImages', {
