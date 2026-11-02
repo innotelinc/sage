@@ -1,16 +1,25 @@
+# Sage — course-taking agent by Innotel Labs (https://innotel.us)
+#
+# Plug and play: `docker compose up -d --build` runs with no .env at all, and
+# picks one up automatically the moment you create it. Nothing here bakes a
+# secret into the image; every setting is an environment variable at runtime.
 services:
   sage:
     build: .
-    image: sage-course-agent:latest
+    image: sage-course-agent:3.0.0
     container_name: sage
+    # PID 1 that forwards signals and reaps children, so `compose stop` is clean.
+    init: true
     ports:
-      - "8787:8787"
-      - "8443:8443"
-    # The gateway key stays in your .env on the host — it is never baked into the image.
+      # Host ports are configurable; the container keeps the app's own defaults.
+      - "${SAGE_HTTP_PORT:-8787}:8787"
+      # Only used when PORT=8443 and TLS_CERT/TLS_KEY are set (mic + screen capture
+      # need a secure context off localhost).
+      - "${SAGE_HTTPS_PORT:-8443}:8443"
+    # Optional by design: a first run with no .env must still work.
     env_file:
-      - .env
-    # PORT and TLS_CERT/TLS_KEY come from .env, so the same compose file serves
-    # plain HTTP locally and HTTPS where a certificate is mounted.
+      - path: .env
+        required: false
     volumes:
       - sage-threads:/app/threads
       # Operator-panel settings, including the access code. A named volume is
@@ -18,9 +27,9 @@ services:
       - sage-data:/app/data
       - ./certs:/app/certs:ro
     restart: unless-stopped
-    # Run exactly one replica: the relay stores frames in this process's memory,
-    # so a second container would not see the frames the first one received.
     deploy:
+      # The relay stores frames in this process's memory, so exactly one replica:
+      # a second container would never see what the first one received.
       replicas: 1
 
 volumes:

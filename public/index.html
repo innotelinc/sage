@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b0f19" />
+    <meta name="theme-color" content="#080b12" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)" />
     <script>
       // Bundled builds are served from their own origin — capacitor://localhost
       // on iOS, https://app.sage.local on Android — with no API server behind
@@ -17,6 +18,13 @@
           window.__SAGE_API__ = 'https://sage.innotel.tech';
           window.__SAGE_NATIVE__ = true;
         }
+        // Paint the right theme before first paint, so there is no flash.
+        try {
+          var saved = JSON.parse(localStorage.getItem('sage.shell.v1') || '{}');
+          var pref = saved.theme || 'auto';
+          var dark = pref === 'dark' || (pref === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        } catch (e) {}
       })();
     </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -26,266 +34,463 @@
     <title>Sage · course agent</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=2.7.2" />
+    <link rel="stylesheet" href="/styles.css?v=3.2.0" />
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand">
-        <span class="dot" id="statusDot" title="checking…"></span>
-        <span class="brand-name" id="agentName">Sage</span>
-        <span class="tag" id="modelTag">connecting</span>
-      </div>
-      <a class="icon-btn" href="/about" title="About Sage" aria-label="About Sage">?</a>
-      <button class="icon-btn" id="btnSettings" title="Settings" aria-label="Settings">⚙</button>
-    </header>
+    <a class="skip-link" href="#main">Skip to content</a>
 
-    <div class="actions" id="courseBar">
-      <select id="courseSelect" title="Active course" aria-label="Active course"></select>
-      <button class="btn ghost small" id="btnNewCourse">＋ course</button>
+    <!-- Connection state is announced, not just coloured. -->
+    <div class="net-banner" id="netBanner" role="status" aria-live="polite" hidden>
+      <span class="net-dot"></span>
+      <span id="netText">Reconnecting to the Sage server…</span>
+      <button type="button" class="link-btn" id="netRetry">Retry</button>
     </div>
 
-    <nav class="tabs" id="tabs" role="tablist">
-      <button class="tab active" data-tab="live" role="tab">Live</button>
-      <button class="tab" data-tab="answer" role="tab">Answer</button>
-      <button class="tab" data-tab="quiz" role="tab">Quiz</button>
-      <button class="tab" data-tab="essay" role="tab">Essay</button>
-      <button class="tab" data-tab="read" role="tab">Read</button>
-      <button class="tab" data-tab="memory" role="tab">Memory</button>
-    </nav>
-
-    <main>
-      <!-- ── LIVE ─────────────────────────────────────────────── -->
-      <section class="panel active" id="tab-live">
-        <div class="setup hidden" id="setupCard">
-          <h3>Connect a brain</h3>
-          <p>
-            Open <strong>Settings → Gateway</strong> and paste an OmniRoute key from
-            <code>gateway.innotel.us</code>. Only keys the gateway accepts will be stored.
-          </p>
-          <button class="btn ghost small" id="btnRetryHealth">Check again</button>
+    <div class="app-shell">
+      <!-- ── rail ───────────────────────────────────────────────── -->
+      <aside class="sidebar" id="sidebar" aria-label="Workspace">
+        <div class="sidebar-head">
+          <span class="dot" id="statusDot" title="checking…" aria-hidden="true"></span>
+          <span class="brand-name" id="agentName">Sage</span>
+          <span class="tag" id="modelTag">connecting</span>
+          <button type="button" class="icon-btn sidebar-close" id="btnSidebarClose" aria-label="Close navigation">✕</button>
         </div>
 
-        <div class="capture-grid">
-          <button class="cap-btn" id="btnListen">
-            <span class="cap-ico">🎙</span>
-            <span class="cap-label">Listen</span>
-            <span class="cap-sub">lecture audio → transcript</span>
-          </button>
-          <button class="cap-btn" id="btnScreen">
-            <span class="cap-ico">🖥</span>
-            <span class="cap-label">Watch</span>
-            <span class="cap-sub">slides, screen, cast</span>
-          </button>
-          <button class="cap-btn" id="btnCamera">
-            <span class="cap-ico">📷</span>
-            <span class="cap-label">Aim</span>
-            <span class="cap-sub">board or TV camera</span>
-          </button>
-          <button class="cap-btn danger" id="btnStopAll">
-            <span class="cap-ico">⏹</span>
-            <span class="cap-label">Stop</span>
-            <span class="cap-sub">end all capture</span>
-          </button>
+        <div class="course-block">
+          <label class="field-label" for="courseSelect">Active course</label>
+          <div class="course-row">
+            <select id="courseSelect" aria-label="Active course"></select>
+            <button class="icon-btn" id="btnNewCourse" title="New course" aria-label="New course">＋</button>
+          </div>
         </div>
 
-        <div class="study-bar">
-          <button class="btn primary" id="btnStudy">Start study mode</button>
-          <span class="study-note" id="studyNote">Listens and watches at the same time, answers when a question appears.</span>
+        <nav class="tabs" id="tabs" role="tablist" aria-label="Sage workspace">
+          <button class="tab active" data-tab="live" role="tab" id="nav-live" aria-controls="tab-live" aria-selected="true">
+            <span class="tab-ico" aria-hidden="true">◉</span><span class="tab-label">Live</span><kbd>1</kbd>
+          </button>
+          <button class="tab" data-tab="answer" role="tab" id="nav-answer" aria-controls="tab-answer" aria-selected="false">
+            <span class="tab-ico" aria-hidden="true">?</span><span class="tab-label">Answer</span><kbd>2</kbd>
+          </button>
+          <button class="tab" data-tab="quiz" role="tab" id="nav-quiz" aria-controls="tab-quiz" aria-selected="false">
+            <span class="tab-ico" aria-hidden="true">☑</span><span class="tab-label">Quiz</span><kbd>3</kbd>
+          </button>
+          <button class="tab" data-tab="essay" role="tab" id="nav-essay" aria-controls="tab-essay" aria-selected="false">
+            <span class="tab-ico" aria-hidden="true">✎</span><span class="tab-label">Essay</span><kbd>4</kbd>
+          </button>
+          <button class="tab" data-tab="read" role="tab" id="nav-read" aria-controls="tab-read" aria-selected="false">
+            <span class="tab-ico" aria-hidden="true">▤</span><span class="tab-label">Read</span><kbd>5</kbd>
+          </button>
+          <button class="tab" data-tab="memory" role="tab" id="nav-memory" aria-controls="tab-memory" aria-selected="false">
+            <span class="tab-ico" aria-hidden="true">✦</span><span class="tab-label">Memory</span><kbd>6</kbd>
+          </button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <button type="button" class="rail-btn" id="btnPalette" aria-keyshortcuts="Control+K Meta+K">
+            <span aria-hidden="true">⌘</span> Command <kbd>K</kbd>
+          </button>
+          <div class="rail-row">
+            <button type="button" class="rail-btn icon-only" id="btnTheme" aria-label="Switch theme" title="Switch theme">◐</button>
+            <button type="button" class="rail-btn icon-only" id="btnShortcuts" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">⌨</button>
+            <a class="rail-btn icon-only" href="/about" title="About Sage" aria-label="About Sage">?</a>
+            <button type="button" class="rail-btn icon-only" id="btnProfile" aria-label="Your profile" title="Your profile (p)"><span class="avatar-xs" id="profileBadge" aria-hidden="true">S</span></button>
+            <button type="button" class="rail-btn icon-only" id="btnSettings" aria-label="Settings" title="Settings">⚙</button>
+          </div>
+          <button type="button" class="rail-btn" id="btnInstall" hidden>
+            <span aria-hidden="true">↓</span> Install app
+          </button>
         </div>
+      </aside>
 
-        <div class="statusline">
-          <span id="captureStatus">Idle. Nothing is being recorded.</span>
-          <span class="counters" id="counters"></span>
-        </div>
+      <div class="scrim" id="scrim" hidden></div>
 
-        <!-- Aim: the live camera and the result it produced. The popup window
-             reuses this markup; this copy is what shows when a popup is blocked
-             or the app runs inside the iOS shell, which has only one window. -->
-        <div class="aim-viewer" id="aimViewer" hidden></div>
+      <!-- ── content ────────────────────────────────────────────── -->
+      <div class="content-col">
+        <header class="topbar">
+          <button type="button" class="icon-btn menu-btn" id="btnSidebar" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">☰</button>
+          <div class="crumbs">
+            <span class="crumb-root">Sage</span>
+            <span class="crumb-sep" aria-hidden="true">/</span>
+            <span class="crumb-here" id="crumbHere">Live</span>
+          </div>
+          <div class="topbar-actions">
+            <span class="live-pill" id="capturePill" hidden><span class="live-pulse" aria-hidden="true"></span>capturing</span>
+            <button type="button" class="btn ghost small" id="btnQuickStudy">Study mode</button>
+          </div>
+        </header>
 
-        <div class="live-grid">
-          <div class="col">
-            <div class="col-head">
-              <h4>Hearing</h4>
-              <button class="mini" id="btnClearTranscript">clear</button>
+        <main id="main">
+          <!-- ── LIVE ─────────────────────────────────────────────── -->
+          <section class="panel active" id="tab-live" role="tabpanel" aria-labelledby="nav-live" tabindex="-1">
+            <div class="page-head">
+              <h1>Live session</h1>
+              <p class="page-sub">Listen to the lecture, watch the slides, and let Sage keep the running notes.</p>
             </div>
-            <div class="feed" id="transcript"><p class="empty">No audio yet. Tap Listen.</p></div>
-          </div>
-          <div class="col">
-            <div class="col-head">
-              <h4>Knowing</h4>
-              <button class="mini" id="btnClearNotes">clear</button>
+
+            <div class="setup hidden" id="setupCard">
+              <h3>Connect a brain</h3>
+              <p>
+                Open <strong>Settings → Gateway</strong> and paste an OmniRoute key from
+                <code>gateway.innotel.us</code>. Only keys the gateway accepts will be stored.
+              </p>
+              <button class="btn ghost small" id="btnRetryHealth">Check again</button>
             </div>
-            <div class="feed" id="liveNotes"><p class="empty">Notes appear here as it understands.</p></div>
+
+            <div class="capture-grid">
+              <button class="cap-btn" id="btnListen">
+                <span class="cap-ico" aria-hidden="true">🎙</span>
+                <span class="cap-label">Listen</span>
+                <span class="cap-sub">lecture audio → transcript</span>
+              </button>
+              <button class="cap-btn" id="btnScreen">
+                <span class="cap-ico" aria-hidden="true">🖥</span>
+                <span class="cap-label">Watch</span>
+                <span class="cap-sub">slides, screen, cast</span>
+              </button>
+              <button class="cap-btn" id="btnCamera">
+                <span class="cap-ico" aria-hidden="true">📷</span>
+                <span class="cap-label">Aim</span>
+                <span class="cap-sub">board or TV camera</span>
+              </button>
+              <button class="cap-btn danger" id="btnStopAll">
+                <span class="cap-ico" aria-hidden="true">⏹</span>
+                <span class="cap-label">Stop</span>
+                <span class="cap-sub">end all capture</span>
+              </button>
+            </div>
+
+            <div class="study-bar">
+              <button class="btn primary" id="btnStudy">Start study mode</button>
+              <span class="study-note" id="studyNote">Listens and watches at the same time, answers when a question appears.</span>
+            </div>
+
+            <div class="statusline">
+              <span id="captureStatus">Idle. Nothing is being recorded.</span>
+              <span class="counters" id="counters"></span>
+            </div>
+
+            <!-- Aim: the live camera and the result it produced. The popup window
+                 reuses this markup; this copy is what shows when a popup is blocked
+                 or the app runs inside the iOS shell, which has only one window. -->
+            <div class="aim-viewer" id="aimViewer" hidden></div>
+
+            <div class="live-grid">
+              <div class="col">
+                <div class="col-head">
+                  <h2 class="col-title">Hearing</h2>
+                  <button class="mini" id="btnClearTranscript">clear</button>
+                </div>
+                <div class="feed" id="transcript" aria-live="polite"><p class="empty">No audio yet. Tap Listen.</p></div>
+              </div>
+              <div class="col">
+                <div class="col-head">
+                  <h2 class="col-title">Knowing</h2>
+                  <button class="mini" id="btnClearNotes">clear</button>
+                </div>
+                <div class="feed" id="liveNotes" aria-live="polite"><p class="empty">Notes appear here as it understands.</p></div>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button class="btn primary" id="btnAnswerNow">Answer last question</button>
+              <button class="btn" id="btnSay">What do I say?</button>
+              <label class="switch"><input type="checkbox" id="ttsToggle" checked /> speak answers</label>
+            </div>
+
+            <div class="ask-row relay-row">
+              <input id="relayCode" type="text" maxlength="12" placeholder="Relay code from your computer…" aria-label="Relay code" />
+              <button class="btn" id="btnRelayJoin">Join</button>
+            </div>
+            <p class="mini muted" id="relayStatus" hidden></p>
+
+            <div class="ask-row">
+              <input id="liveAskInput" type="text" placeholder="Ask it anything about what's on screen…" aria-label="Ask about the session" />
+              <button class="btn" id="btnLiveAsk">Ask</button>
+            </div>
+
+            <div class="result" id="liveAnswer" hidden></div>
+          </section>
+
+          <!-- ── ANSWER ───────────────────────────────────────────── -->
+          <section class="panel" id="tab-answer" role="tabpanel" aria-labelledby="nav-answer" tabindex="-1">
+            <div class="page-head">
+              <h1>Answer a question</h1>
+              <p class="page-sub">A question from a quiz slide, a worksheet, or your own curiosity. Attach a photo if showing is easier than typing.</p>
+            </div>
+            <textarea id="answerText" rows="4" placeholder="Paste the question…"></textarea>
+            <div class="field-row">
+              <label class="file-btn">
+                <input type="file" id="answerFiles" accept="image/*" multiple hidden />
+                <span id="answerFilesLabel">＋ photo of question</span>
+              </label>
+              <span class="mini muted" id="answerFileCount"></span>
+              <button type="button" class="mini" id="btnClearAnswerFiles" hidden>clear photos</button>
+            </div>
+            <div class="thumbs" id="answerThumbs"></div>
+            <button class="btn primary block" id="btnAnswer">Answer it</button>
+            <div class="result" id="answerResult" hidden></div>
+          </section>
+
+          <!-- ── QUIZ ─────────────────────────────────────────────── -->
+          <section class="panel" id="tab-quiz" role="tabpanel" aria-labelledby="nav-quiz" tabindex="-1">
+            <div class="page-head">
+              <h1>Quiz</h1>
+              <p class="page-sub">Paste the whole quiz — separate questions with a blank line. It answers in order, one decision at a time.</p>
+            </div>
+            <textarea id="quizText" rows="7" placeholder="1. Which organelle…&#10;&#10;2. A 3 kg block…"></textarea>
+            <div class="field-row">
+              <label class="file-btn">
+                <input type="file" id="quizFiles" accept="image/*" multiple hidden />
+                <span id="quizFilesLabel">＋ photo of quiz</span>
+              </label>
+              <span class="mini muted" id="quizFileCount"></span>
+            </div>
+            <div class="thumbs" id="quizThumbs"></div>
+            <div class="actions">
+              <button class="btn primary" id="btnQuizSolve">Solve all</button>
+              <button class="btn ghost" id="btnQuizStop" disabled>Stop</button>
+            </div>
+            <div class="quiz-progress mini muted" id="quizProgress"></div>
+            <div id="quizResults" class="stack"></div>
+          </section>
+
+          <!-- ── ESSAY ────────────────────────────────────────────── -->
+          <section class="panel" id="tab-essay" role="tabpanel" aria-labelledby="nav-essay" tabindex="-1">
+            <div class="page-head">
+              <h1>Essay</h1>
+              <p class="page-sub">Give it the prompt and the material. It writes in your voice, citing only what you gave it.</p>
+            </div>
+            <input id="essayTopic" type="text" placeholder="Essay question or title" aria-label="Essay question or title" />
+            <textarea id="essayRubric" rows="2" placeholder="Rubric / what earns marks (optional)"></textarea>
+            <textarea id="essaySources" rows="4" placeholder="Source material, quotes, lecture notes it may rely on (optional)"></textarea>
+            <div class="field-row">
+              <label class="inline-field">words <input id="essayWords" type="number" min="150" max="4000" step="50" value="800" /></label>
+              <label class="inline-field">tone
+                <select id="essayTone">
+                  <option value="">as me</option>
+                  <option value="academic">academic</option>
+                  <option value="punchy">punchy</option>
+                  <option value="reflective">reflective</option>
+                  <option value="technical">technical</option>
+                </select>
+              </label>
+            </div>
+            <button class="btn primary block" id="btnEssay">Write it</button>
+            <div class="result" id="essayResult" hidden>
+              <div class="result-head">
+                <span class="result-tag">Draft</span>
+                <span class="result-tools">
+                  <button class="mini" id="btnEssayCopy">copy</button>
+                  <button class="mini" id="btnEssayDownload">.md</button>
+                </span>
+              </div>
+              <div class="prose" id="essayOutput"></div>
+            </div>
+          </section>
+
+          <!-- ── READ ─────────────────────────────────────────────── -->
+          <section class="panel" id="tab-read" role="tabpanel" aria-labelledby="nav-read" tabindex="-1">
+            <div class="page-head">
+              <h1>Read &amp; extract</h1>
+              <p class="page-sub">Drop in slides, screenshots, a phone screen recording, or paste a chapter. Video is sampled into frames.</p>
+            </div>
+            <label class="file-btn block">
+              <input type="file" id="readFiles" accept="image/*,video/*,.txt,.md,.csv,.vtt,.srt" multiple hidden />
+              <span id="readFilesLabel">＋ files, photos, screen recording</span>
+            </label>
+            <div class="thumbs" id="readThumbs"></div>
+            <textarea id="readPaste" rows="4" placeholder="…or paste text / notes here"></textarea>
+            <button class="btn primary block" id="btnRead">Read &amp; extract</button>
+            <div class="result" id="readResult" hidden><div class="prose" id="readOutput"></div></div>
+          </section>
+
+          <!-- ── MEMORY ───────────────────────────────────────────── -->
+          <section class="panel" id="tab-memory" role="tabpanel" aria-labelledby="nav-memory" tabindex="-1">
+            <div class="page-head">
+              <h1>Memory</h1>
+              <p class="page-sub">What it has learned about this course and about you. Everything here is fed back in next time.</p>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2 class="card-title">Study pack</h2></div>
+              <div class="actions">
+                <button class="btn primary" id="btnEvolve">Evolve</button>
+                <button class="btn ghost" id="btnExport">Export</button>
+                <button class="btn ghost" id="btnPackExport">Study pack ↓</button>
+                <button class="btn ghost" id="btnPackImport">Import pack</button>
+                <button class="btn ghost" id="btnRevision">Revision sheet</button>
+                <button class="btn ghost danger" id="btnClearMemory">Wipe</button>
+                <input type="file" id="packFile" accept=".json,application/json" hidden />
+              </div>
+              <p class="mini muted" id="packStatus"></p>
+              <p class="mini muted">
+                A study pack is one file: what was said in class, what it learned and corrected, every answer and quiz
+                item with the reasoning, and the material it relied on. Import it on another device to carry the course
+                across, or print the revision sheet the night before.
+              </p>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h2 class="card-title">Across devices</h2>
+                <button class="btn ghost small" id="btnSyncNow">Sync now</button>
+              </div>
+              <p class="mini muted" id="syncStatus">Checking the server…</p>
+              <p class="mini muted">
+                One copy on the server, keyed to you: sign in to the panel and it follows the session, or set the access
+                code in Settings and it follows the code. That is how a course opened on the phone reaches the browser
+                without exporting a study pack. With neither, the workspace stays on this device.
+              </p>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2 class="card-title">Timetable</h2></div>
+              <p class="mini muted">When a class is in session, its course answers — whichever tab you last used.</p>
+              <div class="actions">
+                <select id="slotCourse" aria-label="Course for this class"></select>
+                <input id="slotDays" type="text" placeholder="days, e.g. Mon, Wed" aria-label="Days" />
+                <label class="inline-field">from <input id="slotStart" type="time" value="09:00" /></label>
+                <label class="inline-field">to <input id="slotEnd" type="time" value="10:15" /></label>
+                <button class="btn ghost" id="btnSlotAdd">Add class</button>
+              </div>
+              <div id="timetableList" class="stack"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2 class="card-title">Evolved behaviour</h2></div>
+              <div id="traitsList" class="chips"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h2 class="card-title">Notes</h2>
+                <span class="mini muted" id="memoryCount"></span>
+              </div>
+              <div class="ask-row">
+                <input id="memoryAdd" type="text" placeholder="Teach it something durable…" aria-label="Add a memory" />
+                <button class="btn" id="btnMemoryAdd">Add</button>
+              </div>
+              <div id="memoryList" class="stack"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2 class="card-title">Evolution log</h2></div>
+              <div id="evolutionLog" class="stack"></div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- ── profile: who Sage is ─────────────────────────────────── -->
+    <dialog id="profileDialog" class="sheet wp-sheet" aria-labelledby="profileTitle">
+      <form method="dialog" id="profileForm">
+        <div class="wp-cover">
+          <span class="wp-cover-glow" aria-hidden="true"></span>
+          <button type="button" class="wp-close" id="btnCloseProfile" aria-label="Close profile" title="Close">✕</button>
+        </div>
+
+        <header class="wp-head">
+          <span class="wp-avatar" id="profileAvatar" aria-hidden="true">S</span>
+          <div class="wp-id">
+            <h3 id="profileTitle">Sage</h3>
+            <p class="wp-handle" id="profileHandle">@sage · study double</p>
+            <p class="wp-course" id="profileCourse">No course set yet — name the course Sage is taking.</p>
           </div>
-        </div>
-
-        <div class="actions">
-          <button class="btn primary" id="btnAnswerNow">Answer last question</button>
-          <button class="btn" id="btnSay">What do I say?</button>
-          <label class="switch"><input type="checkbox" id="ttsToggle" checked /> speak answers</label>
-        </div>
-
-        <div class="ask-row relay-row">
-          <input id="relayCode" type="text" maxlength="12" placeholder="Relay code from your computer…" />
-          <button class="btn" id="btnRelayJoin">Join</button>
-        </div>
-        <p class="mini muted" id="relayStatus" hidden></p>
-
-        <div class="ask-row">
-          <input id="liveAskInput" type="text" placeholder="Ask it anything about what's on screen…" />
-          <button class="btn" id="btnLiveAsk">Ask</button>
-        </div>
-
-        <div class="result" id="liveAnswer" hidden></div>
-      </section>
-
-      <!-- ── ANSWER ───────────────────────────────────────────── -->
-      <section class="panel" id="tab-answer">
-        <p class="hint">
-          A question from a quiz slide, a worksheet, or your own curiosity. Attach a photo of the question if it is
-          easier to show than to type.
-        </p>
-        <textarea id="answerText" rows="4" placeholder="Paste the question…"></textarea>
-        <div class="field-row">
-          <label class="file-btn">
-            <input type="file" id="answerFiles" accept="image/*" multiple hidden />
-            <span id="answerFilesLabel">＋ photo of question</span>
-          </label>
-          <span class="mini muted" id="answerFileCount"></span>
-          <button type="button" class="mini" id="btnClearAnswerFiles" hidden>clear photos</button>
-        </div>
-        <div class="thumbs" id="answerThumbs"></div>
-        <button class="btn primary block" id="btnAnswer">Answer it</button>
-        <div class="result" id="answerResult" hidden></div>
-      </section>
-
-      <!-- ── QUIZ ─────────────────────────────────────────────── -->
-      <section class="panel" id="tab-quiz">
-        <p class="hint">
-          Paste the whole quiz — separate questions with a blank line. It answers in order, one decision at a time.
-          You can also attach the printed page as a photo.
-        </p>
-        <textarea id="quizText" rows="7" placeholder="1. Which organelle…&#10;&#10;2. A 3 kg block…"></textarea>
-        <div class="field-row">
-          <label class="file-btn">
-            <input type="file" id="quizFiles" accept="image/*" multiple hidden />
-            <span id="quizFilesLabel">＋ photo of quiz</span>
-          </label>
-          <span class="mini muted" id="quizFileCount"></span>
-        </div>
-        <div class="thumbs" id="quizThumbs"></div>
-        <div class="actions">
-          <button class="btn primary" id="btnQuizSolve">Solve all</button>
-          <button class="btn ghost" id="btnQuizStop" disabled>Stop</button>
-        </div>
-        <div class="quiz-progress mini muted" id="quizProgress"></div>
-        <div id="quizResults" class="stack"></div>
-      </section>
-
-      <!-- ── ESSAY ────────────────────────────────────────────── -->
-      <section class="panel" id="tab-essay">
-        <p class="hint">Give it the prompt and the material. It writes in your voice, cites only what you gave it.</p>
-        <input id="essayTopic" type="text" placeholder="Essay question or title" />
-        <textarea id="essayRubric" rows="2" placeholder="Rubric / what earns marks (optional)"></textarea>
-        <textarea id="essaySources" rows="4" placeholder="Source material, quotes, lecture notes it may rely on (optional)"></textarea>
-        <div class="field-row">
-          <label class="inline-field">words <input id="essayWords" type="number" min="150" max="4000" step="50" value="800" /></label>
-          <label class="inline-field">tone
-            <select id="essayTone">
-              <option value="">as me</option>
-              <option value="academic">academic</option>
-              <option value="punchy">punchy</option>
-              <option value="reflective">reflective</option>
-              <option value="technical">technical</option>
-            </select>
-          </label>
-        </div>
-        <button class="btn primary block" id="btnEssay">Write it</button>
-        <div class="result" id="essayResult" hidden>
-          <div class="result-head"><span class="result-tag">Draft</span>
-            <span class="result-tools"><button class="mini" id="btnEssayCopy">copy</button><button class="mini" id="btnEssayDownload">.md</button></span>
+          <div class="wp-head-actions">
+            <button type="button" class="wp-btn wp-btn-ghost" id="btnProfileClose">Done</button>
+            <button type="button" class="wp-btn wp-btn-primary" id="btnSaveProfile">Save profile</button>
           </div>
-          <div class="prose" id="essayOutput"></div>
-        </div>
-      </section>
+        </header>
 
-      <!-- ── READ ─────────────────────────────────────────────── -->
-      <section class="panel" id="tab-read">
-        <p class="hint">
-          Drop in slides, screenshots, a phone screen recording, or paste a chapter. Video is sampled into frames, so
-          an iOS screen recording works here.
-        </p>
-        <label class="file-btn block">
-          <input type="file" id="readFiles" accept="image/*,video/*,.txt,.md,.csv,.vtt,.srt" multiple hidden />
-          <span id="readFilesLabel">＋ files, photos, screen recording</span>
-        </label>
-        <div class="thumbs" id="readThumbs"></div>
-        <textarea id="readPaste" rows="4" placeholder="…or paste text / notes here"></textarea>
-        <button class="btn primary block" id="btnRead">Read &amp; extract</button>
-        <div class="result" id="readResult" hidden><div class="prose" id="readOutput"></div></div>
-      </section>
+        <div class="wp-chips" id="profileChips" aria-live="polite"></div>
 
-      <!-- ── MEMORY ───────────────────────────────────────────── -->
-      <section class="panel" id="tab-memory">
-        <p class="hint">What it has learned about this course and about you. Everything here is fed back in next time.</p>
-        <div class="actions">
-          <button class="btn primary" id="btnEvolve">Evolve</button>
-          <button class="btn ghost" id="btnExport">Export</button>
-          <button class="btn ghost" id="btnClearMemory">Wipe</button>
+        <div class="wp-stats" role="list">
+          <div class="wp-stat" role="listitem"><span>Course</span><strong id="statCourse">Not set</strong></div>
+          <div class="wp-stat" role="listitem"><span>Voice</span><strong id="statVoice">warm · balanced</strong></div>
+          <div class="wp-stat" role="listitem"><span>Cadence</span><strong id="statCadence">every 20s</strong></div>
         </div>
-        <div class="actions">
-          <button class="btn ghost" id="btnPackExport">Study pack ↓</button>
-          <button class="btn ghost" id="btnPackImport">Import pack</button>
-          <button class="btn ghost" id="btnRevision">Revision sheet</button>
-          <input type="file" id="packFile" accept=".json,application/json" hidden />
-        </div>
-        <p class="mini muted" id="packStatus"></p>
-        <p class="mini muted">
-          A study pack is one file: what was said in class, what it learned and corrected, every answer and quiz
-          item with the reasoning, and the material it relied on. Import it on another device to carry the course
-          across, or print the revision sheet the night before.
-        </p>
-        <h4 class="section-title">Across devices</h4>
-        <div class="actions">
-          <button class="btn ghost" id="btnSyncNow">Sync now</button>
-        </div>
-        <p class="mini muted" id="syncStatus">Checking the server…</p>
-        <p class="mini muted">
-          One copy on the server, keyed to you: sign in to the panel and it follows the session, or set the access
-          code in Settings and it follows the code. That is how a course opened on the phone reaches the browser
-          without exporting a study pack. With neither, the workspace stays on this device.
-        </p>
-        <div class="ask-row">
-          <input id="memoryAdd" type="text" placeholder="Teach it something durable…" />
-          <button class="btn" id="btnMemoryAdd">Add</button>
-        </div>
-        <h4 class="section-title">Timetable</h4>
-        <p class="mini muted">
-          When a class is in session, its course answers — whichever tab you last used.
-        </p>
-        <div class="actions">
-          <select id="slotCourse" aria-label="Course for this class"></select>
-          <input id="slotDays" type="text" placeholder="days, e.g. Mon, Wed" />
-          <label class="inline-field">from <input id="slotStart" type="time" value="09:00" /></label>
-          <label class="inline-field">to <input id="slotEnd" type="time" value="10:15" /></label>
-          <button class="btn ghost" id="btnSlotAdd">Add class</button>
-        </div>
-        <div id="timetableList" class="stack"></div>
 
-        <h4 class="section-title">Evolved behaviour</h4>
-        <div id="traitsList" class="chips"></div>
-        <h4 class="section-title">Notes <span class="mini muted" id="memoryCount"></span></h4>
-        <div id="memoryList" class="stack"></div>
-        <h4 class="section-title">Evolution log</h4>
-        <div id="evolutionLog" class="stack"></div>
-      </section>
-    </main>
+        <div class="wp-body">
+          <div class="wp-col">
+            <section class="wp-card" aria-labelledby="wpIdentity">
+              <h4 class="wp-card-title" id="wpIdentity">Identity</h4>
+              <p class="wp-sub">Sage sits in your course as you. This is the name it answers to and the material it is taking.</p>
+              <div class="wp-fields">
+                <label class="wp-field"><span>Name Sage answers to</span><input id="setName" type="text" maxlength="30" autocomplete="off" /></label>
+                <label class="wp-field"><span>Course</span><input id="setCourse" type="text" maxlength="120" placeholder="e.g. BIO 201 · Physiology" /></label>
+              </div>
+            </section>
 
-    <dialog id="settingsDialog">
+            <section class="wp-card" aria-labelledby="wpVoice">
+              <h4 class="wp-card-title" id="wpVoice">Voice</h4>
+              <p class="wp-sub">These reach the system prompt, not a label — every answer, quiz and essay is written this way.</p>
+              <div class="wp-fields">
+                <label class="wp-field"><span>Tone</span>
+                  <select id="setTone">
+                    <option value="warm">warm</option>
+                    <option value="plain">plain</option>
+                    <option value="formal">formal</option>
+                    <option value="blunt">blunt</option>
+                  </select>
+                </label>
+                <label class="wp-field"><span>Depth</span>
+                  <select id="setDepth">
+                    <option value="balanced">balanced</option>
+                    <option value="concise">concise</option>
+                    <option value="detailed">detailed</option>
+                  </select>
+                </label>
+                <label class="wp-field"><span>Humour</span>
+                  <span class="wp-range"><input id="setHumour" type="range" min="0" max="5" step="1" /><output id="humourOut" for="setHumour">3</output></span>
+                </label>
+                <label class="wp-field"><span>Risk</span>
+                  <span class="wp-range"><input id="setRisk" type="range" min="0" max="5" step="1" /><output id="riskOut" for="setRisk">2</output></span>
+                </label>
+                <label class="wp-field"><span>Language</span><input id="setLanguage" type="text" placeholder="auto — match the material" maxlength="40" /></label>
+                <label class="wp-field"><span>Note cadence (s)</span><input id="setInterval" type="number" min="8" max="120" step="2" /></label>
+              </div>
+            </section>
+          </div>
+
+          <aside class="wp-col wp-col-side">
+            <section class="wp-card wp-card-preview" aria-labelledby="wpSound">
+              <h4 class="wp-card-title" id="wpSound">How it sounds</h4>
+              <p class="wp-quote" id="voicePreview"></p>
+            </section>
+
+            <section class="wp-card" aria-labelledby="wpHabits">
+              <h4 class="wp-card-title" id="wpHabits">Habits</h4>
+              <label class="wp-switch"><input type="checkbox" id="setAutoNotes" /><span>Analyse capture as it arrives</span></label>
+              <label class="wp-switch"><input type="checkbox" id="setTts" /><span>Speak answers aloud</span></label>
+            </section>
+
+            <section class="wp-card" aria-labelledby="wpBilling">
+              <div class="wp-card-head">
+                <h4 class="wp-card-title" id="wpBilling">Billing</h4>
+                <span class="wp-badge">Not linked</span>
+              </div>
+              <p class="wp-sub">No Stripe account is connected to this build, so nothing in Sage can charge you. When billing is linked, the plan, the card and the invoices will sit here — and not before you say so.</p>
+              <button type="button" class="wp-btn wp-btn-ghost wp-btn-block" id="btnBilling" disabled aria-disabled="true" title="Stripe is not linked yet">Connect billing</button>
+            </section>
+
+            <p class="wp-foot-note">Gateway keys, sessions and the access code stay in <button type="button" class="wp-link" id="btnPlumbing">Settings</button> — plumbing, not profile.</p>
+          </aside>
+        </div>
+
+        <footer class="wp-foot">
+          <span class="wp-status" id="profileStatus" role="status" aria-live="polite"></span>
+          <button type="button" class="wp-btn wp-btn-ghost" id="btnProfileCloseFoot">Close</button>
+          <button type="button" class="wp-btn wp-btn-primary" id="btnSaveProfileFoot">Save profile</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <!-- ── settings ──────────────────────────────────────────────── -->
+    <dialog id="settingsDialog" aria-labelledby="settingsTitle">
       <form method="dialog" id="settingsForm">
         <button type="button" class="dialog-close" id="btnCloseSettings" aria-label="Close settings" title="Close">✕</button>
-        <h3>Settings</h3>
+        <h3 id="settingsTitle">Settings</h3>
 
         <fieldset class="admin-block">
           <legend>Gateway</legend>
@@ -345,38 +550,24 @@
           <p class="mini muted" id="claimStatus"></p>
         </fieldset>
 
-        <div class="grid2">
-          <label>Agent name <input id="setName" type="text" maxlength="30" /></label>
-          <label>Course <input id="setCourse" type="text" maxlength="120" placeholder="e.g. BIO 201 · Physiology" /></label>
-          <label>Tone
-            <select id="setTone">
-              <option value="warm">warm</option>
-              <option value="plain">plain</option>
-              <option value="formal">formal</option>
-              <option value="blunt">blunt</option>
-            </select>
-          </label>
-          <label>Depth
-            <select id="setDepth">
-              <option value="balanced">balanced</option>
-              <option value="concise">concise</option>
-              <option value="detailed">detailed</option>
-            </select>
-          </label>
-          <label>Humour <input id="setHumour" type="range" min="0" max="5" step="1" /></label>
-          <label>Risk <input id="setRisk" type="range" min="0" max="5" step="1" /></label>
-          <label>Language <input id="setLanguage" type="text" placeholder="auto" maxlength="40" /></label>
-          <label>Note cadence (s) <input id="setInterval" type="number" min="8" max="120" step="2" /></label>
-          <label class="span2">Access code <input id="setAccess" type="password" placeholder="usually empty" />
+        <div class="settings-note">
+          <div>
+            <strong>Who Sage is</strong>
+            <p class="mini muted">Name, course, voice, working habits and billing live in your profile.</p>
+          </div>
+          <button type="button" class="btn ghost small" id="btnProfileFromSettings">Open profile</button>
+        </div>
+
+        <fieldset class="admin-block">
+          <legend>Access</legend>
+          <label>Access code <input id="setAccess" type="password" placeholder="usually empty" />
             <span class="mini muted">
               Server-wide password, not a key. Only needed when the Sage server itself was started with
               <code>ACCESS_CODE</code>; it is sent as <code>x-access-code</code> on every request. Your gateway key and your
               Magnate claim code are different things and do not belong here.
             </span>
           </label>
-        </div>
-        <label class="check"><input type="checkbox" id="setAutoNotes" /> auto-analyse capture</label>
-        <label class="check"><input type="checkbox" id="setTts" /> speak answers aloud</label>
+        </fieldset>
         <div class="dialog-actions">
           <button type="button" class="btn ghost" id="btnTestConn">Test</button>
           <button type="submit" class="btn primary" id="btnSaveSettings">Save</button>
@@ -385,8 +576,9 @@
       </form>
     </dialog>
 
-    <dialog id="screenDialog">
-      <h3>Watching the screen</h3>
+    <!-- ── screen capture fallback ───────────────────────────────── -->
+    <dialog id="screenDialog" aria-labelledby="screenTitle">
+      <h3 id="screenTitle">Watching the screen</h3>
       <p class="mini muted">
         An app cannot read its own screen, and recording fights video playback for the microphone — that is why
         listening stops the moment a lesson video plays. Apple's own screen recorder does not have that problem.
@@ -406,8 +598,37 @@
       </div>
     </dialog>
 
-    <div class="toast" id="toast" hidden></div>
+    <!-- ── command palette (new) ─────────────────────────────────── -->
+    <dialog id="palette" class="palette" aria-label="Command palette">
+      <div class="palette-inner">
+        <input id="paletteInput" type="text" placeholder="Jump to a tab, or run a command…" autocomplete="off"
+               autocapitalize="off" spellcheck="false" aria-label="Search commands" aria-controls="paletteList" />
+        <ul id="paletteList" class="palette-list" role="listbox" aria-label="Commands"></ul>
+        <p class="palette-foot mini muted"><kbd>↑</kbd><kbd>↓</kbd> to move · <kbd>↵</kbd> to run · <kbd>esc</kbd> to close</p>
+      </div>
+    </dialog>
+
+    <!-- ── shortcuts (new) ───────────────────────────────────────── -->
+    <dialog id="shortcutsDialog" aria-labelledby="shortcutsTitle">
+      <button type="button" class="dialog-close" id="btnCloseShortcuts" aria-label="Close shortcuts">✕</button>
+      <h3 id="shortcutsTitle">Keyboard</h3>
+      <dl class="shortcut-list">
+        <dt><kbd>⌘</kbd><kbd>K</kbd></dt><dd>Command palette</dd>
+        <dt><kbd>1</kbd>…<kbd>6</kbd></dt><dd>Jump to Live, Answer, Quiz, Essay, Read, Memory</dd>
+        <dt><kbd>/</kbd></dt><dd>Focus the question box on the current tab</dd>
+        <dt><kbd>s</kbd></dt><dd>Start or stop study mode</dd>
+        <dt><kbd>.</kbd></dt><dd>Stop all capture</dd>
+        <dt><kbd>t</kbd></dt><dd>Cycle theme</dd>
+        <dt><kbd>p</kbd></dt><dd>Your profile</dd>
+        <dt><kbd>?</kbd></dt><dd>This sheet</dd>
+      </dl>
+      <p class="mini muted">Shortcuts stay out of the way while you are typing in a field.</p>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=2.7.2"></script>
+    <script type="module" src="/app.js?v=3.2.0"></script>
+    <script type="module" src="/shell.js?v=3.2.0"></script>
+    <script type="module" src="/profile.js?v=3.2.0"></script>
   </body>
 </html>

@@ -3294,3 +3294,26 @@ if ('serviceWorker' in navigator) {
   // Only register when served over a secure context, and never cache the API.
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
+
+/* ── profile bridge ──────────────────────────────────────────────
+   The profile sheet lives in the shell, but the persona belongs to this
+   module's state. Hydrating, saving and counting traits through these calls
+   keeps one copy of the truth: no second name field to go stale, and the same
+   saveSettings() path the Settings dialog has always used. */
+window.sageProfile = {
+  hydrate() {
+    const p = state.persona;
+    $('setName').value = p.name;
+    $('setCourse').value = p.course;
+    $('setTone').value = p.tone;
+    $('setDepth').value = p.depth;
+    $('setHumour').value = String(p.humour);
+    $('setRisk').value = String(p.risk);
+    $('setLanguage').value = state.language;
+    $('setInterval').value = String(state.settings.noteIntervalSec);
+    $('setAutoNotes').checked = state.settings.autoNotes;
+    $('setTts').checked = state.settings.tts;
+  },
+  save: () => saveSettings(),
+  traits: () => (Array.isArray(state.persona.traits) ? state.persona.traits.length : 0),
+};
