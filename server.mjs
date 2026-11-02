@@ -109,9 +109,9 @@ async function sendAbout(req, res, pathname) {
   await sendStatic(req, res, relative, aboutDir);
 }
 
-// The bundled iOS shell runs on capacitor://localhost (or ionic://), a
-// different origin from this server, so API calls need explicit CORS.
-const NATIVE_ORIGINS = new Set(['capacitor://localhost', 'ionic://localhost']);
+// The bundled shells run on their own origin — capacitor://localhost on iOS,
+// https://app.sage.local on Android — so API calls from them need explicit CORS.
+const NATIVE_ORIGINS = new Set(['capacitor://localhost', 'ionic://localhost', 'https://app.sage.local']);
 
 function applyCors(req, res) {
   const origin = req.headers.origin;
