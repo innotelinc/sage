@@ -30,6 +30,7 @@ const ATTACH = /^(1|true|yes)$/i.test(String(process.env.ATTACH || ''));
 const LISTING = /^(1|true|yes)$/i.test(String(process.env.LISTING || ''));
 const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+$/, '');
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
+const SHOT_DIR_PHONE = (process.env.APP_STORE_SHOTS_PHONE || '').trim();
 const SHOT_DIR_IPAD = (process.env.APP_STORE_SHOTS_IPAD || '').trim();
 const CATEGORY = (process.env.APPLE_CATEGORY || 'EDUCATION').trim();
 
@@ -66,7 +67,7 @@ const AGE_RATING = {
 const REVIEW = {
   firstName: (process.env.APPLE_REVIEW_FIRST_NAME || 'Darnel').trim(),
   lastName: (process.env.APPLE_REVIEW_LAST_NAME || 'Hunter').trim(),
-  email: (process.env.APPLE_REVIEW_EMAIL || 'dhunter@innotel.us').trim(),
+  email: (process.env.APPLE_REVIEW_EMAIL || 'admin@innotel.us').trim(),
   // App Review telephones this number before rejecting, so it has to be one that is
   // answered. It is a repository secret: never written into the repo.
   phone: (process.env.APPLE_REVIEW_PHONE || '').trim(),
@@ -605,8 +606,19 @@ async function ensureListingText(versionId) {
 /** Where App Review writes and telephones. Both are required before submitting. */
 async function ensureReviewContact(versionId) {
   const current = await optional(`/v1/appStoreVersions/${versionId}/appStoreReviewDetail`);
-  if (current?.data?.attributes?.contactEmail) {
+  if (current?.data?.attributes?.contactEmail === REVIEW.email) {
     console.log('  review contact · already there');
+    return;
+  }
+  if (current?.data?.attributes?.contactEmail) {
+    await call('PATCH', `/v1/appStoreReviewDetails/${current.data.id}`, {
+      data: {
+        type: 'appStoreReviewDetails',
+        id: current.data.id,
+        attributes: { contactFirstName: REVIEW.firstName, contactLastName: REVIEW.lastName, contactEmail: REVIEW.email, contactPhone: REVIEW.phone || current.data.attributes.contactPhone },
+      },
+    });
+    console.log(`  review contact · address updated to ${REVIEW.email}`);
     return;
   }
   if (!REVIEW.phone) {
@@ -981,7 +993,8 @@ async function ensureListing(app) {
   await ensureAgeRating(app);
   await ensureAppInfo(app);
   await ensureAppPrice(app);
-  console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_67', SHOT_DIR)}`);
+  console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_61', SHOT_DIR_PHONE)}`);
+  if (SHOT_DIR) console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_67', SHOT_DIR)}`);
   console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPAD_PRO_3GEN_129', SHOT_DIR_IPAD)}`);
   await placeInSubmission(app, version);
 }

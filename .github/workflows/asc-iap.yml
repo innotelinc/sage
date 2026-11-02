@@ -42,6 +42,7 @@ jobs:
           ATTACH: ${{ inputs.attach }}
           LISTING: ${{ inputs.listing }}
           SAGE_SITE: https://sage.innotel.tech
+          APP_STORE_SHOTS_PHONE: deploy/ios/store-phone
           APP_STORE_SHOTS: deploy/ios/store
           APP_STORE_SHOTS_IPAD: deploy/ios/store-ipad
           APPLE_REVIEW_PHONE: ${{ secrets.APPLE_REVIEW_PHONE }}

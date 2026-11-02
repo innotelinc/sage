@@ -1,7 +1,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 # attribution-guard.yml — enforce the attribution policy on every push and PR.
 #
-# Policy: no credit is given to anyone but Darnel Hunter <dhunter@innotel.us>.
+# Policy: no credit is given to anyone but Darnel Hunter <admin@innotel.us>.
 # The guard rejects attribution text (Co-Authored-By/Signed-off-by trailers
 # naming anyone else, "Generated with/by <AI tool>", credit lines) in:
 #   - commit messages introduced by this push/PR,
@@ -60,7 +60,7 @@ jobs:
               printf '%s\n' "$added" | guard_check_stream || fail=1
             fi
             if [ "$fail" -ne 0 ]; then
-              echo "::error::Attribution guard failed — only Darnel Hunter <dhunter@innotel.us> may be credited."
+              echo "::error::Attribution guard failed — only Darnel Hunter <admin@innotel.us> may be credited."
               exit 1
             fi
             echo "attribution guard: clean"
@@ -103,7 +103,7 @@ jobs:
           fi
 
           if [ "$fail" -ne 0 ]; then
-            echo "::error::Attribution guard failed — only Darnel Hunter <dhunter@innotel.us> may be credited."
+            echo "::error::Attribution guard failed — only Darnel Hunter <admin@innotel.us> may be credited."
             exit 1
           fi
           echo "attribution guard: clean"

@@ -1,10 +1,10 @@
 /**
- * App Store screenshots from the live app, at Apple's required sizes.
+ * App Store screenshots from the live app, at the sizes Apple currently asks for.
  *
  * The preview panel draws its own badge over the page, so a panel capture always
  * carries something that is not the app. This drives the installed browser headless
- * through the DevTools protocol instead: each profile sets the exact CSS size and
- * device scale that renders Apple's pixel dimensions, and every tab is a real click.
+ * through the DevTools protocol instead, clicks real tabs and real dialogs, and sets
+ * the exact CSS size and device scale that render Apple's pixel dimensions.
  */
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -21,17 +21,43 @@ const BROWSERS = [
 const URL_TO_LOAD = process.env.SAGE_URL || 'https://sage.innotel.tech/';
 const PORT = 9333;
 
-// 430x932 at 3 is 1290x2796 (6.7 inch iPhone). 1032x1376 at 2 is 2064x2752
-// (13 inch iPad), which App Review also requires for a universal app.
+// 402x874 at 3 is 1206x2622 — the medium iPhone display (6.3 inch) App Store Connect
+// asks for first. 1032x1376 at 2 is 2064x2752, the 13 inch iPad.
 const PROFILES = [
-  { dir: 'deploy/ios/store', width: 430, height: 932, scale: 3, label: '6.7 inch' },
-  { dir: 'deploy/ios/store-ipad', width: 1032, height: 1376, scale: 2, label: '13 inch iPad' },
+  { dir: 'deploy/ios/store-phone', width: 402, height: 874, scale: 3, mobile: true, label: 'iPhone 6.3' },
+  { dir: 'deploy/ios/store-ipad', width: 1032, height: 1376, scale: 2, mobile: false, label: 'iPad 13' },
 ];
 
-const SHOTS = [
-  { file: '01-live.png', tab: 'live' },
-  { file: '02-answer.png', tab: 'answer' },
-  { file: '03-quiz.png', tab: 'quiz' },
+const clickTab = (tab) => `document.querySelector('.tab[data-tab="${tab}"]').click(); window.scrollTo(0, 0);`;
+
+// Ten surfaces, in the order someone would meet them. Every one is a real screen.
+const STATES = [
+  { file: '01-live.png', label: 'Live · capture', run: clickTab('live') },
+  { file: '02-answer.png', label: 'Answer', run: clickTab('answer') },
+  { file: '03-quiz.png', label: 'Quiz', run: clickTab('quiz') },
+  { file: '04-essay.png', label: 'Essay', run: clickTab('essay') },
+  { file: '05-read.png', label: 'Read', run: clickTab('read') },
+  { file: '06-memory.png', label: 'Memory', run: clickTab('memory') },
+  {
+    file: '07-study-pack.png',
+    label: 'Memory · study pack and timetable',
+    run: `${clickTab('memory')} document.getElementById('btnPackExport').scrollIntoView({ block: 'center' });`,
+  },
+  {
+    file: '08-settings-gateway.png',
+    label: 'Settings · gateway',
+    run: `document.getElementById('btnSettings').click(); const form = document.querySelector('#settingsDialog form'); form.scrollTop = 0;`,
+  },
+  {
+    file: '09-settings-session.png',
+    label: 'Settings · session',
+    run: `document.getElementById('btnSettings').click(); const box = document.querySelectorAll('#settingsDialog fieldset')[1]; box.scrollIntoView({ block: 'center' });`,
+  },
+  {
+    file: '10-watch.png',
+    label: 'Watching the screen',
+    run: `${clickTab('live')} document.getElementById('btnScreen').click();`,
+  },
 ];
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -123,7 +149,7 @@ try {
       width: profile.width,
       height: profile.height,
       deviceScaleFactor: profile.scale,
-      mobile: profile === PROFILES[0],
+      mobile: profile.mobile,
     });
 
     const loaded = once('Page.loadEventFired');
@@ -142,21 +168,12 @@ try {
       })()`,
     });
 
-    for (const shot of SHOTS) {
-      const clicked = await send('Runtime.evaluate', {
-        expression: `(() => {
-          const tab = document.querySelector('.tab[data-tab="${shot.tab}"]');
-          if (!tab) return 'no tab';
-          tab.click();
-          return tab.textContent.trim();
-        })()`,
-        returnByValue: true,
-      });
-      if (clicked.result?.value === 'no tab') throw new Error(`the ${shot.tab} tab is not on the page`);
-      await sleep(700);
+    for (const state of STATES) {
+      await send('Runtime.evaluate', { expression: `(() => { ${state.run} return true; })()` });
+      await sleep(650);
       const captured = await send('Page.captureScreenshot', { format: 'png' });
-      await writeFile(join(profile.dir, shot.file), Buffer.from(captured.data, 'base64'));
-      console.log(`  ${profile.label} · ${shot.file} · ${shot.tab} tab`);
+      await writeFile(join(profile.dir, state.file), Buffer.from(captured.data, 'base64'));
+      console.log(`  ${profile.label} · ${state.file} · ${state.label}`);
     }
   }
 
