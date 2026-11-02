@@ -726,8 +726,14 @@ async function ensureShotSet(localizationId, displayType, directory) {
 async function ensureAppPrice(app) {
   const schedule = await optional(`/v1/apps/${app}/appPriceSchedule`);
   if (schedule?.data) {
-    console.log('  app price · already set');
-    return;
+    const prices = await soft(`/v1/appPriceSchedules/${schedule.data.id}/manualPrices?limit=10`);
+    if ((prices?.data || []).length) {
+      console.log('  app price · a manual price is already set');
+      return;
+    }
+    // App Review counts a schedule without a price as no pricing at all, so an empty
+    // one has to be filled rather than trusted.
+    console.log('  app price · the schedule exists but carries no price; filling it');
   }
   const points = await call(
     'GET',
@@ -738,23 +744,28 @@ async function ensureAppPrice(app) {
     console.log('  app price · Apple returned no zero price point; set it in the web UI');
     return;
   }
-  await call('POST', '/v1/appPriceSchedules', {
-    data: {
-      type: 'appPriceSchedules',
-      relationships: {
-        app: { data: { type: 'apps', id: app } },
-        baseTerritory: { data: { type: 'territories', id: 'USA' } },
-        manualPrices: { data: [{ type: 'appPrices', id: '${price}' }] },
+  try {
+    await call('POST', '/v1/appPriceSchedules', {
+      data: {
+        type: 'appPriceSchedules',
+        relationships: {
+          app: { data: { type: 'apps', id: app } },
+          baseTerritory: { data: { type: 'territories', id: 'USA' } },
+          manualPrices: { data: [{ type: 'appPrices', id: '${price}' }] },
+        },
       },
-    },
-    included: [
-      {
-        type: 'appPrices',
-        id: '${price}',
-        relationships: { appPricePoint: { data: { type: 'appPricePoints', id: free.id } } },
-      },
-    ],
-  });
+      included: [
+        {
+          type: 'appPrices',
+          id: '${price}',
+          relationships: { appPricePoint: { data: { type: 'appPricePoints', id: free.id } } },
+        },
+      ],
+    });
+  } catch (error) {
+    console.log(`  app price · refused: ${error.message}`);
+    return;
+  }
   console.log('  app price · free');
 }
 
