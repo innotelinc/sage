@@ -675,11 +675,65 @@ async function ensureStoreShots(localizationId) {
   return `${names.length} uploaded`;
 }
 
+/**
+ * Three fields App Review will not accept a version without, and that nothing else
+ * in this script sets. Apple only says "check associated errors", so each is read,
+ * written when absent, and reported either way.
+ */
+async function ensureCompliance(app, version) {
+  const fields = await soft(`/v1/appStoreVersions/${version.id}?fields[appStoreVersions]=versionString,copyright`);
+  if (fields?.data?.attributes?.copyright) {
+    console.log('  copyright · already set');
+  } else {
+    const year = new Date().getFullYear();
+    await call('PATCH', `/v1/appStoreVersions/${version.id}`, {
+      data: { type: 'appStoreVersions', id: version.id, attributes: { copyright: `${year} Innotel Labs` } },
+    });
+    console.log(`  copyright · ${year} Innotel Labs`);
+  }
+
+  const buildId = version.relationships?.build?.data?.id;
+  if (buildId) {
+    const build = await soft(`/v1/builds/${buildId}?fields[builds]=version,usesNonExemptEncryption`);
+    if (build?.data?.attributes?.usesNonExemptEncryption == null) {
+      try {
+        await call('PATCH', `/v1/builds/${buildId}`, {
+          data: { type: 'builds', id: buildId, attributes: { usesNonExemptEncryption: false } },
+        });
+        console.log('  export compliance · no non-exempt encryption');
+      } catch (error) {
+        console.log(`  export compliance · could not be set: ${error.message}`);
+      }
+    } else {
+      console.log('  export compliance · already answered');
+    }
+  }
+
+  const apps = await soft(`/v1/apps/${app}?fields[apps]=contentRightsDeclaration`);
+  if (apps?.data?.attributes?.contentRightsDeclaration) {
+    console.log('  content rights · already declared');
+  } else {
+    try {
+      await call('PATCH', `/v1/apps/${app}`, {
+        data: {
+          type: 'apps',
+          id: app,
+          attributes: { contentRightsDeclaration: 'DOES_NOT_USE_THIRD_PARTY_CONTENT' },
+        },
+      });
+      console.log('  content rights · does not use third-party content');
+    } catch (error) {
+      console.log(`  content rights · could not be set: ${error.message}`);
+    }
+  }
+}
+
 /** Everything App Review needs, then the version joins the products in the draft. */
 async function ensureListing(app) {
   const version = await iosVersion(app);
   const localization = await ensureListingText(version.id);
   await ensureReviewContact(version.id);
+  await ensureCompliance(app, version);
   await ensureAppInfo(app);
   console.log(`  screenshots · ${await ensureStoreShots(localization.id)}`);
   try {
