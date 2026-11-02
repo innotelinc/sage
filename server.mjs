@@ -81,14 +81,20 @@ async function sendStatic(req, res, pathname, baseDir = publicDir) {
     res.writeHead(403).end('Forbidden');
     return;
   }
-  let info;
+  // A clean URL is the directory's own index, so /privacy serves
+  // /privacy/index.html. A path that carries an extension but does not exist is a
+  // genuine 404 and stays one — this must never turn a missing asset into a page.
+  let file;
   try {
-    info = await stat(target);
+    const info = await stat(target);
+    file = info.isDirectory() ? path.join(target, 'index.html') : target;
   } catch {
-    res.writeHead(404, { 'content-type': 'text/plain' }).end('Not found');
-    return;
+    if (path.extname(target)) {
+      res.writeHead(404, { 'content-type': 'text/plain' }).end('Not found');
+      return;
+    }
+    file = path.join(target, 'index.html');
   }
-  const file = info.isDirectory() ? path.join(target, 'index.html') : target;
   try {
     const fileInfo = await stat(file);
     res.writeHead(200, {
