@@ -2749,7 +2749,7 @@ async function micCheck() {
    decision is made. The checkout is started by our own server so the browser
    never needs CORS access to a billing origin, and the receipt page opens this
    app at #claim=<code>, which installs the key with no copying. */
-const store = { plans: [], slug: '', page: '', minutes: 15, iap: null };
+const store = { plans: [], slug: '', page: '', minutes: 15, iap: null, applePrices: {} };
 
 function chosenPlan() {
   return store.plans.find((plan) => plan.slug === store.slug) || store.plans[0] || null;
@@ -2764,6 +2764,14 @@ function money(cents) {
   return '$' + (Number(cents || 0) / 100).toFixed(2);
 }
 
+/* On iOS a session is priced by the App Store, in the currency of the account
+   signed in on the phone. Falling back to Magnate's number keeps the web and
+   Android lists unchanged. */
+function planPrice(plan) {
+  const entry = store.iap?.products?.find((product) => product.planSlug === plan.slug);
+  return (entry && store.applePrices[entry.productId]) || money(plan.priceCents);
+}
+
 async function loadStore() {
   try {
     const data = await api('/api/store');
@@ -2774,6 +2782,16 @@ async function loadStore() {
     // and mint a key for it; otherwise the store page stays the way to buy.
     const iap = await api('/api/iap/config').catch(() => null);
     store.iap = iap && iap.enabled ? iap : null;
+    // The App Store is the price list the phone is charged against, so on iOS
+    // the numbers above the buttons are StoreKit's own, never Magnate's.
+    store.applePrices = {};
+    if (store.iap && NATIVE_STORE) {
+      const ids = store.iap.products.map((product) => product.productId);
+      const priced = await NATIVE_STORE.products({ ids }).catch(() => null);
+      for (const product of priced?.products || []) {
+        if (product?.productId && product?.price) store.applePrices[product.productId] = product.price;
+      }
+    }
     if (!store.plans.some((plan) => plan.slug === store.slug)) store.slug = store.plans[0]?.slug || '';
   } catch {
     // An unreachable store is not a broken app: the page link still works.
@@ -2809,7 +2827,7 @@ function renderStore() {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn ' + (option.slug === plan.slug ? 'primary' : 'ghost');
-    button.textContent = planLabel(option) + ' · ' + money(option.priceCents);
+    button.textContent = planLabel(option) + ' · ' + planPrice(option);
     button.onclick = () => {
       store.slug = option.slug;
       renderStore();
@@ -2818,7 +2836,7 @@ function renderStore() {
   }
   if (note) {
     note.textContent =
-      planLabel(plan) + ' — ' + store.minutes + ' minutes of the gateway, ' + money(plan.priceCents) +
+      planLabel(plan) + ' — ' + store.minutes + ' minutes of the gateway, ' + planPrice(plan) +
       ' each. One key, usable as often as you like until the window closes.';
   }
 }

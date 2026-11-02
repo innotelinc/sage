@@ -1,0 +1,34 @@
+name: App Store Connect · session products
+
+# The App Store Connect key is a repository secret, and GitHub never reads a secret
+# back out. So the one-time product setup runs here rather than on a workstation.
+on:
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: Submit the products for review (the first consumable needs an app version in the submission)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  products:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Create, price and localise the three session products
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          APPLE_BUNDLE_ID: us.innotel.sage
+          IAP_SCREENSHOT: deploy/ios/iap-review.png
+          SUBMIT: ${{ inputs.submit }}
+        run: node scripts/asc-iap.mjs
