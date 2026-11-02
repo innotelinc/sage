@@ -31,6 +31,37 @@ const LISTING = /^(1|true|yes)$/i.test(String(process.env.LISTING || ''));
 const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+$/, '');
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
 const CATEGORY = (process.env.APPLE_CATEGORY || 'EDUCATION').trim();
+
+/* App Review's questionnaire, answered for what Sage is: a study tool with no chat
+   between people, no ads, no shared content and no age gate. Types come from
+   Apple's published schema — eleven booleans and thirteen rated scales. */
+const AGE_RATING = {
+  advertising: false,
+  ageAssurance: false,
+  alcoholTobaccoOrDrugUseOrReferences: 'NONE',
+  contests: 'NONE',
+  gambling: false,
+  gamblingSimulated: 'NONE',
+  gunsOrOtherWeapons: 'NONE',
+  healthOrWellnessTopics: false,
+  horrorOrFearThemes: 'NONE',
+  lootBox: false,
+  matureOrSuggestiveThemes: 'NONE',
+  medicalOrTreatmentInformation: 'NONE',
+  messagingAndChat: false,
+  parentalControls: false,
+  profanityOrCrudeHumor: 'NONE',
+  sexualContentGraphicAndNudity: 'NONE',
+  sexualContentOrNudity: 'NONE',
+  socialMedia: false,
+  socialMediaAgeRestricted: false,
+  unrestrictedWebAccess: false,
+  userGeneratedContent: false,
+  violenceCartoonOrFantasy: 'NONE',
+  violenceRealistic: 'NONE',
+  violenceRealisticProlongedGraphicOrSadistic: 'NONE',
+};
+
 const REVIEW = {
   firstName: (process.env.APPLE_REVIEW_FIRST_NAME || 'Darnel').trim(),
   lastName: (process.env.APPLE_REVIEW_LAST_NAME || 'Hunter').trim(),
@@ -744,6 +775,17 @@ async function ensureCompliance(app, version) {
 async function placeInSubmission(app, version) {
   const subs = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&limit=10`);
   const drafts = (subs?.data || []).filter((d) => d.attributes?.state === 'READY_FOR_REVIEW');
+  for (const draft of [...drafts]) {
+    const held = await call('GET', `/v1/reviewSubmissions/${draft.id}/items?limit=50`).catch(() => null);
+    if ((held?.data || []).length) continue;
+    try {
+      await call('DELETE', `/v1/reviewSubmissions/${draft.id}`);
+      drafts.splice(drafts.indexOf(draft), 1);
+      console.log(`  submission · removed empty draft ${draft.id}`);
+    } catch (error) {
+      console.log(`  submission · kept empty draft ${draft.id}: ${error.message}`);
+    }
+  }
   const item = (id, rel, type, value) => ({
     data: {
       type: 'reviewSubmissionItems',
@@ -796,12 +838,36 @@ async function placeInSubmission(app, version) {
   console.log(`  submission · ${(items?.data || []).length} items in draft ${id}`);
 }
 
+/**
+ * The age rating has to be answered, not merely present: App Review refuses a version
+ * whose declaration is empty, and says only "check associated errors" when it does.
+ */
+async function ensureAgeRating(app) {
+  const infos = await call('GET', `/v1/apps/${app}/appInfos?include=ageRatingDeclaration&limit=5`);
+  const declaration = (infos?.included || []).find((item) => item.type === 'ageRatingDeclarations');
+  if (!declaration) {
+    console.log('  age rating · no declaration to answer');
+    return;
+  }
+  const blanks = Object.keys(AGE_RATING).filter((key) => declaration.attributes?.[key] == null);
+  if (!blanks.length) {
+    console.log('  age rating · already answered');
+    return;
+  }
+  const attributes = Object.fromEntries(blanks.map((key) => [key, AGE_RATING[key]]));
+  await call('PATCH', `/v1/ageRatingDeclarations/${declaration.id}`, {
+    data: { type: 'ageRatingDeclarations', id: declaration.id, attributes },
+  });
+  console.log(`  age rating · answered ${blanks.length} fields, nothing above NONE`);
+}
+
 /** Everything App Review needs, then the version joins the products in the draft. */
 async function ensureListing(app) {
   const version = await iosVersion(app);
   const localization = await ensureListingText(version.id);
   await ensureReviewContact(version.id);
   await ensureCompliance(app, version);
+  await ensureAgeRating(app);
   await ensureAppInfo(app);
   console.log(`  screenshots · ${await ensureStoreShots(localization.id)}`);
   await placeInSubmission(app, version);
