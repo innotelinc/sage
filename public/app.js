@@ -183,7 +183,7 @@ function persist() {
 // way one copy follows the phone and the browser between them; with neither, it
 // stays in localStorage exactly as it did before.
 const SYNC_DEBOUNCE_MS = 3500;
-const sync = { state: 'idle', rev: '', at: '', storedBy: '', message: '', timer: null };
+const sync = { state: 'idle', rev: '', at: '', storedBy: '', message: '', timer: null, dirty: false };
 
 function syncAge(iso) {
   const then = Date.parse(String(iso || ''));
@@ -276,9 +276,27 @@ async function pushWorkspace(announce = false, depth = 0) {
   sync.rev = data.rev || '';
   sync.at = data.savedAt || '';
   sync.storedBy = data.storedBy || sync.storedBy;
+  sync.dirty = false;
   sync.state = 'synced';
   renderSyncUi();
   if (announce) toast('Workspace saved to the server.');
+}
+
+// A device with nothing of its own has nothing to protect, so it takes the copy
+// on the server whatever the clocks say. That is what opening Sage on a second
+// device has to mean; trusting timestamps alone let a fresh install push its one
+// untitled course over a real workspace.
+function isPristine() {
+  if (state.courses.length !== 1 || state.timetable.length) return false;
+  const [course] = state.courses;
+  if (course.persona.course || (course.persona.traits || []).length) return false;
+  if (course.memory.length || course.evolution.length) return false;
+  const history = course.history || {};
+  for (const key of ['answers', 'quizzes', 'essays', 'sources']) {
+    if ((history[key] || []).length) return false;
+  }
+  const session = course.session || {};
+  return !(session.notes || []).length && !(session.transcript || []).length;
 }
 
 async function syncWorkspace({ announce = false } = {}) {
@@ -293,12 +311,21 @@ async function syncWorkspace({ announce = false } = {}) {
     const remote = await api('/api/workspace', { method: 'GET' });
     sync.rev = remote.rev || '';
     sync.storedBy = remote.storedBy || '';
-    if (remote.workspace && String(remote.savedAt || '') > String(state.savedAt || '')) {
+    const serverNewer = remote.workspace && String(remote.savedAt || '') > String(state.savedAt || '');
+    if (remote.workspace && (serverNewer || isPristine())) {
       adoptWorkspace(remote.workspace, remote.savedAt);
       sync.state = 'pulled';
       sync.at = remote.savedAt || '';
       renderSyncUi();
       if (announce) toast('Workspace updated from the server.');
+      return;
+    }
+    // Nothing has changed here since the last save, so there is nothing to save
+    // again: a sync that always writes churns the revision for no reason.
+    if (!sync.dirty && remote.workspace) {
+      sync.state = 'synced';
+      sync.at = remote.savedAt || sync.at;
+      renderSyncUi();
       return;
     }
     await pushWorkspace(announce);
@@ -316,6 +343,7 @@ async function syncWorkspace({ announce = false } = {}) {
 }
 
 function queueWorkspacePush() {
+  sync.dirty = true;
   if (sync.state === 'local' && !state.settings.accessCode) return;
   clearTimeout(sync.timer);
   sync.timer = setTimeout(() => {
