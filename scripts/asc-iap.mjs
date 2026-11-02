@@ -632,8 +632,6 @@ async function ensureStoreShots(localizationId) {
     set = made.data;
     console.log('  screenshots · 6.7 inch set created');
   }
-  const existing = await call('GET', `/v1/appScreenshotSets/${set.id}/appScreenshots?limit=20`);
-  if ((existing?.data || []).length) return 'already uploaded';
   let names = [];
   try {
     names = (await readdir(SHOT_DIR)).filter((name) => /\.(png|jpe?g)$/i.test(name)).sort();
@@ -641,6 +639,13 @@ async function ensureStoreShots(localizationId) {
     return `missing (${SHOT_DIR} is not in the repository)`;
   }
   if (!names.length) return `missing (${SHOT_DIR} holds no images)`;
+  const existing = await call('GET', `/v1/appScreenshotSets/${set.id}/appScreenshots?limit=20`);
+  const current = existing?.data || [];
+  // App Store Connect appends, it never replaces: a different number of local images
+  // means the set has changed, so the old ones are cleared first.
+  if (current.length === names.length) return `already uploaded (${current.length})`;
+  for (const shot of current) await call('DELETE', `/v1/appScreenshots/${shot.id}`);
+  if (current.length) console.log(`  screenshots · cleared ${current.length} old image(s)`);
   for (const name of names) {
     const bytes = await readFile(join(SHOT_DIR, name));
     const reserved = await call('POST', '/v1/appScreenshots', {
