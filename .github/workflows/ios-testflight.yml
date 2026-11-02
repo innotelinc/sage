@@ -1,8 +1,11 @@
 name: iOS TestFlight
 
 # TestFlight needs macOS + Xcode. This workflow is the route from this repo to
-# App Store Connect with no Mac of your own and no certificate files stored
-# anywhere: signing is automatic, driven by the App Store Connect API key.
+# App Store Connect with no Mac of your own. The Apple Distribution identity is
+# stored as IOS_DIST_P12 + IOS_DIST_P12_PASSWORD and imported into a throwaway
+# keychain here, so every run signs with the same certificate. Letting Xcode
+# create one per run is what filled the account's certificate cap: a fresh runner
+# has no private key for an existing certificate, so it mints another.
 #
 # Required repository secrets:
 #   APPLE_TEAM_ID   10-character team id
@@ -38,6 +41,28 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           printf '%s' "$ASC_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+
+      - name: Import the distribution certificate
+        env:
+          IOS_DIST_P12: ${{ secrets.IOS_DIST_P12 }}
+          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+        run: |
+          if [ -z "$IOS_DIST_P12" ] || [ -z "$IOS_DIST_P12_PASSWORD" ]; then
+            echo "IOS_DIST_P12 / IOS_DIST_P12_PASSWORD secrets are missing"; exit 1
+          fi
+          KEYCHAIN="$RUNNER_TEMP/sage-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          printf '%s' "$IOS_DIST_P12" | base64 -D > "$RUNNER_TEMP/distribution.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/distribution.p12" -k "$KEYCHAIN" -P "$IOS_DIST_P12_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/distribution.p12"
+          echo "=== signing identities available to this run:"
+          security find-identity -v -p codesigning "$KEYCHAIN"
 
       - name: Configure project
         env:
