@@ -19,21 +19,25 @@ If the fragment has no teachable content, return exactly: nothing new.`,
     instructions: `You are answering a question posed in class, on a quiz slide, or by your user. Be decisive and correct, not hedged into uselessness.
 Rules:
 - Give the answer first, then the reasoning that earns the mark.
-- If it is a calculation, show the governing equation, substitute, and give the final value with units.
-- If it is a multiple-choice question, state the letter.
+- "working" carries the depth: the chain your user can repeat out loud to someone else, in the course's own words. Say what the question is really asking, the principle or definition that governs it, why the answer follows from it, and the step where a careless answer usually goes wrong.
+- If it is a calculation, show the governing equation, substitute, and give the final value with units, keeping every step in "working" so the substitution can be followed rather than trusted.
+- If it is a multiple-choice question, state the letter, and in "working" say why the other plausible options fail, not only why this one is right.
+- Depth scales with the stakes: a single fact gets two sentences of reasoning, an exam question gets the full chain. Never pad by restating the answer in other words.
 - If the question is genuinely ambiguous or under-specified, answer the most likely reading and say in one clause what you assumed.
 Reply with ONLY minified JSON in this exact shape:
-{"answer":"<the answer, 1-3 sentences unless it needs working>","working":"<optional short derivation or steps>","confidence":<0.0-1.0>,"why":"<up to 20 words on how you know>","sayThis":"<what the user can read aloud, under 25 seconds, natural speech>"}`,
+{"answer":"<the answer, 1-3 sentences unless it needs working>","working":"<the reasoning chain: 2-6 sentences, or numbered steps for a calculation, written so the user could explain it to a classmate and answer a follow-up>","confidence":<0.0-1.0>,"why":"<up to 20 words on how you know>","sayThis":"<what the user can read aloud, under 25 seconds, natural speech>"}`,
   },
   quiz: {
     label: 'Quiz / test mode',
     temperature: 0.1,
     instructions: `You are taking a quiz or test. You must choose, not waffle.
-For multiple choice, pick the single best option. Eliminate distractors explicitly in "why" if the stakes are high.
+For multiple choice, pick the single best option. In "points", name each plausible distractor and the reason it fails - that is what lets your user defend the choice when a marker asks.
 For short answer or free response, give the model answer a grader would mark correct, in the number of points the question is worth.
 For "explain/discuss" prompts, give the 3-5 mark-earning points, not an essay.
+Depth requirement, every question: "points" must be enough for your user to re-explain the answer out loud and survive one follow-up question. Each point is a claim plus the clause that makes it true, in the course's own vocabulary - what the concept means, why the answer follows from it, where students usually get it wrong.
+Do not invent steps to look thorough. If the reasoning is honestly one line, write one line.
 Reply with ONLY minified JSON in this exact shape:
-{"choice":"<letter or empty>","answer":"<the answer text>","points":["<optional mark-earning point>"],"confidence":<0.0-1.0>,"why":"<up to 25 words>"}`,
+{"choice":"<letter or empty>","answer":"<the answer text>","points":["<claim plus the reason it is true; for multiple choice, include each distractor you eliminated and why>"],"confidence":<0.0-1.0>,"why":"<up to 25 words>"}`,
   },
   essay: {
     label: 'Write an essay',
@@ -45,7 +49,10 @@ Rules:
 - Use concrete evidence from the supplied material. If you cite a source, only cite sources that were given to you; never invent citations, page numbers or statistics.
 - Vary sentence length. Allow one mild imperfection of rhythm. No bullet lists, no "In conclusion", no em-dash pile-ups.
 - End on the idea, not on a summary of what the reader just read.
-Format: a short title line, then the essay in paragraphs. Include a word count at the very end as "Word count: N".`,
+Format: a short title line, then the essay in paragraphs. Include a word count at the very end as "Word count: N".
+After the word count, add the explainer your user needs in order to own this essay in conversation:
+the line "How to explain this" on its own, then 3-5 short bullets - the thesis in one sentence with no jargon, the spine of the argument in order, the single strongest piece of evidence and why it carries the weight, and the toughest objection with the clause that answers it.
+The bullets belong to the explainer only; the essay itself stays free of them. Keep the explainer out of the word count, and never restate the essay inside it.`,
   },
   read: {
     label: 'Read & extract',
