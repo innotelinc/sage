@@ -119,6 +119,7 @@ jobs:
 
       - name: Verify the icon reached the app bundle
         run: |
+          APP=build/Sage.xcarchive/Products/Applications/App.app
           ICONS=$(ls -1 "$APP" | grep -i '^AppIcon' | wc -l | tr -d " ")
           echo "compiled app icon resources: $ICONS"
           test "$ICONS" -ge 1 || { echo "no AppIcon resources were compiled into the app"; exit 1; }
