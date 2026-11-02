@@ -1,58 +1,43 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#080b12" />
+    <meta name="theme-color" content="#07080b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)" />
     <title>Terms · Sage</title>
     <meta name="description" content="The terms that apply to buying and using Sage sessions." />
-    <style>
-      :root {
-        --bg: #080b12;
-        --panel: #0e1420;
-        --line: #1e283a;
-        --text: #e7edf7;
-        --muted: #8b98ad;
-        --accent: #6ee7b7;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--text);
-        font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        -webkit-text-size-adjust: 100%;
-      }
-      .wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 72px; }
-      header { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
-      .brand {
-        display: inline-flex; align-items: center; gap: 8px;
-        color: var(--text); text-decoration: none; font-weight: 700; letter-spacing: 0.02em;
-      }
-      .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
-      .back { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 14px; }
-      .back:hover { color: var(--accent); }
-      h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.02em; }
-      .lede { color: var(--muted); margin: 0 0 6px; }
-      .updated { color: var(--muted); font-size: 13px; margin: 0 0 32px; }
-      h2 { font-size: 18px; margin: 34px 0 10px; letter-spacing: -0.01em; }
-      p, li { color: #d5deec; }
-      ul { padding-left: 20px; }
-      li { margin: 6px 0; }
-      a { color: var(--accent); }
-      footer { margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
-    </style>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/docs.css" />
+    <script>
+      try {
+        var saved = JSON.parse(localStorage.getItem('sage.shell.v1') || '{}');
+        var pref = saved.theme || 'auto';
+        var dark = pref === 'dark' || (pref === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      } catch (e) {}
+    </script>
   </head>
   <body>
-    <div class="wrap">
-      <header>
-        <a class="brand" href="/"><span class="dot"></span>Sage</a>
-        <a class="back" href="/">Open the app →</a>
-      </header>
+    <header class="doc-top">
+      <div class="doc-top-inner">
+        <a class="doc-brand" href="/"><span class="doc-dot" aria-hidden="true"></span>Sage<span class="doc-tag">course agent</span></a>
+        <nav class="doc-nav" aria-label="Sage">
+          <a href="/">App</a>
+          <a href="/about">About</a>
+          <a href="/support">Support</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms" aria-current="page">Terms</a>
+        </nav>
+      </div>
+    </header>
 
-      <h1>Terms</h1>
-      <p class="lede">These terms cover buying and using Sage sessions.</p>
-      <p class="updated">Last updated 2 November 2026 · Innotel Labs</p>
+    <main class="doc-wrap">
+      <div class="doc-head">
+        <h1>Terms</h1>
+        <p class="doc-lede">These terms cover buying and using Sage sessions.</p>
+        <p class="doc-meta">Last updated 2 November 2026 · Innotel Labs</p>
+      </div>
 
       <h2>What a session is</h2>
       <p>A session is a fifteen-minute window of access to the model gateway, bought in advance. One session is one key: it works for as many requests as you like until the window closes, and the window starts when the purchase is confirmed. Sessions are not subscriptions and do not renew by themselves.</p>
@@ -89,10 +74,14 @@
       <h2>Contact</h2>
       <p><a href="mailto:admin@innotel.us">admin@innotel.us</a></p>
 
-      <footer>
-        SAGE — a course-taking agent. A product of <a href="https://innotel.us">Innotel Labs</a>.
-        See also <a href="/privacy">Privacy</a> and <a href="/support">Support</a>.
+      <footer class="doc-foot">
+        <span>Sage — a course-taking agent. A product of <a href="https://innotel.us">Innotel Labs</a>.</span>
+        <span class="doc-foot-links">
+          <a href="/support">Support</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+        </span>
       </footer>
-    </div>
+    </main>
   </body>
 </html>
