@@ -43,6 +43,7 @@ const defaultState = () => ({
     accessCode: '',
     ttsVoice: '',
     gatewayKey: '',
+    receiptEmail: '',
     gatewayBase: 'https://gateway.innotel.us/v1',
     // Set only for a key bought as a session: the moment its window closes.
     keyExpiresAt: '',
@@ -516,7 +517,7 @@ function courseForTurn() {
 async function agent(mode, { text = '', images = [], maxTokens } = {}) {
   const left = sessionRemainingMs();
   if (left !== null && left <= 0) {
-    throw new Error('Your session ended. Buy another at magnate.innotel.us/sage and claim it in Settings.');
+    throw new Error('Your session ended. Buy another session in Settings → Session.');
   }
   const turn = courseForTurn();
   if (turn && turn.id !== state.activeId) switchCourse(turn.id, { auto: true });
@@ -2451,7 +2452,7 @@ function renderSessionClock() {
     return;
   }
   if (left <= 0) {
-    el.textContent = 'Session ended — capture is paused. Buy another at magnate.innotel.us/sage.';
+    el.textContent = 'Session ended — capture is paused. Buy another in Settings → Session.';
     el.setAttribute('data-state', 'over');
     return;
   }
@@ -2479,7 +2480,7 @@ function checkSessionClock() {
   if (cap.study) {
     try { stopStudyMode(); } catch { /* already stopped */ }
   }
-  toast('Your session ended — capture paused. Buy another session to keep going.', 'error');
+  toast('Your session ended — capture paused. Buy another in Settings → Session.', 'error');
   updateStatus();
   checkHealth();
 }
@@ -2724,6 +2725,137 @@ async function micCheck() {
   out.textContent = bits.join(' · ');
 }
 
+/* ── buying a session ──────────────────────────────────────── */
+/* Magnate prices the session and runs the payment; this app is where the
+   decision is made. The checkout is started by our own server so the browser
+   never needs CORS access to a billing origin, and the receipt page opens this
+   app at #claim=<code>, which installs the key with no copying. */
+const store = { plans: [], slug: '', page: '', minutes: 15 };
+
+function chosenPlan() {
+  return store.plans.find((plan) => plan.slug === store.slug) || store.plans[0] || null;
+}
+
+function planLabel(plan) {
+  const label = String(plan?.name || plan?.slug || 'session').replace(/^sage-session-/, '').replace(/-/g, ' ');
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function money(cents) {
+  return '$' + (Number(cents || 0) / 100).toFixed(2);
+}
+
+async function loadStore() {
+  try {
+    const data = await api('/api/store');
+    store.plans = Array.isArray(data.plans) ? data.plans : [];
+    store.page = data.page || '';
+    store.minutes = Number(data.minutes) || 15;
+    if (!store.plans.some((plan) => plan.slug === store.slug)) store.slug = store.plans[0]?.slug || '';
+  } catch {
+    // An unreachable store is not a broken app: the page link still works.
+    store.plans = [];
+  }
+  renderStore();
+}
+
+function renderStore() {
+  const host = $('storePlans');
+  if (!host) return;
+  host.innerHTML = '';
+  const note = $('storeNote');
+  const buy = $('btnBuy');
+  const page = $('btnStorePage');
+  const plan = chosenPlan();
+
+  if (!plan) {
+    if (note) {
+      note.textContent = 'Sessions are priced on Magnate, which runs the payment; the receipt carries a claim code that installs the key here.';
+    }
+    if (buy) buy.hidden = true;
+    if (page) page.hidden = false;
+    return;
+  }
+  if (buy) buy.hidden = false;
+  if (page) page.hidden = true;
+  for (const option of store.plans) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn ' + (option.slug === plan.slug ? 'primary' : 'ghost');
+    button.textContent = planLabel(option) + ' · ' + money(option.priceCents);
+    button.onclick = () => {
+      store.slug = option.slug;
+      renderStore();
+    };
+    host.appendChild(button);
+  }
+  if (note) {
+    note.textContent =
+      planLabel(plan) + ' — ' + store.minutes + ' minutes of the gateway, ' + money(plan.priceCents) +
+      ' each. One key, usable as often as you like until the window closes.';
+  }
+}
+
+async function startPurchase() {
+  const status = $('buyStatus');
+  const button = $('btnBuy');
+  const email = String($('setReceiptEmail')?.value || '').trim();
+  const sessions = Math.max(1, Math.min(10, Math.floor(Number($('setSessions')?.value) || 1)));
+  const plan = chosenPlan();
+  if (!plan) return openStorePage();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    if (status) status.textContent = 'An email is needed for the receipt — that is where the key appears.';
+    $('setReceiptEmail')?.focus();
+    return;
+  }
+  state.settings.receiptEmail = email;
+  persist();
+  busy(button, true);
+  if (status) status.textContent = 'Starting the checkout…';
+  try {
+    const data = await api('/api/store/checkout', { body: { planSlug: plan.slug, email, sessions } });
+    if (!data.url) throw new Error('The store did not return a checkout link.');
+    if (status) status.textContent = 'Opening the payment page. Leave it open until it confirms — the key installs itself.';
+    openStoreUrl(data.url);
+  } catch (error) {
+    if (status) status.textContent = error.message;
+  } finally {
+    busy(button, false);
+  }
+}
+
+function openStorePage() {
+  openStoreUrl(store.page || 'https://magnate.innotel.us/sage');
+}
+
+/* A tab is the honest place for a payment page: it keeps its own back button and
+   the receipt can reopen this app. A shell with no tabs sends the page to its
+   browser instead, and says so if even that is refused. */
+function openStoreUrl(url) {
+  let opened = null;
+  try {
+    opened = window.open(url, '_blank', 'noopener');
+  } catch {
+    opened = null;
+  }
+  if (opened) return;
+  try {
+    location.href = url;
+    return;
+  } catch {
+    /* fall through to the link */
+  }
+  const status = $('buyStatus');
+  if (!status) return;
+  status.textContent = '';
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = 'Open the payment page';
+  status.appendChild(link);
+}
+
 function openSettings() {
   const p = state.persona;
   $('setName').value = p.name;
@@ -2747,6 +2879,10 @@ function openSettings() {
     ? 'Key stored on this device. Use the mic check if capture is refusing.'
     : '';
   $('micStatus').textContent = '';
+  if ($('setReceiptEmail')) $('setReceiptEmail').value = state.settings.receiptEmail || '';
+  if ($('setSessions')) $('setSessions').value = '1';
+  if ($('buyStatus')) $('buyStatus').textContent = '';
+  loadStore();
   $('settingsDialog').showModal();
 }
 
@@ -2761,6 +2897,7 @@ function saveSettings() {
   state.language = $('setLanguage').value.trim().slice(0, 40);
   state.settings.noteIntervalSec = Math.max(8, Math.min(120, Number($('setInterval').value) || 20));
   state.settings.accessCode = $('setAccess').value.trim();
+  state.settings.receiptEmail = String($('setReceiptEmail')?.value || '').trim();
   state.settings.autoNotes = $('setAutoNotes').checked;
   state.settings.tts = $('setTts').checked;
   clearInterval(cap.noteTimer);
@@ -2829,6 +2966,8 @@ function bind() {
   $('btnTestConn').onclick = testConnection;
   $('btnVerifyKey').onclick = saveGatewayKey;
   $('btnMicCheck').onclick = micCheck;
+  $('btnBuy').onclick = startPurchase;
+  $('btnStorePage').onclick = openStorePage;
   $('btnScreenRelay').onclick = () => {
     $('screenDialog').close();
     openTab('live');

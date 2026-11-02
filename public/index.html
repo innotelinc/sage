@@ -26,7 +26,7 @@
     <title>Sage · course agent</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=2.5.1" />
+    <link rel="stylesheet" href="/styles.css?v=2.6.0" />
   </head>
   <body>
     <header class="topbar">
@@ -307,15 +307,38 @@
           <p class="mini muted" id="sessionClock"></p>
           <div class="chips" id="gatewayModels"></div>
           <p class="mini muted" id="micStatus"></p>
-          <label>Bought a session at Magnate?
+        </fieldset>
+
+        <fieldset class="admin-block">
+          <legend>Session</legend>
+          <p class="mini muted" id="storeNote">
+            A session is a timed key: pay once, then use the gateway as much as you like until the window closes.
+          </p>
+          <div class="chips" id="storePlans"></div>
+          <div class="grid2">
+            <label>Sessions <input id="setSessions" type="number" min="1" max="10" step="1" value="1" /></label>
+            <label>Email for the receipt
+              <input id="setReceiptEmail" type="email" autocomplete="email" autocapitalize="off" spellcheck="false"
+                     placeholder="you@example.com" />
+            </label>
+          </div>
+          <div class="dialog-actions">
+            <button type="button" class="btn primary" id="btnBuy">Buy a session</button>
+            <button type="button" class="btn ghost" id="btnStorePage">Open the store page</button>
+          </div>
+          <p class="mini muted" id="buyStatus"></p>
+          <p class="mini muted">
+            Payment is Stripe's, run by Magnate; the key is minted the moment it confirms and installs itself here.
+            Lost the receipt? Claim the code from it below.
+          </p>
+          <label>Claim code
             <input id="setClaimCode" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
-                   placeholder="Claim code from your receipt" />
+                   placeholder="From your receipt" />
           </label>
           <div class="dialog-actions">
             <button type="button" class="btn ghost" id="btnClaim">Claim key</button>
           </div>
           <p class="mini muted" id="claimStatus"></p>
-          <p class="mini muted">Keys: <strong>magnate.innotel.us/sage</strong> — a bought session installs itself from its claim code.</p>
         </fieldset>
 
         <div class="grid2">
@@ -381,6 +404,6 @@
 
     <div class="toast" id="toast" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=2.5.1"></script>
+    <script type="module" src="/app.js?v=2.6.0"></script>
   </body>
 </html>

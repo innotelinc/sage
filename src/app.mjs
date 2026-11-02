@@ -6,6 +6,7 @@ import { buildSystemPrompt, parseMemory, parseStructured, MODES } from './person
 import { handleRelay } from './relay.mjs';
 import { handleWorkspace } from './workspace.mjs';
 import { openSession, closeSession, accepts, recordFrame, readNotes } from './broadcast.mjs';
+import { handleStore } from './store.mjs';
 import { synthesize, ttsConfig } from './tts.mjs';
 
 const MAX_IMAGES = 6;
@@ -585,6 +586,12 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
     return handleWorkspace(request, url, env);
   }
 
+  // The catalog is a price list, not a secret: it is answered before the
+  // access-code gate so a locked instance can still say what a session costs.
+  if (url.pathname === '/api/store' && request.method === 'GET') {
+    return handleStore(request, url, cfg, json);
+  }
+
   if (!authorised(request, cfg, runtime)) {
     return json({ error: 'unauthorised', message: 'Wrong or missing access code.' }, 401);
   }
@@ -606,6 +613,11 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
     const target = String(url.searchParams.get('device') || '').trim().slice(0, 64);
     if (!target) return json({ error: 'no_device', message: 'A device identifier is required.' }, 400);
     return json(readNotes(target));
+  }
+
+  // Buying a session happens in the app now; the payment itself stays Magnate's.
+  if (url.pathname === '/api/store/checkout') {
+    return handleStore(request, url, cfg, json);
   }
 
   if (url.pathname.startsWith('/api/relay/')) {
