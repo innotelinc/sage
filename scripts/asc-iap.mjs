@@ -993,19 +993,48 @@ async function ensureAgeRating(app) {
  * Review appScreenshotSets". The version therefore leaves the draft for the upload and
  * goes back in afterwards. Deleting an item is permitted; the submission is not.
  */
-async function detachVersion(app, versionId) {
-  const drafts =
-    (await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&filter[platform]=IOS&limit=10`).catch(() => null)) ||
-    (await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&limit=10`).catch(() => null));
-  for (const draft of drafts?.data || []) {
+async function draftsFor(app) {
+  const filtered = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&filter[platform]=IOS&limit=10`).catch(() => null);
+  if (filtered?.data) return filtered.data;
+  const all = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&limit=10`).catch(() => null);
+  return all?.data || [];
+}
+
+/**
+ * Screenshots are only editable while the version is outside a submission: Apple
+ * answers a new screenshot set with "Can't Create Screenshot Set while Ready For
+ * Review". A reshoot therefore releases the draft with PATCH canceled=true, which is
+ * the documented way back, and the version rejoins a fresh draft with its products.
+ */
+async function cancelDraft(app, versionId) {
+  const drafts = await draftsFor(app);
+  let released = false;
+  for (const draft of drafts) {
     if (draft.attributes?.state !== 'READY_FOR_REVIEW') continue;
-    const items = await call('GET', `/v1/reviewSubmissions/${draft.id}/items?limit=50`).catch(() => null);
-    for (const entry of items?.data || []) {
-      if (entry.relationships?.appStoreVersion?.data?.id !== versionId) continue;
-      await call('DELETE', `/v1/reviewSubmissionItems/${entry.id}`);
-      console.log('  submission · version held out of the draft for the screenshot upload');
+    try {
+      await call('PATCH', `/v1/reviewSubmissions/${draft.id}`, {
+        data: { type: 'reviewSubmissions', id: draft.id, attributes: { canceled: true } },
+      });
+      console.log(`  submission · canceled draft ${draft.id} to free the listing`);
+      released = true;
+    } catch (error) {
+      console.log(`  submission · could not cancel ${draft.id}: ${error.message}`);
     }
   }
+  if (!released) {
+    console.log('  submission · no ready draft to cancel');
+    return;
+  }
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const version = await call('GET', `/v1/appStoreVersions/${versionId}`).catch(() => null);
+    const state = version?.data?.attributes?.state;
+    if (state && state !== 'READY_FOR_REVIEW') {
+      console.log(`  submission · version is now ${state}`);
+      return;
+    }
+    await new Promise((done) => setTimeout(done, 1500));
+  }
+  console.log('  submission · version still reads READY_FOR_REVIEW');
 }
 
 /** Everything App Review needs, then the version joins the products in the draft. */
@@ -1017,7 +1046,7 @@ async function ensureListing(app) {
   await ensureAgeRating(app);
   await ensureAppInfo(app);
   await ensureAppPrice(app);
-  await detachVersion(app, version.id);
+  if (REPLACE_SHOTS) await cancelDraft(app, version.id);
   console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_61', SHOT_DIR_PHONE)}`);
   if (SHOT_DIR) console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_67', SHOT_DIR)}`);
   console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPAD_PRO_3GEN_129', SHOT_DIR_IPAD)}`);
