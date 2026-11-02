@@ -50,6 +50,21 @@ jobs:
           npx cap sync ios
           echo "generated layout:"; ls -1 ios/App
 
+      - name: Install app icon
+        run: |
+          # The Xcode project is generated fresh in this job, so it starts with whatever
+          # icon Capacitor's template ships. Swap in Sage's catalog icon before the archive
+          # so TestFlight and the App Store listing show the real mark.
+          ICONSET=ios/App/App/Assets.xcassets/AppIcon.appiconset
+          mkdir -p "$(dirname "$ICONSET")"
+          rm -rf "$ICONSET"
+          cp -R deploy/ios/AppIcon.appiconset "$ICONSET"
+          echo "icon slots: $(ls -1 "$ICONSET"/*.png | wc -l)"
+          # An upload is rejected if the 1024 marketing icon carries alpha.
+          if sips -g hasAlpha "$ICONSET/AppIcon-1024x1024@1x.png" | grep -q "hasAlpha: yes"; then
+            echo "AppIcon-1024x1024@1x.png has an alpha channel"; exit 1
+          fi
+
       - name: Merge usage descriptions into Info.plist
         run: |
           PLIST=ios/App/App/Info.plist
@@ -99,7 +114,17 @@ jobs:
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Automatic \
+            ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon \
             archive
+
+      - name: Verify the icon reached the app bundle
+        run: |
+          APP=build/Sage.xcarchive/Products/Applications/App.app
+          NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP/Info.plist")
+          echo "CFBundleIconName=$NAME"
+          test "$NAME" = "AppIcon"
+          test -f "$APP/Assets.car"
+          ls -1 "$APP" | grep -i '^AppIcon' || true
 
       - name: Export .ipa
         env:

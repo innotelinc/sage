@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    The App Store masks the icon itself, so this artwork is a full-bleed square
+    with no corner radius and no transparent pixels. public/icon.svg keeps the
+    rounded rect because browsers do not mask it.
+  -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6ee7b7" />
+      <stop offset="1" stop-color="#38bdf8" />
+    </linearGradient>
+    <radialGradient id="bg" cx="0.5" cy="0.42" r="0.75">
+      <stop offset="0" stop-color="#101c2e" />
+      <stop offset="0.6" stop-color="#0a1018" />
+      <stop offset="1" stop-color="#05070c" />
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.30" />
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)" />
+  <circle cx="512" cy="512" r="210" fill="url(#glow)" />
+
+  <circle cx="512" cy="512" r="330" fill="none" stroke="url(#g)" stroke-width="26" opacity="0.55" />
+  <circle cx="512" cy="512" r="234" fill="none" stroke="url(#g)" stroke-width="15" opacity="0.28" />
+
+  <path d="M512 322c0 104.9-85.1 190-190 190 104.9 0 190 85.1 190 190 0-104.9 85.1-190 190-190-104.9 0-190-85.1-190-190z" fill="url(#g)" />
+  <circle cx="512" cy="512" r="26" fill="#080b12" />
+</svg>
