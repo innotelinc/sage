@@ -87,6 +87,10 @@ const COPY = {
     'SESSIONS — access is sold in fifteen-minute sessions. One price, no subscription, no auto-renewal. Buy in the app and the clock stops capture for you when the window closes.',
     'Sage does not replace your reading or your judgement. It is a study aid: check what it tells you.',
   ].join('\n\n'),
+  // The subtitle is what a search result shows under the name; the promotional text
+  // is the only listing field that can change without a new build.
+  subtitle: 'Your course, answered live',
+  promotionalText: 'It sits in your lecture, reads the slides and the board, and answers with the reasoning shown — then leaves you notes you can revise from.',
   keywords: 'study aid,lecture notes,quiz help,essay outline,transcript,tutor,exam prep',
   supportUrl: `${SITE}/support`,
   marketingUrl: `${SITE}/about`,
@@ -422,6 +426,7 @@ async function readiness(app) {
     const attrs = loc.attributes || {};
     const gap = ['description', 'keywords', 'supportUrl'].filter((key) => !String(attrs[key] || '').trim());
     line('listing text', gap.length ? `MISSING ${gap.join(', ')}` : 'description, keywords, support URL present');
+    line('promotional text', attrs.promotionalText ? `set (${attrs.promotionalText.length} chars)` : 'MISSING');
     const sets = await soft(`/v1/appStoreVersionLocalizations/${loc.id}/appScreenshotSets?limit=10`);
     const kinds = (sets?.data || []).map((item) => item.attributes?.screenshotDisplayType);
     line('screenshots', kinds.length ? `sets: ${kinds.join(', ')}` : 'MISSING — no screenshot set');
@@ -433,7 +438,7 @@ async function readiness(app) {
   const info = infos?.data?.[0];
   const included = infos?.included || [];
   const infoLoc = included.find((item) => item.type === 'appInfoLocalizations')?.attributes || {};
-  line('app info', !info ? 'MISSING' : [infoLoc.name || 'name MISSING', infoLoc.privacyPolicyUrl ? 'privacy policy' : 'privacy policy MISSING'].join(' · '));
+  line('app info', !info ? 'MISSING' : [infoLoc.name || 'name MISSING', infoLoc.subtitle ? `subtitle "${infoLoc.subtitle}"` : 'subtitle MISSING', infoLoc.privacyPolicyUrl ? 'privacy policy' : 'privacy policy MISSING'].join(' · '));
   line('age rating', included.some((item) => item.type === 'ageRatingDeclarations') ? 'set' : 'MISSING');
   const declaration = included.find((item) => item.type === 'ageRatingDeclarations');
   if (declaration) {
@@ -589,6 +594,7 @@ async function ensureListingText(versionId) {
         keywords: COPY.keywords,
         supportUrl: COPY.supportUrl,
         marketingUrl: COPY.marketingUrl,
+        promotionalText: COPY.promotionalText,
       },
     },
   });
@@ -635,7 +641,7 @@ async function ensureAppInfo(app) {
       data: {
         type: 'appInfoLocalizations',
         id: localization.id,
-        attributes: { privacyPolicyUrl: COPY.privacyUrl },
+        attributes: { privacyPolicyUrl: COPY.privacyUrl, subtitle: COPY.subtitle },
       },
     });
     console.log(`  privacy policy · ${COPY.privacyUrl}`);
