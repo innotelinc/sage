@@ -111,9 +111,7 @@ jobs:
           # recording in another app has to be a ReplayKit broadcast extension —
           # a second target, which the generated project does not have.
           mkdir -p ios/App/SageBroadcast
-          cp deploy/ios/broadcast/SageBroadcast/SampleHandler.swift              deploy/ios/broadcast/SageBroadcast/Info.plist              deploy/ios/broadcast/SageBroadcast/SageBroadcast.entitlements              ios/App/SageBroadcast/
           cp deploy/ios/broadcast/SageBroadcastPlugin.swift ios/App/App/
-          cp deploy/ios/broadcast/App.entitlements ios/App/App/App.entitlements
           IOS_MARKETING_VERSION=$(node -p "require('./package.json').version")             gem install xcodeproj --no-document > /dev/null
           IOS_MARKETING_VERSION=$(node -p "require('./package.json').version")             ruby deploy/ios/add-broadcast-target.rb
           /usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" ios/App/SageBroadcast/Info.plist

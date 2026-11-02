@@ -30,7 +30,6 @@ extension = project.new_target(:app_extension, 'SageBroadcast', :ios, '15.0')
 # 'SageBroadcast/SageBroadcast/SampleHandler.swift' is not where the file is.
 extension_group = project.main_group.new_group('SageBroadcast', 'SageBroadcast')
 handler = extension_group.new_file('SampleHandler.swift')
-extension_group.new_file('SageBroadcast.entitlements')
 extension.source_build_phase.add_file_reference(handler)
 
 app_group = project.main_group.find_subpath('App', false)
@@ -42,7 +41,11 @@ extension.build_configurations.each do |config|
   config.build_settings.merge!(
     'PRODUCT_BUNDLE_IDENTIFIER' => 'us.innotel.sage.broadcast',
     'INFOPLIST_FILE' => 'SageBroadcast/Info.plist',
-    'CODE_SIGN_ENTITLEMENTS' => 'SageBroadcast/SageBroadcast.entitlements',
+    # No entitlements: an App Group cannot be created through the App Store
+    # Connect API, which is the only signing this project has, so an entitlement
+    # here would fail to sign rather than do anything.
+    'PRODUCT_NAME' => 'SageBroadcast',
+    'WRAPPER_EXTENSION' => 'appex',
     'CODE_SIGN_STYLE' => 'Automatic',
     'DEVELOPMENT_TEAM' => team,
     'SWIFT_VERSION' => '5.0',
@@ -54,12 +57,6 @@ extension.build_configurations.each do |config|
     'MARKETING_VERSION' => version,
     'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks'
   )
-end
-
-# The app carries the App Group too: the extension writes notes into the shared
-# container and the app is what reads them back.
-app.build_configurations.each do |config|
-  config.build_settings['CODE_SIGN_ENTITLEMENTS'] = 'App/App.entitlements'
 end
 
 app.add_dependency(extension)

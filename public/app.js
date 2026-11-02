@@ -565,6 +565,7 @@ const cap = {
   nativeFrames: null,
   broadcastPoll: null,
   broadcastSeen: false,
+  broadcastDevice: null,
   cameraStream: null,
   screenVideo: null,
   cameraVideo: null,
@@ -925,37 +926,50 @@ async function startNativeWatch() {
 // app going to the background. Notes are collected as they arrive.
 async function startBroadcastWatch() {
   try {
-    await NATIVE_BROADCAST.configure({ code: state.settings.accessCode || '' });
+    const found = await NATIVE_BROADCAST.device();
+    cap.broadcastDevice = found?.device || '';
+    if (!cap.broadcastDevice) {
+      toast('This build cannot identify the device for a broadcast.', 'error');
+      return;
+    }
+    // The server is the only place the extension and the app can meet: there is no
+    // shared container, and the extension carries no access code.
+    await api('/api/broadcast/session', { body: { device: cap.broadcastDevice } });
     await NATIVE_BROADCAST.start();
   } catch (error) {
     toast(`Could not open the broadcast sheet: ${error?.message || error}`, 'error');
     return;
   }
   cap.watchOn = true;
+  cap.frames = 0;
+  cap.broadcastSeen = false;
   clearInterval(cap.broadcastPoll);
   cap.broadcastPoll = setInterval(drainBroadcast, 6000);
-  await drainBroadcast();
   updateStatus();
-  toast('Choose Sage in the sheet and start the broadcast, then switch apps — it keeps recording.');
+  toast('Pick Sage in the sheet and start the broadcast, then switch apps — it keeps recording.');
 }
 
 async function drainBroadcast() {
+  if (!cap.broadcastDevice) return;
   let out;
   try {
-    out = await NATIVE_BROADCAST.drain();
+    out = await api(`/api/broadcast/notes?device=${encodeURIComponent(cap.broadcastDevice)}`);
   } catch {
     return;
   }
   for (const note of out?.notes || []) addNote(note.text, 'broadcast');
-  if (out && out.running === false && cap.broadcastSeen) {
-    // Stopped from Control Center or the status bar, not by tapping Watch.
+  if (Number.isFinite(out?.frames) && out.frames > cap.frames) cap.frames = out.frames;
+  if (out?.running) cap.broadcastSeen = true;
+  else if (cap.broadcastSeen) {
+    // Nothing has arrived for the whole live window: the broadcast was stopped
+    // from Control Center, so the page should stop claiming to watch.
     cap.broadcastSeen = false;
     stopWatch();
     toast('The screen broadcast stopped.');
     return;
   }
-  if (out?.running) cap.broadcastSeen = true;
-  if (out?.error) aimStatus(`broadcast: ${out.error}`);
+  updateStatus();
+  aimLiveStatus();
 }
 
 function stopWatch() {
@@ -963,6 +977,11 @@ function stopWatch() {
   if (cap.broadcastPoll) {
     clearInterval(cap.broadcastPoll);
     cap.broadcastPoll = null;
+  }
+  if (cap.broadcastDevice) {
+    // Closing the session stops the server accepting frames for a broadcast that
+    // is no longer anyone's.
+    api(`/api/broadcast/session?device=${encodeURIComponent(cap.broadcastDevice)}`, { method: 'DELETE' }).catch(() => {});
   }
   if (cap.nativeFrames || NATIVE_SCREEN) {
     try {

@@ -5,6 +5,7 @@
 import { buildSystemPrompt, parseMemory, parseStructured, MODES } from './persona.mjs';
 import { handleRelay } from './relay.mjs';
 import { handleWorkspace } from './workspace.mjs';
+import { openSession, closeSession, accepts, recordFrame, readNotes } from './broadcast.mjs';
 import { synthesize, ttsConfig } from './tts.mjs';
 
 const MAX_IMAGES = 6;
@@ -131,6 +132,38 @@ function keyRejected(status, detail) {
     },
     401
   );
+}
+
+const BROADCAST_PROMPT =
+  'Frame captured from the screen while the user was in another app. Note only what matters academically; mark exam hints with EXAM:';
+
+/**
+ * A frame from the iOS broadcast extension. It cannot present the access code, so
+ * the session the app opened is the credential; the reply is stored for the app to
+ * collect rather than returned, because nobody is looking at this response.
+ */
+async function handleBroadcastFrame(request, cfg) {
+  const body = await request.json().catch(() => null);
+  if (!body) return json({ error: 'bad_json', message: 'Body must be JSON.' }, 400);
+  const device = String(body.device || '').trim().slice(0, 64);
+  if (!device) return json({ error: 'no_device', message: 'A device identifier is required.' }, 400);
+  if (!accepts(device)) {
+    return json({ error: 'no_session', message: 'Open a broadcast session from the app first.' }, 409);
+  }
+  if (!isDataImage(body.image)) {
+    return json({ error: 'bad_frame', message: 'image must be an image data URL.' }, 400);
+  }
+
+  let note = '';
+  try {
+    const answer = await handleChat({ mode: 'note', text: BROADCAST_PROMPT, images: [body.image] }, cfg);
+    const payload = await answer.json().catch(() => null);
+    if (answer.ok && payload?.reply && payload.reply.trim().toLowerCase() !== 'nothing new') note = payload.reply;
+  } catch {
+    // A frame that could not be read is not a reason to end the broadcast.
+  }
+  const state = recordFrame(device, note);
+  return json({ ok: true, noted: Boolean(note), frames: state?.frames || 0, running: true });
 }
 
 async function handleChat(body, cfg) {
@@ -539,6 +572,13 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
     });
   }
 
+  // A broadcast extension has nowhere to keep the access code and no shared
+  // container in which to read the page's, so its frames are accepted on the
+  // strength of a session the app opened with that code.
+  if (url.pathname === '/api/broadcast/frame' && request.method === 'POST') {
+    return handleBroadcastFrame(request, cfg);
+  }
+
   // The workspace is decided per identity, not per access code alone, so it is
   // answered before the access-code gate: handleWorkspace does its own check.
   if (url.pathname === '/api/workspace') {
@@ -552,6 +592,21 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
   const client = withClientCredentials(request, env, cfg);
   if (client.error) return client.error;
   cfg = client.cfg;
+
+  if (url.pathname === '/api/broadcast/session') {
+    const asked = await request.json().catch(() => ({}));
+    const target = String(url.searchParams.get('device') || asked?.device || '').trim().slice(0, 64);
+    if (!target) return json({ error: 'no_device', message: 'A device identifier is required.' }, 400);
+    if (request.method === 'POST') return json(openSession(target));
+    if (request.method === 'DELETE') return json(closeSession(target));
+    return json({ error: 'method_not_allowed' }, 405);
+  }
+
+  if (url.pathname === '/api/broadcast/notes' && request.method === 'GET') {
+    const target = String(url.searchParams.get('device') || '').trim().slice(0, 64);
+    if (!target) return json({ error: 'no_device', message: 'A device identifier is required.' }, 400);
+    return json(readNotes(target));
+  }
 
   if (url.pathname.startsWith('/api/relay/')) {
     return handleRelay(request, url, json);
