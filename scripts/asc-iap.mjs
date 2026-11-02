@@ -22,6 +22,9 @@ const TERRITORY = (process.env.ASC_BASE_TERRITORY || 'USA').trim();
 const SUBMIT = /^(1|true|yes)$/i.test(String(process.env.SUBMIT || ''));
 const SCREENSHOT = (process.env.IAP_SCREENSHOT || '').trim();
 
+/** Only edits things when asked: it attaches a build and touches a submission. */
+const ATTACH = /^(1|true|yes)$/i.test(String(process.env.ATTACH || ''));
+
 const issuer = (process.env.ASC_ISSUER_ID || '').trim();
 const keyId = (process.env.ASC_KEY_ID || '').trim();
 const pem = (process.env.ASC_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
@@ -358,9 +361,70 @@ async function report(app) {
 }
 
 
+/** The newest build Apple will accept. */
+async function newestBuild(app) {
+  const list = await call('GET', `/v1/apps/${app}/builds?limit=50&fields[builds]=version,processingState,expired`);
+  const builds = (list?.data || [])
+    .map((build) => ({ id: build.id, version: Number(build.attributes?.version), state: build.attributes?.processingState, expired: Boolean(build.attributes?.expired) }))
+    .filter((build) => build.state === 'VALID' && !build.expired && Number.isFinite(build.version))
+    .sort((a, b) => b.version - a.version);
+  console.log(`  valid builds: ${builds.map((build) => build.version).join(', ') || 'none'}`);
+  return builds[0] || null;
+}
+
+/**
+ * Version 1.0 was created but never given a build, and App Store Connect does not
+ * offer a build-less version in the "add an app version" picker — which is why the
+ * three products cannot be submitted. This attaches the newest valid build to the
+ * version and adds that version to the open submission next to the products. It
+ * leaves everything as a draft: submitting is still a deliberate, separate act.
+ */
+async function attachVersion(app) {
+  const list = await call('GET', `/v1/apps/${app}/appStoreVersions?limit=10&include=build`);
+  const version = (list?.data || []).find((item) => item.attributes?.platform === 'IOS');
+  if (!version) throw new Error('no iOS app version exists');
+  if (version.relationships?.build?.data?.id) {
+    console.log(`  version ${version.attributes?.versionString} · build already attached`);
+  } else {
+    const build = await newestBuild(app);
+    if (!build) throw new Error('no valid build to attach');
+    await call('PATCH', `/v1/appStoreVersions/${version.id}`, {
+      data: {
+        type: 'appStoreVersions',
+        id: version.id,
+        relationships: { build: { data: { type: 'builds', id: build.id } } },
+      },
+    });
+    console.log(`  version ${version.attributes?.versionString} · attached build ${build.version}`);
+  }
+  const subs = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&limit=10`);
+  const open = (subs?.data || []).find((item) => item.attributes?.state === 'READY_FOR_REVIEW');
+  if (!open) {
+    console.log('  no open iOS submission to add the version to');
+    return;
+  }
+  try {
+    await call('POST', '/v1/reviewSubmissionItems', {
+      data: {
+        type: 'reviewSubmissionItems',
+        relationships: {
+          reviewSubmission: { data: { type: 'reviewSubmissions', id: open.id } },
+          appStoreVersion: { data: { type: 'appStoreVersions', id: version.id } },
+        },
+      },
+    });
+    console.log(`  submission ${open.id} · app version ${version.attributes?.versionString} added`);
+  } catch (error) {
+    console.log(`  submission ${open.id} · version not added: ${error.message}`);
+  }
+  const after = await call('GET', `/v1/reviewSubmissions/${open.id}`);
+  console.log(`  submission state · ${after?.data?.attributes?.state || 'unknown'}`);
+}
+
 const app = await resolveAppId();
 console.log(`App ${BUNDLE} (${app}) · base territory ${TERRITORY}`);
 await report(app);
+if (ATTACH) await attachVersion(app);
 const iap = await existingProducts(app);
 
 const failed = [];
