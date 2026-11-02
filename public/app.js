@@ -34,6 +34,9 @@ const defaultState = () => ({
   courses: [],
   timetable: [],
   activeId: '',
+  // The moment of the last save here, so a copy from the server can be judged
+  // newer or older without a second table of revisions.
+  savedAt: '',
   ui: { tab: 'live' },
 });
 
@@ -113,7 +116,14 @@ let health = null;
 function loadState() {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return;
+    if (!raw) {
+      // A device with nothing saved still takes one course, so the switcher,
+      // the timetable and every answer have somewhere to live from the first tap.
+      state.courses = [defaultCourse()];
+      state.activeId = state.courses[0].id;
+      hydrateActive();
+      return;
+    }
     const saved = JSON.parse(raw);
     const base = defaultState();
     state = {
@@ -158,11 +168,159 @@ function persist() {
       state.memory = state.memory.slice(-400);
       trimHistory();
       stashActive();
+      state.savedAt = new Date().toISOString();
       localStorage.setItem(LS_KEY, JSON.stringify(state));
+      queueWorkspacePush();
     } catch {
       /* storage full — keep running */
     }
   }, 250);
+}
+
+/* ── across devices ────────────────────────────────────────── */
+// The workspace can also live on the server, keyed to whoever is asking: a panel
+// session names a person, otherwise the access code names this instance. Either
+// way one copy follows the phone and the browser between them; with neither, it
+// stays in localStorage exactly as it did before.
+const SYNC_DEBOUNCE_MS = 3500;
+const sync = { state: 'idle', rev: '', at: '', storedBy: '', message: '', timer: null };
+
+function syncAge(iso) {
+  const then = Date.parse(String(iso || ''));
+  if (!then) return 'just now';
+  const mins = Math.round((Date.now() - then) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
+}
+
+function renderSyncUi() {
+  const label = $('syncStatus');
+  if (!label) return;
+  if (sync.state === 'syncing') label.textContent = 'Syncing…';
+  else if (sync.state === 'synced') label.textContent = `In step with the server · saved ${syncAge(sync.at)}${sync.storedBy ? ` as ${sync.storedBy}` : ''}.`;
+  else if (sync.state === 'pulled') label.textContent = `Picked up a newer copy from the server · saved ${syncAge(sync.at)}.`;
+  else if (sync.state === 'local') label.textContent = 'On this device only — set the access code in Settings, or sign in to the panel, to keep this workspace on the server.';
+  else if (sync.state === 'error') label.textContent = sync.message || 'Could not reach the server; the workspace is safe on this device.';
+  else label.textContent = 'Checking the server…';
+}
+
+function workspaceSnapshot() {
+  stashActive();
+  return {
+    activeId: state.activeId,
+    courses: state.courses,
+    timetable: state.timetable,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+// Adopting writes straight to storage rather than through persist(), because
+// persist() schedules a push and a pull that pushes straight back would loop.
+function adoptWorkspace(workspace, savedAt) {
+  const courses = Array.isArray(workspace?.courses) ? workspace.courses : [];
+  if (!courses.length) return false;
+  state.courses = courses.map((course) => defaultCourse(course));
+  state.timetable = normalizeTimetable(workspace.timetable);
+  state.activeId = state.courses.some((course) => course.id === workspace.activeId) ? workspace.activeId : state.courses[0].id;
+  state.savedAt = savedAt || workspace.savedAt || new Date().toISOString();
+  hydrateActive();
+  try {
+    stashActive();
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  } catch {
+    /* storage full — the adopted copy lives in memory at least */
+  }
+  renderCourseUi();
+  renderMemory();
+  hydrateFeeds();
+  updateStatus();
+  renderPackStatus();
+  return true;
+}
+
+async function pushWorkspace(announce = false, depth = 0) {
+  const snapshot = workspaceSnapshot();
+  const headers = { 'content-type': 'application/json' };
+  if (state.settings.accessCode) headers['x-access-code'] = state.settings.accessCode;
+  const res = await fetch(apiUrl('/api/workspace'), {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ baseRev: sync.rev, workspace: snapshot }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 409 && data.workspace && depth < 2) {
+    // Another device saved first. Its copy wins only when it is genuinely newer;
+    // otherwise this device holds the newest work and goes again on top of it.
+    if (String(data.savedAt || '') > String(state.savedAt || '')) {
+      adoptWorkspace(data.workspace, data.savedAt);
+      sync.rev = data.rev || '';
+      sync.at = data.savedAt || '';
+      sync.state = 'pulled';
+      renderSyncUi();
+      if (announce) toast('Kept the newer copy from the server.');
+      return;
+    }
+    sync.rev = data.rev || '';
+    return pushWorkspace(announce, depth + 1);
+  }
+  if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+  state.savedAt = snapshot.savedAt;
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  } catch {
+    /* keep running */
+  }
+  sync.rev = data.rev || '';
+  sync.at = data.savedAt || '';
+  sync.storedBy = data.storedBy || sync.storedBy;
+  sync.state = 'synced';
+  renderSyncUi();
+  if (announce) toast('Workspace saved to the server.');
+}
+
+async function syncWorkspace({ announce = false } = {}) {
+  clearTimeout(sync.timer);
+  sync.timer = null;
+  // A code entered in Settings is a new identity for the server, so a device
+  // that had given up on sync tries again rather than waiting for a reload.
+  if (sync.state === 'local' && !announce && !state.settings.accessCode) return;
+  sync.state = 'syncing';
+  renderSyncUi();
+  try {
+    const remote = await api('/api/workspace', { method: 'GET' });
+    sync.rev = remote.rev || '';
+    sync.storedBy = remote.storedBy || '';
+    if (remote.workspace && String(remote.savedAt || '') > String(state.savedAt || '')) {
+      adoptWorkspace(remote.workspace, remote.savedAt);
+      sync.state = 'pulled';
+      sync.at = remote.savedAt || '';
+      renderSyncUi();
+      if (announce) toast('Workspace updated from the server.');
+      return;
+    }
+    await pushWorkspace(announce);
+  } catch (error) {
+    // 401 means this device has no identity the server will accept, which is the
+    // ordinary local-only case and should read as one rather than as a failure.
+    if (/sign_in_required|access code|401/i.test(String(error.message || ''))) {
+      sync.state = 'local';
+    } else {
+      sync.state = 'error';
+      sync.message = String(error.message || 'Sync failed.');
+    }
+    renderSyncUi();
+  }
+}
+
+function queueWorkspacePush() {
+  if (sync.state === 'local' && !state.settings.accessCode) return;
+  clearTimeout(sync.timer);
+  sync.timer = setTimeout(() => {
+    if (state.settings.accessCode || sync.rev) syncWorkspace();
+  }, SYNC_DEBOUNCE_MS);
 }
 
 /* ── helpers ───────────────────────────────────────────────── */
@@ -2420,6 +2578,7 @@ function openSettings() {
 }
 
 function saveSettings() {
+  const previousCode = state.settings.accessCode;
   state.persona.name = $('setName').value.trim().slice(0, 30) || 'Sage';
   state.persona.course = $('setCourse').value.trim().slice(0, 120);
   state.persona.tone = $('setTone').value;
@@ -2439,6 +2598,9 @@ function saveSettings() {
   updateStatus();
   renderMemory();
   toast('Saved.');
+  // A code that has just been entered or cleared changes who the server thinks is
+  // asking, so the workspace is offered to it (or given up) right away.
+  if (state.settings.accessCode !== previousCode) syncWorkspace();
 }
 
 async function testConnection() {
@@ -2616,6 +2778,7 @@ function bind() {
   $('courseSelect').onchange = (event) => switchCourse(event.target.value);
   $('btnNewCourse').onclick = newCourse;
   $('btnSlotAdd').onclick = addSlot;
+  $('btnSyncNow').onclick = () => syncWorkspace({ announce: true });
   $('timetableList').addEventListener('click', (event) => {
     const id = event.target.dataset?.slot;
     if (!id) return;
@@ -2701,6 +2864,8 @@ hydrateFeeds();
 updateStatus();
 renderPackStatus();
 startTimetableClock();
+renderSyncUi();
+syncWorkspace();
 // Come back to the tab the user left, not to whatever boot defaults to.
 if (state.ui?.tab && state.ui.tab !== 'live') openTab(state.ui.tab);
 checkHealth();
