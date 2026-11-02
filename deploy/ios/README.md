@@ -25,6 +25,38 @@ Four repository secrets, nothing else:
 An **App Store Connect app record for `us.innotel.sage`** must exist before the
 first upload, or the upload is rejected.
 
+## In-app purchase
+
+Apple requires digital goods sold inside an iOS app to go through StoreKit, so a
+session bought on the phone is a consumable, not a card form. `SageStorePlugin.swift`
+buys it; the server verifies the transaction with Apple and mints the key.
+
+Three consumables must exist in App Store Connect, with these product ids:
+
+| Product id | Plan |
+| --- | --- |
+| `us.innotel.sage.session.trial` | trial |
+| `us.innotel.sage.session.standard` | standard |
+| `us.innotel.sage.session.intensive` | intensive |
+
+Set `IAP_PRODUCTS` (`productId:planSlug,productId:planSlug,…`) to use different ones.
+They cannot be created by the App Store Connect API, so this is a manual step in
+the web UI.
+
+Server configuration (all optional together — without them the app keeps the store
+page, and no purchase can happen):
+
+| Variable | Meaning |
+| --- | --- |
+| `APPLE_ISSUER_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` | App Store Server API key, used to read the transaction back from Apple |
+| `APPLE_BUNDLE_ID` | defaults to `us.innotel.sage` |
+| `IAP_MINT_URL` | endpoint that turns a verified transaction into a session |
+| `IAP_MINT_TOKEN` | bearer token for that endpoint, if it needs one |
+
+The mint endpoint receives `{ productId, transactionId, email }` and answers
+`{ key, expiresAt, secondsLeft, planName }` — the same shape the claim exchange
+returns, because a key is a key once it is issued.
+
 ## Why the runner is macos-26
 
 App Store Connect now refuses builds that are not made with the **iOS 26 SDK**;

@@ -121,6 +121,7 @@ jobs:
           cp deploy/ios/broadcast/SageBroadcast/SampleHandler.swift ios/App/SageBroadcast/
           cp deploy/ios/broadcast/SageBroadcast/Info.plist ios/App/SageBroadcast/
           cp deploy/ios/broadcast/SageBroadcastPlugin.swift ios/App/App/
+          cp deploy/ios/plugins/SageStorePlugin.swift ios/App/App/
           ls -1 ios/App/SageBroadcast
           gem install xcodeproj --no-document > /dev/null
           ruby deploy/ios/add-broadcast-target.rb

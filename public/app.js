@@ -29,6 +29,18 @@ const NATIVE_BROADCAST = (() => {
     return null;
   }
 })();
+// Apple requires digital goods sold inside an iOS app to go through StoreKit, so
+// on this platform the purchase is an App Store transaction rather than a card
+// form in a tab.
+const NATIVE_STORE = (() => {
+  const bridge = window.Capacitor;
+  if (!bridge?.isNativePlatform?.() || bridge.getPlatform?.() !== 'ios') return null;
+  try {
+    return (bridge.registerPlugin ? bridge.registerPlugin('SageStore') : bridge.Plugins?.SageStore) || null;
+  } catch {
+    return null;
+  }
+})();
 const GATEWAY_DEFAULT = 'https://gateway.innotel.us/v1';
 
 /* ── state ─────────────────────────────────────────────────── */
@@ -2498,10 +2510,17 @@ async function claimGatewayKey(token, options) {
   } catch (error) {
     return { ok: false, message: error.message };
   }
+  return applySessionKey(data, options);
+}
+
+/* One installation path for both stores: a key is a key once it is issued, and
+   writing the state twice is how two devices end up disagreeing about which key
+   is stored. */
+async function applySessionKey(data, options) {
   const base = (data.baseUrl || GATEWAY_DEFAULT).replace(/\/+$/, '');
   const check = await verifyGatewayKey(data.key, base);
   if (!check.ok) {
-    return { ok: false, message: 'The gateway refused the key Magnate issued: ' + check.message };
+    return { ok: false, message: 'The gateway refused the issued key: ' + check.message };
   }
   state.settings.gatewayKey = data.key;
   state.settings.gatewayBase = base;
@@ -2730,7 +2749,7 @@ async function micCheck() {
    decision is made. The checkout is started by our own server so the browser
    never needs CORS access to a billing origin, and the receipt page opens this
    app at #claim=<code>, which installs the key with no copying. */
-const store = { plans: [], slug: '', page: '', minutes: 15 };
+const store = { plans: [], slug: '', page: '', minutes: 15, iap: null };
 
 function chosenPlan() {
   return store.plans.find((plan) => plan.slug === store.slug) || store.plans[0] || null;
@@ -2751,6 +2770,10 @@ async function loadStore() {
     store.plans = Array.isArray(data.plans) ? data.plans : [];
     store.page = data.page || '';
     store.minutes = Number(data.minutes) || 15;
+    // In-app purchase is offered only when the server can verify a transaction
+    // and mint a key for it; otherwise the store page stays the way to buy.
+    const iap = await api('/api/iap/config').catch(() => null);
+    store.iap = iap && iap.enabled ? iap : null;
     if (!store.plans.some((plan) => plan.slug === store.slug)) store.slug = store.plans[0]?.slug || '';
   } catch {
     // An unreachable store is not a broken app: the page link still works.
@@ -2776,8 +2799,12 @@ function renderStore() {
     if (page) page.hidden = false;
     return;
   }
-  if (buy) buy.hidden = false;
+  if (buy) {
+    buy.hidden = false;
+    buy.textContent = store.iap && NATIVE_STORE ? 'Buy with the App Store' : 'Buy a session';
+  }
   if (page) page.hidden = true;
+  if ($('iapNote')) $('iapNote').hidden = !(store.iap && NATIVE_STORE);
   for (const option of store.plans) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -2817,6 +2844,41 @@ async function startPurchase() {
     if (!data.url) throw new Error('The store did not return a checkout link.');
     if (status) status.textContent = 'Opening the payment page. Leave it open until it confirms — the key installs itself.';
     openStoreUrl(data.url);
+  } catch (error) {
+    if (status) status.textContent = error.message;
+  } finally {
+    busy(button, false);
+  }
+}
+
+/* The App Store takes the money and the server mints the key: the plugin stops
+   at a verified transaction id, which is the only part worth trusting here. */
+async function buyWithApple(plan) {
+  const status = $('buyStatus');
+  const button = $('btnBuy');
+  if (!plan) return;
+  const entry =
+    store.iap?.products?.find((product) => product.planSlug === plan.slug) || store.iap?.products?.[0] || null;
+  if (!entry) {
+    if (status) status.textContent = 'That session is not set up in the App Store yet.';
+    return;
+  }
+  const email = String($('setReceiptEmail')?.value || '').trim();
+  busy(button, true);
+  try {
+    if (status) status.textContent = 'Waiting for the App Store…';
+    const bought = await NATIVE_STORE.buy({ productId: entry.productId });
+    if (status) status.textContent = 'Purchase confirmed — installing the key…';
+    const data = await api('/api/iap/purchase', {
+      body: { transactionId: bought.transactionId, productId: bought.productId, email },
+    });
+    const installed = await applySessionKey(data, { silent: true });
+    if (status) {
+      status.textContent = installed.ok
+        ? 'Paid · ' + (data.planName || 'session') + ' key installed.'
+        : installed.message;
+    }
+    if (!installed.ok) throw new Error(installed.message);
   } catch (error) {
     if (status) status.textContent = error.message;
   } finally {
@@ -2966,7 +3028,7 @@ function bind() {
   $('btnTestConn').onclick = testConnection;
   $('btnVerifyKey').onclick = saveGatewayKey;
   $('btnMicCheck').onclick = micCheck;
-  $('btnBuy').onclick = startPurchase;
+  $('btnBuy').onclick = () => (store.iap && NATIVE_STORE ? buyWithApple(chosenPlan()) : startPurchase());
   $('btnStorePage').onclick = openStorePage;
   $('btnScreenRelay').onclick = () => {
     $('screenDialog').close();

@@ -137,6 +137,11 @@ to mean opening Magnate in another tab and copying a claim code back; it is now 
 | Payment | `POST /api/store/checkout` asks Magnate for a Stripe URL and opens it |
 | Key installs itself | the receipt page opens this app at `#claim=<code>`, which `POST /api/claim` trades for the key |
 
+On iOS the payment has to be an App Store purchase: `Settings → Session` asks StoreKit for the session
+product, and the transaction id it returns is verified against the App Store Server API before the server mints
+a key. That needs three consumables in App Store Connect and `IAP_MINT_URL` on the server (see
+`deploy/ios/README.md`); until then the phone falls back to the store page.
+
 The browser never talks to a billing origin directly — CORS forbids it and the plan list would be a second
 place to keep in step — so both calls are proxied by the server. `MAGNATE_URL` points it at a different store,
 and if the catalog cannot be read the app offers the store link rather than inventing a price or a slug.
@@ -271,6 +276,7 @@ expose the app publicly, set `ACCESS_CODE` so only you can spend your credits.
 at all on an instance with no code and no sign-in.
 - **v2.5.1** — shipped: watching the screen after you leave the app — the Android build now captures through its own foreground service (a MediaProjection of the whole display) instead of the browser's, so *Watch* keeps sampling when the course app comes to the front, and an ongoing notification says it is still running so it is never silent.
 - **v2.6** — shipped: buying a session inside the app — Settings → Session lists the plans with their prices, takes the email the receipt goes to, starts the Stripe checkout through the server, and the key installs itself when the receipt reopens the app.
+- **v2.7** — shipped: in-app purchase on iOS — the session is a StoreKit consumable, its transaction is verified against Apple before a key is minted, and the web keeps the Stripe storefront.
 - **v3.0** — started: native capture — the iOS broadcast extension now records while another app is in front (notes are waiting when you come back; an extension cannot raise a notification), the Android build captures through its own foreground service, and an on-device fallback that keeps working when the network drops is still to come.
 - Native iOS capture, which no web page can do.
 

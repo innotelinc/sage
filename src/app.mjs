@@ -7,6 +7,7 @@ import { handleRelay } from './relay.mjs';
 import { handleWorkspace } from './workspace.mjs';
 import { openSession, closeSession, accepts, recordFrame, readNotes } from './broadcast.mjs';
 import { handleStore } from './store.mjs';
+import { handleIap } from './iap.mjs';
 import { synthesize, ttsConfig } from './tts.mjs';
 
 const MAX_IMAGES = 6;
@@ -613,6 +614,12 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
     const target = String(url.searchParams.get('device') || '').trim().slice(0, 64);
     if (!target) return json({ error: 'no_device', message: 'A device identifier is required.' }, 400);
     return json(readNotes(target));
+  }
+
+  // App Store purchases: Apple's rules put the payment inside the app, so the
+  // verification and the minting live here, behind the same gate as a checkout.
+  if (url.pathname === '/api/iap/config' || url.pathname === '/api/iap/purchase') {
+    return handleIap(request, url, env, json);
   }
 
   // Buying a session happens in the app now; the payment itself stays Magnate's.

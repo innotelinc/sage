@@ -37,6 +37,11 @@ abort('the App group was not generated') unless app_group
 plugin = app_group.new_file('SageBroadcastPlugin.swift')
 app.source_build_phase.add_file_reference(plugin)
 
+# In-app purchase lives in the app target: StoreKit is not available to the
+# broadcast extension, and nothing about a screenshot needs a price.
+store = app_group.new_file('SageStorePlugin.swift')
+app.source_build_phase.add_file_reference(store)
+
 extension.build_configurations.each do |config|
   config.build_settings.merge!(
     'PRODUCT_BUNDLE_IDENTIFIER' => 'us.innotel.sage.broadcast',
