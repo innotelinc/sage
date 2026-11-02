@@ -9,6 +9,10 @@ on:
         description: Submit the products for review (the first consumable needs an app version in the submission)
         type: boolean
         default: false
+      probe:
+        description: Ask Apple what the Duo and Watch slots expect
+        type: boolean
+        default: false
       creative:
         description: Upload the header and search result creative into the asset library
         type: boolean
@@ -51,6 +55,7 @@ jobs:
           LISTING: ${{ inputs.listing }}
           REPLACE_SHOTS: ${{ inputs.reshoot }}
           APP_STORE_CREATIVE: ${{ inputs.creative }}
+          APP_STORE_PROBE: ${{ inputs.probe }}
           SAGE_SITE: https://sage.innotel.tech
           APP_STORE_SHOTS_PHONE: deploy/ios/store-phone
           APP_STORE_SHOTS: deploy/ios/store

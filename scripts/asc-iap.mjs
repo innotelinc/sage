@@ -30,6 +30,7 @@ const ATTACH = /^(1|true|yes)$/i.test(String(process.env.ATTACH || ''));
 const LISTING = /^(1|true|yes)$/i.test(String(process.env.LISTING || ''));
 const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+$/, '');
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
+const PROBE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_PROBE || ''));
 const CREATIVE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_CREATIVE || ''));
 const HEADER_ASSET = (process.env.APP_STORE_HEADER || 'deploy/ios/store-header/header-universal.png').trim();
 const CREATIVE_TYPES = ['PRODUCT_PAGE_HEADER_ASSET', 'APP_STORE_SEARCH_RESULTS_ASSET'];
@@ -1142,6 +1143,55 @@ async function ensureCreative(app, localizationId) {
 }
 
 /** Apple reports per-image delivery state, which is where processing failures surface. */
+/**
+ * Apple never publishes the pixel sizes for a slot in the API, but it does say them when
+ * an image is wrong. A one-pixel upload therefore turns a guess into an answer: the
+ * delivery errors name the exact dimensions the slot expects.
+ */
+async function probeDimensions(localizationId) {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==', 'base64');
+  for (const displayType of ['APP_IPHONE_DUO', 'APP_WATCH_ULTRA', 'APP_WATCH_SERIES_10']) {
+    try {
+      const sets = await call('GET', `/v1/appStoreVersionLocalizations/${localizationId}/appScreenshotSets?limit=30`);
+      let set = (sets?.data || []).find((item) => item.attributes?.screenshotDisplayType === displayType);
+      if (!set) {
+        const made = await call('POST', '/v1/appScreenshotSets', {
+          data: {
+            type: 'appScreenshotSets',
+            attributes: { screenshotDisplayType: displayType },
+            relationships: { appStoreVersionLocalization: { data: { type: 'appStoreVersionLocalizations', id: localizationId } } },
+          },
+        });
+        set = made.data;
+      }
+      const reserved = await call('POST', '/v1/appScreenshots', {
+        data: {
+          type: 'appScreenshots',
+          attributes: { fileName: 'probe.png', fileSize: png.length },
+          relationships: { appScreenshotSet: { data: { type: 'appScreenshotSets', id: set.id } } },
+        },
+      });
+      const record = reserved.data;
+      for (const operation of record.attributes?.uploadOperations || []) {
+        const headers = {};
+        for (const header of operation.requestHeaders || []) headers[header.name] = header.value;
+        await fetch(operation.url, { method: operation.method, headers, body: png.subarray(operation.offset, operation.offset + operation.length) });
+      }
+      await call('PATCH', `/v1/appScreenshots/${record.id}`, {
+        data: { type: 'appScreenshots', id: record.id, attributes: { uploaded: true } },
+      });
+      await new Promise((done) => setTimeout(done, 5000));
+      const fresh = await call('GET', `/v1/appScreenshots/${record.id}`).catch(() => null);
+      const errors = (fresh?.data?.attributes?.assetDeliveryState?.errors || []).map((e) => e.description || e.code);
+      console.log(`  probe · ${displayType} · ${errors.join(' / ') || 'no complaint reported'}`);
+      await call('DELETE', `/v1/appScreenshots/${record.id}`).catch(() => null);
+      await call('DELETE', `/v1/appScreenshotSets/${set.id}`).catch(() => null);
+    } catch (error) {
+      console.log(`  probe · ${displayType} · ${error.message}`);
+    }
+  }
+}
+
 async function shotStates(localizationId) {
   const sets = await call('GET', `/v1/appStoreVersionLocalizations/${localizationId}/appScreenshotSets?limit=20`).catch(() => null);
   for (const set of sets?.data || []) {
@@ -1221,11 +1271,12 @@ async function ensureListing(app) {
   await ensureAgeRating(app);
   await ensureAppInfo(app);
   await ensureAppPrice(app);
-  if (REPLACE_SHOTS) await releaseVersion(app, version.id);
+  if (REPLACE_SHOTS || PROBE) await releaseVersion(app, version.id);
   console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_61', SHOT_DIR_PHONE)}`);
   if (SHOT_DIR) console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_67', SHOT_DIR)}`);
   console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPAD_PRO_3GEN_129', SHOT_DIR_IPAD)}`);
   if (CREATIVE) console.log(`  header · ${await ensureCreative(app, localization.id)}`);
+  if (PROBE) await probeDimensions(localization.id);
   await shotStates(localization.id);
   await placeInSubmission(app, version);
 }
