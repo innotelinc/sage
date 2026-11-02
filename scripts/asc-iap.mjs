@@ -532,7 +532,22 @@ async function attachVersion(app) {
   const version = (list?.data || []).find((item) => item.attributes?.platform === 'IOS');
   if (!version) throw new Error('no iOS app version exists');
   if (version.relationships?.build?.data?.id) {
-    console.log(`  version ${version.attributes?.versionString} · build already attached`);
+    // A version holds on to the build it was first given, so a fresher upload
+    // would never reach the App Store record unless it is swapped in. Only a build
+    // Apple has finished validating can be attached, so this is worth re-running.
+    const newest = await newestBuild(app);
+    if (newest && newest.id !== version.relationships.build.data.id) {
+      await call('PATCH', `/v1/appStoreVersions/${version.id}`, {
+        data: {
+          type: 'appStoreVersions',
+          id: version.id,
+          relationships: { build: { data: { type: 'builds', id: newest.id } } },
+        },
+      });
+      console.log(`  version ${version.attributes?.versionString} · swapped to build ${newest.version}`);
+    } else {
+      console.log(`  version ${version.attributes?.versionString} · build already attached`);
+    }
   } else {
     const build = await newestBuild(app);
     if (!build) throw new Error('no valid build to attach');
