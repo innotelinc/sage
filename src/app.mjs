@@ -8,6 +8,7 @@ import { handleWorkspace } from './workspace.mjs';
 import { openSession, closeSession, accepts, recordFrame, readNotes } from './broadcast.mjs';
 import { handleStore } from './store.mjs';
 import { handleIap } from './iap.mjs';
+import { publicPlans } from './plans.mjs';
 import { synthesize, ttsConfig } from './tts.mjs';
 
 const MAX_IMAGES = 6;
@@ -119,6 +120,9 @@ const environmentOnly = {
 };
 
 function authorised(request, cfg, runtime) {
+  // A SaaS instance answers this itself: the subscription gate has already
+  // decided, and an access code is a self-hosted idea.
+  if (typeof runtime.authorise === 'function' && runtime.authorise(request, cfg) === true) return true;
   if (!runtime.accessRequired(cfg.accessCode)) return true;
   const provided = request.headers.get('x-access-code') || '';
   return provided && runtime.accessAccepted(provided, cfg.accessCode);
@@ -572,6 +576,12 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
       authRequired: Boolean(runtime.accessRequired(cfg.accessCode)),
       modes: Object.keys(MODES),
     });
+  }
+
+  // The price list is public on every build: the page that sells a subscription
+  // has to be readable before anyone has signed in.
+  if (url.pathname === '/api/plans' && request.method === 'GET') {
+    return json({ plans: publicPlans() });
   }
 
   // A broadcast extension has nowhere to keep the access code and no shared

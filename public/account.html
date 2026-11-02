@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Your account — SAGE</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b0d10'/%3E%3Cpath d='M16 6c0 5.5-4.5 10-10 10 5.5 0 10 4.5 10 10 0-5.5 4.5-10 10-10-5.5 0-10-4.5-10-10z' fill='%236ee7b7'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #080b12; --panel: #0e1420; --panel-2: #131b2a; --line: #1e283a;
+      --text: #e7edf7; --muted: #8b98ad; --accent: #6ee7b7; --accent-ink: #04120c;
+      --danger: #f87171; --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0 auto; max-width: 880px; padding: 28px 18px 80px;
+      background: var(--bg); color: var(--text);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-image: radial-gradient(900px 400px at 50% -20%, rgba(110, 231, 183, .12), transparent 70%);
+      background-repeat: no-repeat;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
+    header .brand { display: flex; align-items: center; gap: 8px; font-weight: 650; letter-spacing: .04em; color: var(--text); }
+    header nav { margin-left: auto; display: flex; gap: 14px; font-size: 14px; }
+    h1 { font-size: 22px; letter-spacing: -.01em; margin: 0 0 4px; }
+    h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+    .sub { color: var(--muted); font-size: 13.5px; margin: 0 0 24px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 18px; }
+    label { display: block; font-size: 12.5px; color: var(--muted); margin: 0 0 6px; }
+    input[type=email], input[type=password] {
+      width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line);
+      background: var(--panel-2); color: var(--text); font-size: 14.5px; margin-bottom: 14px;
+    }
+    input:focus { outline: 2px solid rgba(110, 231, 183, .35); outline-offset: 1px; }
+    button {
+      font: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer;
+      padding: 10px 18px; border-radius: 10px; border: 1px solid transparent;
+      background: var(--accent); color: var(--accent-ink);
+    }
+    button.ghost { background: transparent; border-color: var(--line); color: var(--text); font-weight: 500; }
+    button:disabled { opacity: .55; cursor: default; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .pill { font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+    .pill.live { background: rgba(110, 231, 183, .16); color: var(--accent); }
+    .pill.off { background: rgba(248, 113, 113, .14); color: var(--danger); }
+    .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .plan { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; }
+    .plan.current { border-color: var(--accent); }
+    .plan h3 { margin: 0; font-size: 15.5px; }
+    .plan .price { font-size: 26px; letter-spacing: -.02em; margin: 8px 0 2px; }
+    .plan .price span { font-size: 12.5px; color: var(--muted); letter-spacing: 0; }
+    .plan p { margin: 6px 0 12px; font-size: 13px; color: var(--muted); }
+    .plan ul { list-style: none; padding: 0; margin: 0 0 16px; font-size: 13px; color: var(--muted); }
+    .plan li { padding: 3px 0 3px 16px; position: relative; }
+    .plan li::before { content: "→"; position: absolute; left: 0; color: var(--accent); }
+    .plan button { margin-top: auto; width: 100%; }
+    .meter { height: 6px; border-radius: 999px; background: var(--panel-2); overflow: hidden; margin: 10px 0 8px; }
+    .meter i { display: block; height: 100%; background: var(--accent); }
+    .msg { font-size: 13.5px; margin: 12px 0 0; min-height: 18px; }
+    .msg.error { color: var(--danger); }
+    .msg.ok { color: var(--accent); }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; font-size: 14px; }
+    dt { color: var(--muted); }
+    dd { margin: 0; }
+    .hidden { display: none !important; }
+    @media (max-width: 760px) { .plans { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">
+      <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 4c0 6.6-5.4 12-12 12 6.6 0 12 5.4 12 12 0-6.6 5.4-12 12-12-6.6 0-12-5.4-12-12z" fill="currentColor" opacity=".9"/></svg>
+      SAGE
+    </a>
+    <nav>
+      <a href="/">Open the app</a>
+      <a href="/about">About</a>
+    </nav>
+  </header>
+
+  <h1 id="title">Your account</h1>
+  <p class="sub" id="subtitle">One subscription, one student. Sign in on the phone and the browser alike.</p>
+
+  <!-- Signed out: sign in or create an account. -->
+  <section id="authPanel" class="panel hidden">
+    <h2 id="authHeading">Sign in</h2>
+    <form id="authForm" autocomplete="on">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required minlength="8">
+      <div class="row">
+        <button id="authSubmit" type="submit">Sign in</button>
+        <button id="toggleMode" type="button" class="ghost">Create an account</button>
+      </div>
+      <p class="msg" id="authMsg"></p>
+    </form>
+  </section>
+
+  <!-- Signed in: what the subscription is doing. -->
+  <section id="accountPanel" class="hidden">
+    <div class="panel">
+      <h2>Subscription</h2>
+      <dl>
+        <dt>Email</dt><dd id="accEmail">—</dd>
+        <dt>Plan</dt><dd><span id="accPlan">—</span> <span class="pill" id="accStatus">—</span></dd>
+        <dt>Renews</dt><dd id="accRenews">—</dd>
+        <dt>This month</dt><dd id="accUsage">—</dd>
+      </dl>
+      <div class="meter" id="accMeterWrap" hidden><i id="accMeter" style="width:0%"></i></div>
+      <div class="row" style="margin-top:16px">
+        <button id="manageBtn" class="ghost" type="button">Manage billing</button>
+        <button id="signOutBtn" class="ghost" type="button">Sign out</button>
+      </div>
+      <p class="msg" id="accMsg"></p>
+    </div>
+
+    <h2 id="plansHeading">Plans</h2>
+    <div class="plans" id="plans"></div>
+    <p class="msg" id="planMsg"></p>
+    <p class="muted" style="margin-top:14px">
+      Prices in USD. Cancel any time — the plan stays live until the period ends.
+      Card details are handled by Stripe and never touch this server.
+    </p>
+  </section>
+
+  <!-- Billing not configured on this instance. -->
+  <section id="disabledPanel" class="panel hidden">
+    <h2>Subscriptions are off</h2>
+    <p class="muted">
+      This instance has no Stripe key, so it runs in the self-hosted mode: one access code, no accounts.
+      Set <code>STRIPE_SECRET_KEY</code> and <code>SAGE_SESSION_SECRET</code> to switch it on.
+    </p>
+  </section>
+
+  <script>
+    const state = { signedIn: false, enabled: false, account: null, entitlement: null, plans: [], mode: 'signin' };
+    const $ = (id) => document.getElementById(id);
+
+    const money = (cents, interval) =>
+      '$' + (cents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 }) + (interval === 'year' ? '/yr' : '/mo');
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        method: options.method || 'GET',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        credentials: 'same-origin',
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw Object.assign(new Error(data.message || 'HTTP ' + response.status), { data, status: response.status });
+      return data;
+    }
+
+    function say(el, text, kind) {
+      const node = $(el);
+      node.textContent = text || '';
+      node.className = 'msg' + (kind ? ' ' + kind : '');
+    }
+
+    function render() {
+      $('disabledPanel').classList.toggle('hidden', state.enabled);
+      $('authPanel').classList.toggle('hidden', !state.enabled || state.signedIn);
+      $('accountPanel').classList.toggle('hidden', !state.signedIn);
+      if (!state.signedIn) {
+        $('title').textContent = 'Your account';
+        $('subtitle').textContent = state.enabled
+          ? 'One subscription, one student. Sign in on the phone and the browser alike.'
+          : 'This instance runs without subscriptions.';
+        return;
+      }
+
+      const account = state.account || {};
+      const ent = state.entitlement || {};
+      $('title').textContent = 'Your account';
+      $('subtitle').textContent = 'Signed in as ' + (account.email || '') + '.';
+      $('accEmail').textContent = account.email || '—';
+      $('accPlan').textContent = ent.plan || 'no plan yet';
+      const pill = $('accStatus');
+      pill.textContent = (ent.status || 'none') + (ent.active ? ' · active' : ' · inactive');
+      pill.className = 'pill ' + (ent.active ? 'live' : 'off');
+      $('accRenews').textContent = ent.currentPeriodEnd
+        ? new Date(ent.currentPeriodEnd).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) +
+          (ent.cancelAtPeriodEnd ? ' (ends, not renewing)' : '')
+        : '—';
+
+      const used = Number(ent.used) || 0;
+      const limit = ent.limits && ent.limits.answers;
+      const cap = Number.isFinite(limit) ? limit : null;
+      $('accUsage').textContent = cap === null ? used + ' answers (no cap)' : used + ' of ' + cap + ' answers';
+      $('accMeterWrap').hidden = cap === null;
+      if (cap) $('accMeter').style.width = Math.min(100, Math.round((used / cap) * 100)) + '%';
+
+      const plans = $('plans');
+      plans.replaceChildren();
+      for (const plan of state.plans) {
+        const card = document.createElement('div');
+        card.className = 'plan' + (state.entitlement && state.entitlement.plan === plan.slug ? ' current' : '');
+        const heading = document.createElement('h3');
+        heading.textContent = plan.name;
+        const price = document.createElement('div');
+        price.className = 'price';
+        price.textContent = money(plan.priceCents, plan.interval);
+        price.append(Object.assign(document.createElement('span'), { textContent: plan.interval === 'year' ? ' per year' : ' per month' }));
+        const blurb = document.createElement('p');
+        blurb.textContent = plan.blurb;
+        const list = document.createElement('ul');
+        for (const feature of plan.features) list.append(Object.assign(document.createElement('li'), { textContent: feature }));
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = state.entitlement && state.entitlement.plan === plan.slug && state.entitlement.active ? 'Current plan' : 'Choose ' + plan.name;
+        button.disabled = Boolean(state.entitlement && state.entitlement.plan === plan.slug && state.entitlement.active);
+        button.onclick = () => choosePlan(plan.slug, button);
+        card.append(heading, price, blurb, list, button);
+        plans.append(card);
+      }
+    }
+
+    async function choosePlan(slug, button) {
+      button.disabled = true;
+      say('planMsg', 'Opening Stripe…');
+      try {
+        const data = await api('/api/billing/checkout', { method: 'POST', body: { plan: slug } });
+        if (!data.url) throw new Error('Stripe did not return a checkout link.');
+        window.location.href = data.url;
+      } catch (error) {
+        say('planMsg', error.message, 'error');
+        button.disabled = false;
+      }
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      const creating = mode === 'signup';
+      $('authHeading').textContent = creating ? 'Create an account' : 'Sign in';
+      $('authSubmit').textContent = creating ? 'Create account' : 'Sign in';
+      $('toggleMode').textContent = creating ? 'I already have one' : 'Create an account';
+      $('password').setAttribute('autocomplete', creating ? 'new-password' : 'current-password');
+      say('authMsg', '');
+    }
+
+    async function submitAuth(event) {
+      event.preventDefault();
+      const email = $('email').value.trim();
+      const password = $('password').value;
+      $('authSubmit').disabled = true;
+      say('authMsg', state.mode === 'signup' ? 'Creating your account…' : 'Signing in…');
+      try {
+        const data = await api('/api/auth/' + (state.mode === 'signup' ? 'signup' : 'signin'), {
+          method: 'POST',
+          body: { email, password },
+        });
+        state.signedIn = true;
+        state.account = data.account;
+        state.entitlement = data.entitlement;
+        state.plans = data.plans || state.plans;
+        $('password').value = '';
+        render();
+        say('planMsg', state.entitlement && state.entitlement.active ? '' : 'Pick a plan to start — the first 7 days are a trial.', 'ok');
+      } catch (error) {
+        say('authMsg', error.message, 'error');
+      } finally {
+        $('authSubmit').disabled = false;
+      }
+    }
+
+    async function manage() {
+      say('accMsg', 'Opening the billing portal…');
+      try {
+        const data = await api('/api/billing/portal', { method: 'POST' });
+        window.location.href = data.url;
+      } catch (error) {
+        say('accMsg', error.message, 'error');
+      }
+    }
+
+    async function signOut() {
+      await api('/api/auth/signout', { method: 'POST' }).catch(() => {});
+      state.signedIn = false;
+      state.account = null;
+      state.entitlement = null;
+      render();
+      setMode('signin');
+    }
+
+    async function boot() {
+      $('authForm').addEventListener('submit', submitAuth);
+      $('toggleMode').onclick = () => setMode(state.mode === 'signup' ? 'signin' : 'signup');
+      $('manageBtn').onclick = manage;
+      $('signOutBtn').onclick = signOut;
+      try {
+        const data = await api('/api/auth/me');
+        state.enabled = Boolean(data.enabled);
+        state.plans = data.plans || [];
+        state.signedIn = Boolean(data.signedIn);
+        state.account = data.account || null;
+        state.entitlement = data.entitlement || null;
+      } catch {
+        state.enabled = false;
+      }
+      const params = new URLSearchParams(window.location.search);
+      render();
+      setMode('signin');
+      if (params.get('checkout') === 'done') {
+        // Stripe's redirect lands here before the webhook necessarily has; the
+        // page says so instead of showing a plan that is still on its way.
+        say('planMsg', 'Payment received. The subscription appears here as soon as Stripe confirms it — refresh in a few seconds.', 'ok');
+        setTimeout(async () => {
+          try {
+            const data = await api('/api/auth/me');
+            state.account = data.account || state.account;
+            state.entitlement = data.entitlement || state.entitlement;
+            state.signedIn = Boolean(data.signedIn);
+            render();
+          } catch {}
+        }, 4000);
+      }
+      if (params.get('checkout') === 'cancelled') say('planMsg', 'Checkout cancelled — nothing was charged.', '');
+    }
+
+    boot();
+  </script>
+</body>
+</html>

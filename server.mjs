@@ -13,10 +13,23 @@ import { handleRequest } from './src/app.mjs';
 import { handleAdmin } from './src/admin.mjs';
 import { loadSettings, accessRequired, accessAccepted } from './src/settings.mjs';
 import { loadUsage, recordRequest } from './src/usage.mjs';
+import { loadAccounts } from './src/accounts.mjs';
+import { createSaaS } from './src/billing.mjs';
+
+// Subscriptions are wired after `.env` is read, so the gate is created with the
+// environment the process actually runs with. Until then every call is a no-op,
+// which is also what an instance without a Stripe key does for the rest of its life.
+let saas = { enabled: false, handle: async () => null, countAnswer: async () => null, authorise: () => undefined };
 
 // The operator panel can replace the access code without a restart, so the
 // shared handler asks this store instead of reading the environment itself.
-const runtimeSettings = { accessRequired, accessAccepted };
+const runtimeSettings = {
+  accessRequired,
+  accessAccepted,
+  // A SaaS instance gates per subscriber, not per instance; this tells the shared
+  // handler the subscription check has already answered.
+  authorise: (request, cfg) => saas.authorise(request, cfg),
+};
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(root, 'public');
@@ -128,6 +141,22 @@ function applyCors(req, res) {
   res.setHeader('access-control-allow-headers', 'content-type, x-access-code, x-ai-key, x-ai-base, x-ai-model');
   res.setHeader('access-control-max-age', '600');
 }
+const saasPath = (pathname) => pathname === '/account' || pathname === '/account/';
+
+// One place to write a Response out through node:http, so the admin branch and
+// the API branch cannot drift apart on cookies.
+async function sendResponse(res, response) {
+  const headers = {};
+  for (const [key, value] of response.headers.entries()) {
+    if (key !== 'set-cookie') headers[key] = value;
+  }
+  const cookies = typeof response.headers.getSetCookie === 'function' ? response.headers.getSetCookie() : [];
+  for (const [key, value] of Object.entries(headers)) res.setHeader(key, value);
+  if (cookies.length) res.setHeader('set-cookie', cookies);
+  res.writeHead(response.status);
+  res.end(Buffer.from(await response.arrayBuffer()));
+}
+
 async function handler(req, res) {
   const url = new URL(req.url, 'http://localhost');
 
@@ -135,15 +164,7 @@ async function handler(req, res) {
     const adminBody = await readBody(req);
     try {
       const response = await handleAdmin(toRequest(req, adminBody.length ? adminBody : undefined), process.env);
-      const headers = {};
-      for (const [key, value] of response.headers.entries()) {
-        if (key !== 'set-cookie') headers[key] = value;
-      }
-      const cookies = typeof response.headers.getSetCookie === 'function' ? response.headers.getSetCookie() : [];
-      for (const [key, value] of Object.entries(headers)) res.setHeader(key, value);
-      if (cookies.length) res.setHeader('set-cookie', cookies);
-      res.writeHead(response.status);
-      res.end(Buffer.from(await response.arrayBuffer()));
+      await sendResponse(res, response);
     } catch (error) {
       console.error('Admin error:', error);
       res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' }).end('Panel error: ' + error.message);
@@ -159,15 +180,26 @@ async function handler(req, res) {
     }
     try {
       const body = await readBody(req);
-      const response = await handleRequest(toRequest(req, body.length ? body : undefined), process.env, runtimeSettings);
+      const request = toRequest(req, body.length ? body : undefined);
+      // On a SaaS instance the subscription gate answers first: it owns the auth
+      // and billing routes and refuses the rest without a live account. Everything
+      // it declines falls through to the shared handler exactly as before.
+      const gated = await saas.handle(request, url, body);
+      const response = gated || (await handleRequest(request, process.env, runtimeSettings));
       recordRequest(url.pathname, response.status);
-      res.writeHead(response.status, Object.fromEntries(response.headers.entries()));
-      const buffer = Buffer.from(await response.arrayBuffer());
-      res.end(buffer);
+      if (!gated && url.pathname === '/api/chat' && response.status === 200) {
+        saas.countAnswer(request).catch(() => {});
+      }
+      await sendResponse(res, response);
     } catch (error) {
       console.error('API error:', error);
       res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'server_error', message: error.message }));
     }
+    return;
+  }
+
+  if (saasPath(url.pathname)) {
+    await sendStatic(req, res, '/account.html');
     return;
   }
 
@@ -184,6 +216,8 @@ async function handler(req, res) {
 // what the operator saved.
 const settingsState = await loadSettings();
 await loadUsage();
+await loadAccounts();
+saas = createSaaS(process.env);
 if (settingsState.error) console.error('Settings file unreadable:', settingsState.error);
 
 const port = Number(process.env.PORT) || 8787;
@@ -212,6 +246,10 @@ server.listen(port, '0.0.0.0', () => {
   }
   console.log(`  model:   ${process.env.AI_CHAT_MODEL || 'gpt-4o-mini'} via ${process.env.AI_BASE_URL || 'https://gateway.innotel.us/v1'}`);
   console.log(`  key:     ${configured ? 'configured' : 'MISSING — set OPENAI_API_KEY or enter a gateway key in the app'}`);
-  console.log(`  access:  ${accessRequired(process.env.ACCESS_CODE) ? 'code required (panel or ACCESS_CODE)' : 'open'}`);
+  console.log(`  access:  ${saas.enabled ? 'subscriptions (Stripe)' : accessRequired(process.env.ACCESS_CODE) ? 'code required (panel or ACCESS_CODE)' : 'open'}`);
+  if (saas.enabled) {
+    console.log(`  billing: ${process.env.STRIPE_WEBHOOK_SECRET ? 'webhook configured' : 'MISSING STRIPE_WEBHOOK_SECRET'}`);
+    console.log(`  account: ${scheme}://localhost:${port}/account`);
+  }
   console.log(`  panel:   ${scheme}://localhost:${port}/admin${process.env.SAGE_ADMIN_SECRET ? '' : '  (needs SAGE_ADMIN_SECRET)'}\n`);
 });

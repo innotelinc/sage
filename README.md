@@ -1,7 +1,7 @@
 <div align="center">
 
 [![Latest release](https://img.shields.io/github/v/release/innotelinc/sage?color=18181b)](https://github.com/innotelinc/sage/releases)
-[![Website](https://img.shields.io/badge/site-sage.innotel.tech-6366f1)](https://sage.innotel.tech)
+[![Website](https://img.shields.io/badge/site-innotelinc.github.io%2Fsage-6366f1)](https://innotelinc.github.io/sage)
 [![Pages](https://github.com/innotelinc/sage/actions/workflows/pages.yml/badge.svg)](https://innotelinc.github.io/sage/)
 [![Theme: Unity](https://img.shields.io/badge/theme-Unity-6366f1)](https://github.com/innotelinc/innotel-platform-stack/blob/main/standards/unity/README.md)
 
@@ -42,8 +42,8 @@ interface follows the shared **Unity** theme, and the whole thing runs on plain 
 >
 > **A product of [Innotel Labs](https://innotel.us)** — applied AI, learning platforms, and the systems behind them.
 >
-> **App:** [sage.innotel.tech](https://sage.innotel.tech) ·
-> **About:** [sage.innotel.tech/about](https://sage.innotel.tech/about) ·
+> **App:** [innotelinc.github.io/sage](https://innotelinc.github.io/sage) ·
+> **About:** [innotelinc.github.io/sage](https://innotelinc.github.io/sage) ·
 > **Releases:** [github.com/innotelinc/sage/releases](https://github.com/innotelinc/sage/releases)
 
 ---
@@ -261,6 +261,34 @@ a signed-in panel session or to the access code, written whole and renamed into 
 `DELETE /api/workspace`. Nothing is stored there unless the app is given a code or a panel session. If you
 expose the app publicly, set `ACCESS_CODE` so only you can spend your credits.
 
+## Subscriptions (SaaS)
+
+Setting `STRIPE_SECRET_KEY` turns the instance from *one access code* into *one account per subscriber*.
+`/account` serves sign-up, sign-in, plan selection and the Stripe billing portal; every other `/api` route
+needs a live subscription, and answers are counted against the plan's monthly cap. Without the key nothing
+changes — the self-hosted path above is untouched.
+
+| Env | What it does |
+| --- | --- |
+| `STRIPE_SECRET_KEY` | Turns the subscription gate on. Checkout and the portal call Stripe's REST API directly — no SDK. |
+| `STRIPE_WEBHOOK_SECRET` | Verifies signed events. The webhook is the only writer of subscription state; an unsigned or stale event is refused. |
+| `SAGE_SESSION_SECRET` | Signs the subscriber cookie. `SAGE_ADMIN_SECRET` is a fallback; separate is better. |
+| `APP_ORIGIN` | Where Stripe returns the browser after checkout. |
+| `TRIAL_DAYS` | Free trial on a first subscription (default 7, `0` disables). |
+| `AI_API_KEY` | Set this on a SaaS instance: a subscriber should not need a gateway key of their own. |
+
+Plans and their limits live in `src/plans.mjs`; checkout sends the price inline, so a plan needs no dashboard
+setup until you pin `STRIPE_PRICE_*` ids for prices that must never move. Accounts are one JSON document per
+instance under `SAGE_DATA_DIR`, written atomically, passwords stored as salted scrypt digests.
+
+```bash
+node --test scripts/test-saas.mjs        # accounts, gate, webhook signatures, quota
+stripe listen --forward-to localhost:8787/api/billing/webhook
+```
+
+Accounts need a filesystem, so the subscription gate is Node-only: run the container, not the Worker entry.
+`TRUSTMRR.md` covers listing the resulting SaaS for sale, and what has to be true before the numbers are worth verifying.
+
 ## Roadmap
 
 - **v1.0** — shipped: listening, watching, reading, quiz and essay surfaces, self-evolution memory, gateway wiring, PWA install.
@@ -285,7 +313,7 @@ at all on an instance with no code and no sign-in.
 ---
 
 <div align="center">
-<sub>A product of <a href="https://innotel.us">Innotel Labs</a> · Unity theme · <a href="https://sage.innotel.tech">sage.innotel.tech</a></sub>
+<sub>A product of <a href="https://innotel.us">Innotel Labs</a> · Unity theme · <a href="https://innotelinc.github.io/sage">innotelinc.github.io/sage</a></sub>
 </div>
 
 ## Documentation
@@ -293,6 +321,7 @@ at all on an instance with no code and no sign-in.
 | Doc | What it covers |
 | --- | --- |
 | [docs/stack.md](docs/stack.md) | SAGE's role in the Innotel Platform Stack (LearningOps) |
+| [docs/interface.md](docs/interface.md) | the interface layer: rail, command palette, theme, shortcuts, deep links |
 | [README.md#architecture](README.md) | how capture, memory and routing fit together |
 
 ## License
