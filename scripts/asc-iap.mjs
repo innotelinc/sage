@@ -905,6 +905,15 @@ async function placeInSubmission(app, version) {
       }
     }
     if (!placed) continue;
+    // Re-running must not stack duplicates: the draft holds the version plus one item
+    // per product, so there is nothing to do once that count is reached.
+    const before = await call('GET', `/v1/reviewSubmissions/${draft.id}/items?limit=50`).catch(() => null);
+    const products = await call('GET', `/v1/apps/${app}/inAppPurchasesV2?limit=200`).catch(() => null);
+    const expected = 1 + (products?.data || []).length;
+    if ((before?.data || []).length >= expected) {
+      console.log(`  submission · draft ${draft.id} already holds ${(before?.data || []).length} items`);
+      return;
+    }
     await addProducts(app, draft.id);
     const items = await call('GET', `/v1/reviewSubmissions/${draft.id}/items?limit=50`);
     console.log(`  submission · draft ${draft.id} holds ${(items?.data || []).length} items`);
