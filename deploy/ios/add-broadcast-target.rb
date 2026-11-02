@@ -70,4 +70,3 @@ embedded.settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
 
 project.save
 puts "wired SageBroadcast (#{extension.uuid}) into #{project_path}"
-puts "app entitlements: #{app.build_configurations.first.build_settings['CODE_SIGN_ENTITLEMENTS']}"
