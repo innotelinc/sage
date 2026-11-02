@@ -30,6 +30,7 @@ const ATTACH = /^(1|true|yes)$/i.test(String(process.env.ATTACH || ''));
 const LISTING = /^(1|true|yes)$/i.test(String(process.env.LISTING || ''));
 const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+$/, '');
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
+const REPLACE_SHOTS = /^(1|true|yes)$/i.test(String(process.env.REPLACE_SHOTS || ''));
 const SHOT_DIR_PHONE = (process.env.APP_STORE_SHOTS_PHONE || '').trim();
 const SHOT_DIR_IPAD = (process.env.APP_STORE_SHOTS_IPAD || '').trim();
 const CATEGORY = (process.env.APPLE_CATEGORY || 'EDUCATION').trim();
@@ -705,7 +706,9 @@ async function ensureShotSet(localizationId, displayType, directory) {
   const current = existing?.data || [];
   // App Store Connect appends, it never replaces: a different number of local images
   // means the set has changed, so the old ones are cleared first.
-  if (current.length === names.length) return `${displayType} · already uploaded (${current.length})`;
+  if (current.length === names.length && !REPLACE_SHOTS) {
+    return `${displayType} · already uploaded (${current.length})`;
+  }
   for (const shot of current) await call('DELETE', `/v1/appScreenshots/${shot.id}`);
   if (current.length) console.log(`  ${displayType} · cleared ${current.length} old image(s)`);
   for (const name of names) {
@@ -984,6 +987,27 @@ async function ensureAgeRating(app) {
 }
 
 
+/**
+ * Apple refuses to create or extend a screenshot set while the version is Ready for
+ * Review inside a draft submission: "Can't Create Screenshot Set while Ready For
+ * Review appScreenshotSets". The version therefore leaves the draft for the upload and
+ * goes back in afterwards. Deleting an item is permitted; the submission is not.
+ */
+async function detachVersion(app, versionId) {
+  const drafts =
+    (await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&filter[platform]=IOS&limit=10`).catch(() => null)) ||
+    (await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&limit=10`).catch(() => null));
+  for (const draft of drafts?.data || []) {
+    if (draft.attributes?.state !== 'READY_FOR_REVIEW') continue;
+    const items = await call('GET', `/v1/reviewSubmissions/${draft.id}/items?limit=50`).catch(() => null);
+    for (const entry of items?.data || []) {
+      if (entry.relationships?.appStoreVersion?.data?.id !== versionId) continue;
+      await call('DELETE', `/v1/reviewSubmissionItems/${entry.id}`);
+      console.log('  submission · version held out of the draft for the screenshot upload');
+    }
+  }
+}
+
 /** Everything App Review needs, then the version joins the products in the draft. */
 async function ensureListing(app) {
   const version = await iosVersion(app);
@@ -993,6 +1017,7 @@ async function ensureListing(app) {
   await ensureAgeRating(app);
   await ensureAppInfo(app);
   await ensureAppPrice(app);
+  await detachVersion(app, version.id);
   console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_61', SHOT_DIR_PHONE)}`);
   if (SHOT_DIR) console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_67', SHOT_DIR)}`);
   console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPAD_PRO_3GEN_129', SHOT_DIR_IPAD)}`);

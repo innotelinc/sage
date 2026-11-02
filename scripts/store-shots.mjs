@@ -3,8 +3,12 @@
  *
  * The preview panel draws its own badge over the page, so a panel capture always
  * carries something that is not the app. This drives the installed browser headless
- * through the DevTools protocol instead, clicks real tabs and real dialogs, and sets
- * the exact CSS size and device scale that render Apple's pixel dimensions.
+ * through the DevTools protocol, clicks real tabs and real dialogs, and sets the
+ * exact CSS size and device scale that render Apple's pixel dimensions.
+ *
+ * Every state starts from a clean surface: any dialog left open by the previous shot
+ * is closed first, because a modal that survives one capture silently turns the next
+ * three into the same picture.
  */
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -21,42 +25,44 @@ const BROWSERS = [
 const URL_TO_LOAD = process.env.SAGE_URL || 'https://sage.innotel.tech/';
 const PORT = 9333;
 
-// 402x874 at 3 is 1206x2622 — the medium iPhone display (6.3 inch) App Store Connect
-// asks for first. 1032x1376 at 2 is 2064x2752, the 13 inch iPad.
+// 402x874 at 3 is 1206x2622 — the medium iPhone display (6.3 inch) the console asks
+// for first. 1032x1376 at 2 is 2064x2752, the 13 inch iPad.
 const PROFILES = [
   { dir: 'deploy/ios/store-phone', width: 402, height: 874, scale: 3, mobile: true, label: 'iPhone 6.3' },
   { dir: 'deploy/ios/store-ipad', width: 1032, height: 1376, scale: 2, mobile: false, label: 'iPad 13' },
 ];
 
-const clickTab = (tab) => `document.querySelector('.tab[data-tab="${tab}"]').click(); window.scrollTo(0, 0);`;
+const CLOSE_DIALOGS = `document.querySelectorAll('dialog[open]').forEach((d) => d.close());`;
+const tab = (name) =>
+  `${CLOSE_DIALOGS} document.querySelector('.tab[data-tab="${name}"]').click(); window.scrollTo(0, 0);`;
 
-// Ten surfaces, in the order someone would meet them. Every one is a real screen.
+// Ten distinct surfaces, in the order someone would meet them.
 const STATES = [
-  { file: '01-live.png', label: 'Live · capture', run: clickTab('live') },
-  { file: '02-answer.png', label: 'Answer', run: clickTab('answer') },
-  { file: '03-quiz.png', label: 'Quiz', run: clickTab('quiz') },
-  { file: '04-essay.png', label: 'Essay', run: clickTab('essay') },
-  { file: '05-read.png', label: 'Read', run: clickTab('read') },
-  { file: '06-memory.png', label: 'Memory', run: clickTab('memory') },
+  { file: '01-live.png', label: 'Live · capture', run: tab('live') },
+  { file: '02-answer.png', label: 'Answer', run: tab('answer') },
+  { file: '03-quiz.png', label: 'Quiz', run: tab('quiz') },
+  { file: '04-essay.png', label: 'Essay', run: tab('essay') },
+  { file: '05-read.png', label: 'Read', run: tab('read') },
+  { file: '06-memory.png', label: 'Memory', run: tab('memory') },
   {
     file: '07-study-pack.png',
-    label: 'Memory · study pack and timetable',
-    run: `${clickTab('memory')} document.getElementById('btnPackExport').scrollIntoView({ block: 'center' });`,
+    label: 'Memory · study pack',
+    run: `${tab('memory')} document.getElementById('btnPackExport').scrollIntoView({ block: 'center' });`,
   },
   {
     file: '08-settings-gateway.png',
     label: 'Settings · gateway',
-    run: `document.getElementById('btnSettings').click(); const form = document.querySelector('#settingsDialog form'); form.scrollTop = 0;`,
+    run: `${CLOSE_DIALOGS} document.getElementById('btnSettings').click(); const d = document.getElementById('settingsDialog'); d.scrollTop = 0; d.querySelector('form').scrollTop = 0;`,
   },
   {
-    file: '09-settings-session.png',
-    label: 'Settings · session',
-    run: `document.getElementById('btnSettings').click(); const box = document.querySelectorAll('#settingsDialog fieldset')[1]; box.scrollIntoView({ block: 'center' });`,
-  },
-  {
-    file: '10-watch.png',
+    file: '09-watching.png',
     label: 'Watching the screen',
-    run: `${clickTab('live')} document.getElementById('btnScreen').click();`,
+    run: `${tab('live')} document.getElementById('btnScreen').click();`,
+  },
+  {
+    file: '10-memory-notes.png',
+    label: 'Memory · notes and timetable',
+    run: `${tab('memory')} document.getElementById('memoryList').scrollIntoView({ block: 'center' });`,
   },
 ];
 
@@ -144,7 +150,11 @@ try {
   await send('Runtime.enable');
 
   for (const profile of PROFILES) {
+    // Start from an empty directory so a renamed state can never leave a stale image
+    // behind and inflate the set Apple receives.
+    await rm(profile.dir, { recursive: true, force: true });
     await mkdir(profile.dir, { recursive: true });
+
     await send('Emulation.setDeviceMetricsOverride', {
       width: profile.width,
       height: profile.height,
