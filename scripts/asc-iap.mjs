@@ -315,6 +315,56 @@ async function submitForReview(id, plan) {
  * cannot be submitted without an app version in the same submission, so when the
  * web UI says "add an app version" this is how we see why none is on offer.
  */
+/** Diagnostics must never fail the run: a refused read is itself the finding. */
+async function soft(path) {
+  try {
+    return await call('GET', path);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Apple answers a bad submission with "check associated errors to see why", and the
+ * web UI only greys the button out. Every field App Review requires is read here so
+ * the gap is named instead of hunted for.
+ */
+async function readiness(app) {
+  const line = (label, value) => console.log(`  ${label} · ${value}`);
+  const versions = await soft(`/v1/apps/${app}/appStoreVersions?limit=10&include=build`);
+  const version = (versions?.data || []).find((item) => item.attributes?.platform === 'IOS');
+  if (!version) {
+    line('readiness', 'no iOS app version exists');
+    return;
+  }
+  const attached = version.relationships?.build?.data?.id;
+  line('build', attached ? 'attached' : 'MISSING — nothing to ship');
+  const locs = await soft(`/v1/appStoreVersions/${version.id}/appStoreVersionLocalizations?limit=10`);
+  const loc = locs?.data?.[0];
+  if (!loc) {
+    line('listing text', 'MISSING — no localisation at all');
+    line('screenshots', 'MISSING');
+  } else {
+    const attrs = loc.attributes || {};
+    const gap = ['description', 'keywords', 'supportUrl'].filter((key) => !String(attrs[key] || '').trim());
+    line('listing text', gap.length ? `MISSING ${gap.join(', ')}` : 'description, keywords, support URL present');
+    const sets = await soft(`/v1/appStoreVersionLocalizations/${loc.id}/appScreenshotSets?limit=10`);
+    const kinds = (sets?.data || []).map((item) => item.attributes?.screenshotDisplayType);
+    line('screenshots', kinds.length ? `sets: ${kinds.join(', ')}` : 'MISSING — no screenshot set');
+  }
+  const detail = await soft(`/v1/appStoreVersions/${version.id}/appStoreReviewDetail`);
+  const contact = detail?.data?.attributes;
+  line('review contact', contact?.contactEmail ? 'present' : 'MISSING — App Review contact');
+  const infos = await soft(`/v1/apps/${app}/appInfos?include=appInfoLocalizations,ageRatingDeclaration,primaryCategory&limit=5`);
+  const info = infos?.data?.[0];
+  const included = infos?.included || [];
+  const infoLoc = included.find((item) => item.type === 'appInfoLocalizations')?.attributes || {};
+  line('app info', !info ? 'MISSING' : [infoLoc.name || 'name MISSING', infoLoc.privacyPolicyUrl ? 'privacy policy' : 'privacy policy MISSING'].join(' · '));
+  line('age rating', included.some((item) => item.type === 'ageRatingDeclarations') ? 'set' : 'MISSING');
+  line('primary category', info?.relationships?.primaryCategory?.data?.id ? 'set' : 'MISSING');
+  line('version state', version.attributes?.appStoreState || 'unknown');
+}
+
 async function report(app) {
   const line = (label, value) => console.log(`  ${label} · ${value}`);
   try {
@@ -425,6 +475,7 @@ const app = await resolveAppId();
 console.log(`App ${BUNDLE} (${app}) · base territory ${TERRITORY}`);
 await report(app);
 if (ATTACH) await attachVersion(app);
+await readiness(app);
 const iap = await existingProducts(app);
 
 const failed = [];
