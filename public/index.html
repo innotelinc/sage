@@ -26,7 +26,7 @@
     <title>Sage · course agent</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=2.3.0" />
+    <link rel="stylesheet" href="/styles.css?v=2.4.0" />
   </head>
   <body>
     <header class="topbar">
@@ -38,6 +38,11 @@
       <a class="icon-btn" href="/about" title="About Sage" aria-label="About Sage">?</a>
       <button class="icon-btn" id="btnSettings" title="Settings" aria-label="Settings">⚙</button>
     </header>
+
+    <div class="actions" id="courseBar">
+      <select id="courseSelect" title="Active course" aria-label="Active course"></select>
+      <button class="btn ghost small" id="btnNewCourse">＋ course</button>
+    </div>
 
     <nav class="tabs" id="tabs" role="tablist">
       <button class="tab active" data-tab="live" role="tab">Live</button>
@@ -245,6 +250,19 @@
           <input id="memoryAdd" type="text" placeholder="Teach it something durable…" />
           <button class="btn" id="btnMemoryAdd">Add</button>
         </div>
+        <h4 class="section-title">Timetable</h4>
+        <p class="mini muted">
+          When a class is in session, its course answers — whichever tab you last used.
+        </p>
+        <div class="actions">
+          <select id="slotCourse" aria-label="Course for this class"></select>
+          <input id="slotDays" type="text" placeholder="days, e.g. Mon, Wed" />
+          <label class="inline-field">from <input id="slotStart" type="time" value="09:00" /></label>
+          <label class="inline-field">to <input id="slotEnd" type="time" value="10:15" /></label>
+          <button class="btn ghost" id="btnSlotAdd">Add class</button>
+        </div>
+        <div id="timetableList" class="stack"></div>
+
         <h4 class="section-title">Evolved behaviour</h4>
         <div id="traitsList" class="chips"></div>
         <h4 class="section-title">Notes <span class="mini muted" id="memoryCount"></span></h4>
@@ -353,6 +371,6 @@
 
     <div class="toast" id="toast" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=2.3.0"></script>
+    <script type="module" src="/app.js?v=2.4.0"></script>
   </body>
 </html>

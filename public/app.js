@@ -27,8 +27,85 @@ const defaultState = () => ({
   // The record a revision sheet and a study pack are built from.
   history: { answers: [], quizzes: [], essays: [], sources: [] },
   session: { transcript: [], notes: [] },
+  // A workspace holds several courses. The fields above are the active course's
+  // own copy — the rest of the app already reads state.persona and state.memory,
+  // so switching a course is a copy in and out rather than a rewrite of every
+  // call site.
+  courses: [],
+  timetable: [],
+  activeId: '',
   ui: { tab: 'live' },
 });
+
+const WEEKDAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+function uid(prefix = 'c') {
+  return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function defaultCourse(seed = {}) {
+  return {
+    id: seed.id || uid('c'),
+    persona: {
+      name: 'Sage',
+      course: '',
+      tone: 'warm',
+      depth: 'balanced',
+      humour: 3,
+      risk: 2,
+      traits: [],
+      ...(seed.persona || {}),
+    },
+    memory: Array.isArray(seed.memory) ? seed.memory : [],
+    evolution: Array.isArray(seed.evolution) ? seed.evolution : [],
+    history: normalizeHistory(seed.history),
+    session: { transcript: [], notes: [], ...(seed.session || {}) },
+  };
+}
+
+function normalizeTimetable(raw) {
+  if (!Array.isArray(raw)) return [];
+  const isClock = (value) => /^\d\d:\d\d$/.test(String(value || ''));
+  return raw
+    .filter((slot) => slot && typeof slot === 'object' && isClock(slot.start) && isClock(slot.end))
+    .map((slot) => ({
+      id: slot.id || uid('s'),
+      courseId: String(slot.courseId || ''),
+      days: (Array.isArray(slot.days) ? slot.days : []).map(Number).filter((day) => day >= 0 && day <= 6),
+      start: String(slot.start),
+      end: String(slot.end),
+      label: String(slot.label || '').slice(0, 60),
+    }))
+    .filter((slot) => slot.courseId && slot.days.length);
+}
+
+function activeCourse() {
+  return state.courses.find((course) => course.id === state.activeId) || state.courses[0] || null;
+}
+
+function courseById(id) {
+  return state.courses.find((course) => course.id === id) || null;
+}
+
+function stashActive() {
+  const course = activeCourse();
+  if (!course) return;
+  course.persona = state.persona;
+  course.memory = state.memory;
+  course.evolution = state.evolution;
+  course.history = state.history;
+  course.session = state.session;
+}
+
+function hydrateActive() {
+  const course = activeCourse();
+  if (!course) return;
+  state.persona = course.persona;
+  state.memory = course.memory;
+  state.evolution = course.evolution;
+  state.history = course.history;
+  state.session = course.session;
+}
 
 let state = defaultState();
 let health = null;
@@ -38,16 +115,34 @@ function loadState() {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return;
     const saved = JSON.parse(raw);
+    const base = defaultState();
     state = {
-      ...defaultState(),
+      ...base,
       ...saved,
-      persona: { ...defaultState().persona, ...(saved.persona || {}) },
-      settings: { ...defaultState().settings, ...(saved.settings || {}) },
-      session: { transcript: [], notes: [], ...(saved.session || {}) },
-      memory: Array.isArray(saved.memory) ? saved.memory : [],
-      evolution: Array.isArray(saved.evolution) ? saved.evolution : [],
-      history: normalizeHistory(saved.history),
+      settings: { ...base.settings, ...(saved.settings || {}) },
+      ui: { tab: 'live', ...(saved.ui || {}) },
     };
+    // 2.4 turned one course into a workspace. A 2.3 save keeps its course,
+    // memory and history at the top level, so it becomes course one instead of
+    // a migration the user has to perform.
+    let courses = Array.isArray(saved.courses)
+      ? saved.courses.filter((course) => course && typeof course === 'object').map((course) => defaultCourse(course))
+      : [];
+    if (!courses.length) {
+      courses = [
+        defaultCourse({
+          persona: saved.persona,
+          memory: saved.memory,
+          evolution: saved.evolution,
+          history: saved.history,
+          session: saved.session,
+        }),
+      ];
+    }
+    state.courses = courses;
+    state.activeId = courses.some((course) => course.id === saved.activeId) ? saved.activeId : courses[0].id;
+    state.timetable = normalizeTimetable(saved.timetable);
+    hydrateActive();
   } catch {
     state = defaultState();
   }
@@ -62,6 +157,7 @@ function persist() {
       state.session.notes = state.session.notes.slice(-120);
       state.memory = state.memory.slice(-400);
       trimHistory();
+      stashActive();
       localStorage.setItem(LS_KEY, JSON.stringify(state));
     } catch {
       /* storage full — keep running */
@@ -183,11 +279,36 @@ function recentContext() {
   return state.session.transcript.slice(-4).map((t) => t.text);
 }
 
+function clockMinutes(value) {
+  return Number(String(value).slice(0, 2)) * 60 + Number(String(value).slice(3, 5));
+}
+
+function classNow(date = new Date()) {
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  const day = date.getDay();
+  return (
+    state.timetable.find(
+      (slot) => slot.days.includes(day) && minutes >= clockMinutes(slot.start) && minutes < clockMinutes(slot.end)
+    ) || null
+  );
+}
+
+/* The timetable outranks the last tab that was open: a class in session owns the
+   next answer, because that is the course the question came from. Outside a
+   timetabled window the course you picked stays picked. */
+function courseForTurn() {
+  const slot = classNow();
+  const scheduled = slot ? courseById(slot.courseId) : null;
+  return scheduled || activeCourse();
+}
+
 async function agent(mode, { text = '', images = [], maxTokens } = {}) {
   const left = sessionRemainingMs();
   if (left !== null && left <= 0) {
     throw new Error('Your session ended. Buy another at magnate.innotel.us/sage and claim it in Settings.');
   }
+  const turn = courseForTurn();
+  if (turn && turn.id !== state.activeId) switchCourse(turn.id, { auto: true });
   const res = await api('/api/chat', {
     body: {
       mode,
@@ -967,6 +1088,154 @@ async function evolve() {
   }
 }
 
+/* ── courses and the timetable ─────────────────────────────── */
+let courseTimer = null;
+
+function switchCourse(id, options = {}) {
+  const next = courseById(id);
+  if (!next || next.id === state.activeId) return false;
+  stashActive();
+  state.activeId = next.id;
+  hydrateActive();
+  persist();
+  renderCourseUi();
+  renderMemory();
+  hydrateFeeds();
+  renderPackStatus();
+  const name = $('agentName');
+  if (name) name.textContent = state.persona.name || 'Sage';
+  if (!options.silent) {
+    const label = state.persona.course || 'this course';
+    toast(options.auto ? `Class started — switched to ${label}.` : `Switched to ${label}.`);
+  }
+  return true;
+}
+
+function newCourse() {
+  stashActive();
+  const course = defaultCourse({});
+  state.courses.push(course);
+  state.activeId = course.id;
+  hydrateActive();
+  persist();
+  renderCourseUi();
+  renderMemory();
+  hydrateFeeds();
+  renderPackStatus();
+  openSettings();
+  toast('New course — name it, then Save.');
+}
+
+function renderCourseUi() {
+  const select = $('courseSelect');
+  if (select) {
+    select.innerHTML = '';
+    for (const course of state.courses) {
+      const option = document.createElement('option');
+      option.value = course.id;
+      option.textContent = course.persona.course || 'Untitled course';
+      option.selected = course.id === state.activeId;
+      select.appendChild(option);
+    }
+    select.value = state.activeId;
+  }
+  const slotCourse = $('slotCourse');
+  if (slotCourse) {
+    const keep = slotCourse.value;
+    slotCourse.innerHTML = '';
+    for (const course of state.courses) {
+      const option = document.createElement('option');
+      option.value = course.id;
+      option.textContent = course.persona.course || 'Untitled course';
+      slotCourse.appendChild(option);
+    }
+    slotCourse.value = state.courses.some((course) => course.id === keep) ? keep : state.activeId;
+  }
+  renderTimetable();
+}
+
+function parseDays(text) {
+  const found = new Set();
+  for (const token of String(text || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)) {
+    const named = WEEKDAY_NAMES.indexOf(token.slice(0, 3));
+    if (named >= 0) found.add(named);
+    else if (/^[0-6]$/.test(token)) found.add(Number(token));
+  }
+  return [...found].sort((a, b) => a - b);
+}
+
+function renderTimetable() {
+  const list = $('timetableList');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!state.timetable.length) {
+    list.innerHTML = '<p class="mini muted">No classes yet. Add one and its course answers inside that window, whichever tab you are on.</p>';
+    return;
+  }
+  const now = classNow();
+  const labelled = (day) => WEEKDAY_NAMES[day].replace(/^./, (c) => c.toUpperCase());
+  for (const slot of [...state.timetable].sort((a, b) => a.start.localeCompare(b.start))) {
+    const course = courseById(slot.courseId);
+    const row = document.createElement('div');
+    row.className = 'memory-item';
+    const label = slot.label ? ` · ${escapeHtml(slot.label)}` : '';
+    row.innerHTML =
+      `<span><strong>${escapeHtml(course ? course.persona.course || 'Untitled course' : 'Removed course')}</strong>` +
+      ` · ${escapeHtml(slot.days.map(labelled).join(' '))} ${escapeHtml(slot.start)}–${escapeHtml(slot.end)}${label}` +
+      `${now && now.id === slot.id ? ' · <em>in session</em>' : ''}</span>` +
+      `<button class="x" data-slot="${escapeHtml(slot.id)}" title="Remove">✕</button>`;
+    list.appendChild(row);
+  }
+}
+
+function addSlot() {
+  const courseId = $('slotCourse').value;
+  const days = parseDays($('slotDays').value);
+  const start = $('slotStart').value;
+  const end = $('slotEnd').value;
+  if (!courseId) {
+    toast('Add a course before a class.', 'error');
+    return;
+  }
+  if (!days.length) {
+    toast('Which days? Try Mon, Wed.', 'error');
+    return;
+  }
+  if (!/^\d\d:\d\d$/.test(start) || !/^\d\d:\d\d$/.test(end) || end <= start) {
+    toast('Give a start and an end, with the end after the start.', 'error');
+    return;
+  }
+  state.timetable.push({ id: uid('s'), courseId, days, start, end, label: '' });
+  persist();
+  renderTimetable();
+  toast('Class added to the timetable.');
+}
+
+/* A scheduled class takes over when it starts, and only then: picking another
+   course during a class is respected, but the next class still claims its own
+   window. */
+function timetableTick() {
+  const slot = classNow();
+  const key = slot ? `${slot.id}|${slot.start}` : '';
+  const seen = state.ui ? state.ui.classKey || '' : '';
+  if (key && key !== seen) {
+    state.ui = { ...(state.ui || {}), classKey: key };
+    if (slot.courseId !== state.activeId) switchCourse(slot.courseId, { auto: true });
+    else renderTimetable();
+    persist();
+  } else if (!key && seen) {
+    state.ui = { ...(state.ui || {}), classKey: '' };
+    renderTimetable();
+    persist();
+  }
+}
+
+function startTimetableClock() {
+  clearInterval(courseTimer);
+  courseTimer = setInterval(timetableTick, 30000);
+  timetableTick();
+}
+
 function exportMemory() {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const link = document.createElement('a');
@@ -1092,6 +1361,25 @@ function importPack(file) {
       toast('That pack was made by a newer Sage — update this device first.', 'error');
       return;
     }
+    // A workspace holds several courses: a pack lands in the course of the same
+    // name, and a course this device has never seen becomes a new one rather
+    // than overwriting whichever course happened to be open.
+    const wanted = String(pack.course || '').trim().toLowerCase();
+    let target = wanted
+      ? state.courses.find((course) => String(course.persona.course || '').trim().toLowerCase() === wanted)
+      : null;
+    const created = !target;
+    if (!target) {
+      stashActive();
+      target = defaultCourse({
+        persona: { ...(pack.persona || {}), course: String(pack.course || '').slice(0, 120) },
+      });
+      state.courses.push(target);
+      state.activeId = target.id;
+      hydrateActive();
+    } else if (target.id !== state.activeId) {
+      switchCourse(target.id, { silent: true });
+    }
     const incomingHistory = normalizeHistory(pack.history);
     const historyKey = (entry) => `${entry.at || ''}|${String(entry.question || '').toLowerCase().trim()}`;
 
@@ -1120,8 +1408,11 @@ function importPack(file) {
     hydrateFeeds();
     renderMemory();
     updateStatus();
+    renderCourseUi();
     renderPackStatus(`Last import: ${packCounts(pack)}.`);
-    toast(`Imported ${packCounts(pack)}${pack.course ? ` from ${pack.course}` : ''}.`);
+    toast(
+      `Imported ${packCounts(pack)}${pack.course ? ` into ${pack.course}` : ''}${created ? ' — as a new course' : ''}.`
+    );
   };
   reader.readAsText(file);
 }
@@ -2143,6 +2434,7 @@ function saveSettings() {
   clearInterval(cap.noteTimer);
   cap.noteTimer = cap.listenOn ? setInterval(flushTranscript, state.settings.noteIntervalSec * 1000) : null;
   $('agentName').textContent = state.persona.name;
+  renderCourseUi();
   persist();
   updateStatus();
   renderMemory();
@@ -2321,6 +2613,16 @@ function bind() {
     importPack(file);
   };
   $('btnRevision').onclick = revisionSheet;
+  $('courseSelect').onchange = (event) => switchCourse(event.target.value);
+  $('btnNewCourse').onclick = newCourse;
+  $('btnSlotAdd').onclick = addSlot;
+  $('timetableList').addEventListener('click', (event) => {
+    const id = event.target.dataset?.slot;
+    if (!id) return;
+    state.timetable = state.timetable.filter((slot) => slot.id !== id);
+    persist();
+    renderTimetable();
+  });
   $('btnClearMemory').onclick = () => {
     if (!confirm('Forget every note and evolved trait?')) return;
     state.memory = [];
@@ -2392,11 +2694,13 @@ function bind() {
 loadState();
 bind();
 $('agentName').textContent = state.persona.name;
+renderCourseUi();
 $('ttsToggle').checked = state.settings.tts;
 renderMemory();
 hydrateFeeds();
 updateStatus();
 renderPackStatus();
+startTimetableClock();
 // Come back to the tab the user left, not to whatever boot defaults to.
 if (state.ui?.tab && state.ui.tab !== 'live') openTab(state.ui.tab);
 checkHealth();
