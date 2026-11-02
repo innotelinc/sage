@@ -502,3 +502,58 @@ dialog h3 { margin-bottom: 14px; }
 }
 #screenDialog::backdrop { background: rgba(4, 7, 12, 0.72); }
 #screenDialog h3 { margin: 0 0 8px; font-size: 16px; }
+
+/* ── aim viewer: picture, frame sent, result ─────────────── */
+.aim-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  margin: 0 0 14px;
+  border: 1px solid rgba(110, 231, 183, 0.32);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(110, 231, 183, 0.07), rgba(11, 15, 25, 0.4));
+}
+.aim-viewer[hidden], #aimStill[hidden], .aim-result[hidden] { display: none; }
+.aim-head { display: flex; align-items: center; gap: 8px; }
+.aim-head strong { font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; }
+.aim-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #6ee7b7; box-shadow: 0 0 0 4px rgba(110, 231, 183, 0.14);
+}
+.aim-state {
+  font-size: 11.5px; color: var(--muted); margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.aim-stop {
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+  border-radius: 999px; padding: 3px 10px; font-size: 11px; cursor: pointer;
+}
+.aim-stop:hover { color: #fca5a5; border-color: rgba(248, 113, 113, 0.5); }
+.aim-stage {
+  position: relative; background: #05080f; border-radius: 10px;
+  min-height: 160px; display: grid; place-items: center; overflow: hidden;
+}
+.aim-video { width: 100%; max-height: 46vh; object-fit: contain; background: #05080f; }
+.aim-wait { font-size: 12px; color: var(--muted); }
+.aim-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.aim-read {
+  padding: 8px 14px; border-radius: 999px;
+  border: 1px solid rgba(110, 231, 183, 0.45);
+  background: rgba(110, 231, 183, 0.14); color: #d7fbec;
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.aim-read:disabled { opacity: 0.6; }
+.aim-count { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.aim-label {
+  font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+}
+.aim-still-wrap { display: flex; flex-direction: column; gap: 4px; }
+#aimStill { width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+.aim-result { border-top: 1px solid var(--line); padding-top: 10px; }
+.aim-result-head {
+  font-size: 10.5px; letter-spacing: 0.07em; text-transform: uppercase;
+  color: #6ee7b7; margin-bottom: 6px;
+}
+.aim-result-body { font-size: 13.5px; }
+.aim-result-body p { margin: 0 0 8px; }

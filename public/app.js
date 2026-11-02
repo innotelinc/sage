@@ -529,20 +529,32 @@ function stopWatch() {
 
 async function toggleCamera() {
   if (cap.cameraOn) return stopCamera();
+  // The viewer opens first, inside the click, so a popup blocker still sees a
+  // user gesture and the permission prompt has somewhere to land.
+  openAimViewer();
+  aimStatus('waiting for camera permission…');
   try {
     cap.cameraStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 } },
       audio: false,
     });
   } catch (error) {
-    toast(`Camera blocked: ${error.message}`, 'error');
+    aimStatus('camera blocked: ' + error.message);
+    toast('Camera blocked: ' + error.message, 'error');
     return;
   }
   cap.cameraOn = true;
   attachVideo(cap.cameraStream, 'camera');
+  if (!aimShowStream(cap.cameraStream)) {
+    // A popup in some builds will not accept the stream; draw it in the page.
+    openAimInPage();
+    aimWire();
+    aimShowStream(cap.cameraStream);
+  }
   startSnapLoop();
+  aimLiveStatus();
   updateStatus();
-  toast('Camera on — aim it at the board or TV.');
+  toast('Camera on — aim it at the board. The answer appears under the picture.');
 }
 
 function stopCamera() {
@@ -551,7 +563,283 @@ function stopCamera() {
   cap.cameraStream = null;
   cap.cameraVideo = null;
   if (!cap.watchOn) stopSnapLoop();
+  closeAimViewer();
   updateStatus();
+}
+
+/* ── aim viewer: the picture and the result that came from it ──
+   Capture used to run invisibly — frames were scraped from a <video> that was
+   never added to the page, so tapping Aim looked like nothing happened. The
+   viewer is its own window when the browser allows one, otherwise a panel in
+   the Live tab, and shows the live picture, the exact frame being sent, and the
+   result underneath. */
+const aim = {
+  win: null,
+  doc: null,
+  inPage: false,
+  watch: null,
+  lastFrameAt: 0,
+  lastReadAt: 0,
+  reading: false,
+};
+
+const AIM_CSS = [
+  ':root{color-scheme:dark}',
+  'html,body{margin:0;background:#0b0f19;color:#e8eef8;',
+  'font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}',
+  '.aim-viewer{display:flex;flex-direction:column;gap:10px;padding:12px;',
+  'min-height:100vh;box-sizing:border-box}',
+  '.aim-viewer[hidden],#aimStill[hidden],.aim-result[hidden]{display:none}',
+  '.aim-head{display:flex;align-items:center;gap:8px}',
+  '.aim-head strong{font-size:13px;letter-spacing:.04em;text-transform:uppercase}',
+  '.aim-dot{width:8px;height:8px;border-radius:50%;background:#6ee7b7;',
+  'box-shadow:0 0 0 4px rgba(110,231,183,.14)}',
+  '.aim-state{font-size:11.5px;color:#8b9ab3;margin-left:auto;',
+  'font-variant-numeric:tabular-nums}',
+  '.aim-stop{border:1px solid #223049;background:transparent;color:#8b9ab3;',
+  'border-radius:999px;padding:3px 10px;font-size:11px;cursor:pointer}',
+  '.aim-stage{position:relative;background:#05080f;border-radius:10px;',
+  'min-height:160px;display:grid;place-items:center;overflow:hidden}',
+  '.aim-video{width:100%;max-height:46vh;object-fit:contain;background:#05080f}',
+  '.aim-wait{font-size:12px;color:#8b9ab3}',
+  '.aim-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}',
+  '.aim-read{padding:8px 14px;border-radius:999px;',
+  'border:1px solid rgba(110,231,183,.45);background:rgba(110,231,183,.14);',
+  'color:#d7fbec;font-size:12.5px;font-weight:600;cursor:pointer}',
+  '.aim-read:disabled{opacity:.6}',
+  '.aim-count{font-size:11.5px;color:#8b9ab3;font-variant-numeric:tabular-nums}',
+  '.aim-label{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;',
+  'color:#8b9ab3}',
+  '.aim-still-wrap{display:flex;flex-direction:column;gap:4px}',
+  '#aimStill{width:100%;border-radius:8px;border:1px solid #1e283a}',
+  '.aim-result{border-top:1px solid #1e283a;padding-top:10px}',
+  '.aim-result-head{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;',
+  'color:#6ee7b7;margin-bottom:6px}',
+  '.aim-result-body{font-size:13.5px}',
+  '.aim-result-body p{margin:0 0 8px}',
+  '.aim-result-body code{background:rgba(255,255,255,.07);padding:1px 5px;border-radius:5px}',
+].join('\n');
+
+function aimMarkup() {
+  return [
+    '<div class="aim-head"><span class="aim-dot"></span><strong>Aim</strong>',
+    '<span class="aim-state" id="aimStatus">camera off</span>',
+    '<button type="button" class="aim-stop" id="aimStop">stop</button></div>',
+    '<div class="aim-stage" id="aimMount"><span class="aim-wait">Waiting for the camera…</span></div>',
+    '<div class="aim-bar"><button type="button" class="aim-read" id="aimRead">Read what is on screen</button>',
+    '<span class="aim-count" id="aimCount">0 frames</span></div>',
+    '<div class="aim-still-wrap"><span class="aim-label">the frame it is sending</span>',
+    '<img id="aimStill" alt="Last frame sent to the model" hidden /></div>',
+    '<div class="aim-result" id="aimResult" hidden><div class="aim-result-head">',
+    '<span id="aimResultTag">result</span></div>',
+    '<div class="aim-result-body" id="aimResultBody"></div></div>',
+  ].join('');
+}
+
+function aimDocument() {
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8" />' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1" />' +
+    '<title>Aim · Sage</title><style>' + AIM_CSS + '</style></head><body>' +
+    '<div class="aim-viewer" id="aimViewer">' + aimMarkup() + '</div></body></html>';
+}
+
+function aimEl(id) {
+  if (aim.win && !aim.win.closed && aim.doc) return aim.doc.getElementById(id);
+  if (aim.inPage) return document.getElementById(id);
+  return null;
+}
+
+function openAimInPage() {
+  aim.win = null;
+  aim.doc = null;
+  aim.inPage = true;
+  const host = $('aimViewer');
+  if (!host) return;
+  if (!host.innerHTML.trim()) host.innerHTML = aimMarkup();
+  host.hidden = false;
+}
+
+function openAimViewer() {
+  if (aim.win && !aim.win.closed) return aim.doc;
+  if (aim.inPage && $('aimViewer') && !$('aimViewer').hidden) return document;
+  // WKWebView (the iOS app) has no real second window, so use the panel there.
+  if (!IS_NATIVE) {
+    try {
+      const win = window.open('', 'sage-aim', 'popup=yes,width=520,height=940');
+      if (win && !win.closed && win.document) {
+        win.document.open();
+        win.document.write(aimDocument());
+        win.document.close();
+        if (win.document.getElementById('aimStop')) {
+          aim.win = win;
+          aim.doc = win.document;
+        } else {
+          win.close();
+        }
+      }
+    } catch {
+      /* a blocked or unreadable popup falls through to the in-page view */
+    }
+  }
+  if (!aim.win) openAimInPage();
+  aimWire();
+  aimWatch();
+  return aim.win ? aim.doc : document;
+}
+
+function aimWire() {
+  const read = aimEl('aimRead');
+  if (read && !read.onclick) read.onclick = () => aimReadNow();
+  const stop = aimEl('aimStop');
+  if (stop && !stop.onclick) {
+    stop.onclick = () => {
+      const win = aim.win;
+      stopCamera();
+      try {
+        if (win && !win.closed) win.close();
+      } catch {
+        /* already gone */
+      }
+    };
+  }
+}
+
+function aimWatch() {
+  clearInterval(aim.watch);
+  aim.watch = null;
+  const win = aim.win;
+  if (!win) return;
+  // Closing the viewer ends the capture: it is the only place the picture is
+  // visible, so leaving the camera on would be invisible recording.
+  aim.watch = setInterval(() => {
+    if (!win.closed) return;
+    clearInterval(aim.watch);
+    aim.watch = null;
+    aim.win = null;
+    aim.doc = null;
+    if (cap.cameraOn) stopCamera();
+  }, 700);
+}
+
+function closeAimViewer() {
+  clearInterval(aim.watch);
+  aim.watch = null;
+  const doc = aim.doc;
+  aim.win = null;
+  aim.doc = null;
+  aim.inPage = false;
+  try {
+    doc?.defaultView?.close();
+  } catch {
+    /* already closed */
+  }
+  const host = $('aimViewer');
+  if (host) {
+    host.innerHTML = '';
+    host.hidden = true;
+  }
+}
+
+function aimStatus(text) {
+  const el = aimEl('aimStatus');
+  if (el) el.textContent = text;
+}
+
+function aimLiveStatus() {
+  if (!cap.cameraOn) return;
+  const video = cap.cameraVideo;
+  const size = video && video.videoWidth ? ' · ' + video.videoWidth + '×' + video.videoHeight : '';
+  const ago = aim.lastFrameAt
+    ? ' · last frame ' + Math.max(1, Math.round((Date.now() - aim.lastFrameAt) / 1000)) + 's ago'
+    : ' · waiting for the first frame';
+  aimStatus('live' + size + ago);
+}
+
+function aimShowStream(stream) {
+  const mount = aimEl('aimMount');
+  if (!mount) return false;
+  const doc = mount.ownerDocument;
+  let video;
+  try {
+    video = doc.createElement('video');
+    video.srcObject = stream;
+  } catch {
+    return false;
+  }
+  video.className = 'aim-video';
+  video.muted = true;
+  video.playsInline = true;
+  video.autoplay = true;
+  mount.innerHTML = '';
+  mount.appendChild(video);
+  video.play().catch(() => {});
+  return true;
+}
+
+function aimCount() {
+  const el = aimEl('aimCount');
+  if (el) el.textContent = cap.frames + (cap.frames === 1 ? ' frame' : ' frames');
+}
+
+function aimFrame(data) {
+  aim.lastFrameAt = Date.now();
+  const still = aimEl('aimStill');
+  if (still) {
+    still.src = data;
+    still.hidden = false;
+  }
+  aimCount();
+  aimLiveStatus();
+}
+
+function aimResult(text, tag) {
+  const box = aimEl('aimResult');
+  const body = aimEl('aimResultBody');
+  const label = aimEl('aimResultTag');
+  if (!box || !body) return;
+  if (label) label.textContent = tag || 'result';
+  body.innerHTML = md(String(text || '').slice(0, 4000));
+  box.hidden = false;
+}
+
+async function aimReadNow() {
+  if (aim.reading) return;
+  const video = cap.cameraVideo;
+  const frame = video && video.videoWidth ? toJpeg(video, 1280, 0.72) : cap.frame;
+  if (!frame) {
+    aimStatus('no frame yet — the camera is still starting');
+    return;
+  }
+  aim.reading = true;
+  aim.lastReadAt = Date.now();
+  const button = aimEl('aimRead');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Reading…';
+  }
+  aimStatus('reading the frame…');
+  try {
+    const res = await agent('answer', {
+      text:
+        'Answer the question visible in this frame from the board, slide or screen. ' +
+        'If there is no question, say what matters for the class in two lines.',
+      images: [frame],
+    });
+    const answer = res.structured?.answer || res.reply || '(nothing readable in that frame)';
+    const working = res.structured?.working || '';
+    aimResult([answer, working].filter(Boolean).join('\n\n'), res.mode || 'answer');
+    aimStatus('read · result below');
+    cap.frame = frame;
+  } catch (error) {
+    aimResult('Failed: ' + error.message, 'error');
+    aimStatus('read failed');
+  } finally {
+    aim.reading = false;
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Read what is on screen';
+    }
+  }
 }
 
 function attachVideo(stream, which) {
@@ -591,11 +879,13 @@ function snapFrame() {
   if (!data) return;
   cap.frame = data;
   cap.frames += 1;
+  aimFrame(data);
   if (state.settings.autoNotes && Date.now() - cap.lastAnalyse > 16000) {
     cap.lastAnalyse = Date.now();
     analyseFrame(data);
   }
   updateStatus();
+  aimLiveStatus();
 }
 
 async function analyseFrame(frame) {
@@ -604,7 +894,12 @@ async function analyseFrame(frame) {
       text: 'Frame captured from a live class or the user’s screen. Note only what matters academically; mark exam hints with EXAM:.',
       images: [frame],
     });
-    if (res.reply && res.reply.toLowerCase() !== 'nothing new') addNote(res.reply, 'frame');
+    if (res.reply && res.reply.toLowerCase() !== 'nothing new') {
+      addNote(res.reply, 'frame');
+      // The viewer reports what the frame produced, unless the user just asked
+      // for a specific read — that answer should stay on screen.
+      if (Date.now() - aim.lastReadAt > 20000) aimResult(res.reply, res.mode || 'note');
+    }
   } catch (error) {
     console.warn('frame analysis failed', error.message);
   }
