@@ -25,6 +25,13 @@ export function resolveConfig(env = {}) {
     chatModel,
     visionModel: env.AI_VISION_MODEL || chatModel,
     transcribeModel: env.AI_TRANSCRIBE_MODEL || 'whisper-1',
+    // Audio does not always travel with chat: a gateway key can be minted with a
+    // connection allowlist that reaches no audio model, and then transcription
+    // answers 403 whatever the app does. These point transcription at a route
+    // that does serve audio, on a key of its own.
+    sttBaseUrl: String(env.STT_BASE_URL || env.AI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, ''),
+    sttKey: env.STT_API_KEY || '',
+    sttModel: env.STT_MODEL || env.AI_TRANSCRIBE_MODEL || 'whisper-1',
     accessCode: env.ACCESS_CODE || '',
     // Where a bought session key is claimed from. Magnate mints the OmniRoute
     // key and hands back a token; this server trades the token for it.
@@ -411,7 +418,10 @@ async function modelCandidates(cfg, tier = 'best') {
 }
 
 async function handleTranscribe(request, cfg) {
-  if (!cfg.key) {
+  const route = cfg.sttKey
+    ? { baseUrl: cfg.sttBaseUrl, key: cfg.sttKey, model: cfg.sttModel }
+    : { baseUrl: cfg.baseUrl, key: cfg.key, model: cfg.transcribeModel };
+  if (!route.key) {
     return json({ error: 'no_key', message: 'Transcription needs an API key — enter a gateway key in Settings.' }, 503);
   }
 
@@ -426,15 +436,15 @@ async function handleTranscribe(request, cfg) {
 
   const outbound = new FormData();
   outbound.append('file', audio, audio.name || 'chunk.webm');
-  outbound.append('model', cfg.transcribeModel);
+  outbound.append('model', route.model);
   const language = form.get('language');
   if (language) outbound.append('language', String(language));
 
   let upstream;
   try {
-    upstream = await fetch(`${cfg.baseUrl}/audio/transcriptions`, {
+    upstream = await fetch(`${route.baseUrl}/audio/transcriptions`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${cfg.key}` },
+      headers: { authorization: `Bearer ${route.key}` },
       body: outbound,
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
@@ -449,7 +459,7 @@ async function handleTranscribe(request, cfg) {
   }
 
   const data = await upstream.json().catch(() => ({}));
-  return json({ text: String(data.text || '').trim(), model: cfg.transcribeModel });
+  return json({ text: String(data.text || '').trim(), model: route.model });
 }
 
 const MAX_CLAIM_LENGTH = 64;

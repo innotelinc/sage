@@ -384,7 +384,7 @@ async function transcribeBlob(blob) {
     if (/40[13]|50[23]|allowlist|not available|no_key|no key/i.test(message)) {
       transcribeBlocked = true;
       showInterim('');
-      toast('This gateway key cannot transcribe audio server-side. Relying on the browser’s on-device speech recognition.', 'error');
+      toast('No audio route on this key. Add STT_API_KEY on the server to transcribe here, or rely on Chrome’s dictation.', 'error');
     } else {
       toast(`Transcription failed: ${message}`, 'error');
     }
@@ -459,7 +459,7 @@ async function startListening() {
   const SR = IS_NATIVE || dictationOff ? null : window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SR) startRecognition(SR);
   else if (transcribeBlocked) {
-    toast('No on-device speech recognition in this browser, and this gateway key cannot transcribe. Try Chrome on Android or a desktop browser.', 'error');
+    toast('No on-device dictation here, and no audio route on the server yet. Set STT_API_KEY on the server — or open SAGE in Chrome on Android or a desktop browser.', 'error');
     stopListening();
     return;
   } else startRecorder();
@@ -499,8 +499,13 @@ async function toggleWatch() {
   }
   try {
     cap.screenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: 2 },
+      // 'monitor' is a hint: sharing the desktop is the only pick that keeps
+      // seeing the lecture after you switch to another application.
+      video: { frameRate: 2, displaySurface: 'monitor' },
       audio: false,
+      preferCurrentTab: false,
+      selfBrowserSurface: 'exclude',
+      surfaceSwitching: 'include',
     });
   } catch (error) {
     if (error.name === 'NotAllowedError') return;
@@ -511,11 +516,24 @@ async function toggleWatch() {
     toast(`Screen capture failed (${error.name}): ${error.message}`, 'error');
     return;
   }
+  const track = cap.screenStream.getVideoTracks()[0];
+  const surface = track && track.getSettings ? track.getSettings().displaySurface : '';
+  track?.addEventListener('ended', () => {
+    // The browser's own "stop sharing" was pressed, or the shared tab closed.
+    // Saying so beats looking silently broken.
+    if (!cap.watchOn) return;
+    stopWatch();
+    toast('Sharing stopped. Tap Watch again to pick the screen back up.', 'error');
+  });
   cap.watchOn = true;
   attachVideo(cap.screenStream, 'screen');
   startSnapLoop();
   updateStatus();
-  toast('Watching the shared screen.');
+  if (surface === 'browser') {
+    toast('You shared one tab — that ends the moment you leave it. Share the entire screen to keep watching another app.', 'error');
+  } else {
+    toast('Watching the shared screen.');
+  }
 }
 
 function stopWatch() {
@@ -529,8 +547,8 @@ function stopWatch() {
 
 async function toggleCamera() {
   if (cap.cameraOn) return stopCamera();
-  // The viewer opens first, inside the click, so a popup blocker still sees a
-  // user gesture and the permission prompt has somewhere to land.
+  // The panel opens before the permission prompt, so the picture and the status
+  // have somewhere to land the moment the camera is granted.
   openAimViewer();
   aimStatus('waiting for camera permission…');
   try {
@@ -546,9 +564,8 @@ async function toggleCamera() {
   cap.cameraOn = true;
   attachVideo(cap.cameraStream, 'camera');
   if (!aimShowStream(cap.cameraStream)) {
-    // A popup in some builds will not accept the stream; draw it in the page.
-    openAimInPage();
-    aimWire();
+    // The panel was not mounted yet; put it up and try the stream once more.
+    openAimViewer();
     aimShowStream(cap.cameraStream);
   }
   startSnapLoop();
@@ -570,55 +587,15 @@ function stopCamera() {
 /* ── aim viewer: the picture and the result that came from it ──
    Capture used to run invisibly — frames were scraped from a <video> that was
    never added to the page, so tapping Aim looked like nothing happened. The
-   viewer is its own window when the browser allows one, otherwise a panel in
-   the Live tab, and shows the live picture, the exact frame being sent, and the
+   viewer is a panel in the Live tab — the same screen, under the thumb that
+   tapped Aim — showing the live picture, the exact frame being sent, and the
    result underneath. */
 const aim = {
-  win: null,
-  doc: null,
   inPage: false,
-  watch: null,
   lastFrameAt: 0,
   lastReadAt: 0,
   reading: false,
 };
-
-const AIM_CSS = [
-  ':root{color-scheme:dark}',
-  'html,body{margin:0;background:#0b0f19;color:#e8eef8;',
-  'font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}',
-  '.aim-viewer{display:flex;flex-direction:column;gap:10px;padding:12px;',
-  'min-height:100vh;box-sizing:border-box}',
-  '.aim-viewer[hidden],#aimStill[hidden],.aim-result[hidden]{display:none}',
-  '.aim-head{display:flex;align-items:center;gap:8px}',
-  '.aim-head strong{font-size:13px;letter-spacing:.04em;text-transform:uppercase}',
-  '.aim-dot{width:8px;height:8px;border-radius:50%;background:#6ee7b7;',
-  'box-shadow:0 0 0 4px rgba(110,231,183,.14)}',
-  '.aim-state{font-size:11.5px;color:#8b9ab3;margin-left:auto;',
-  'font-variant-numeric:tabular-nums}',
-  '.aim-stop{border:1px solid #223049;background:transparent;color:#8b9ab3;',
-  'border-radius:999px;padding:3px 10px;font-size:11px;cursor:pointer}',
-  '.aim-stage{position:relative;background:#05080f;border-radius:10px;',
-  'min-height:160px;display:grid;place-items:center;overflow:hidden}',
-  '.aim-video{width:100%;max-height:46vh;object-fit:contain;background:#05080f}',
-  '.aim-wait{font-size:12px;color:#8b9ab3}',
-  '.aim-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}',
-  '.aim-read{padding:8px 14px;border-radius:999px;',
-  'border:1px solid rgba(110,231,183,.45);background:rgba(110,231,183,.14);',
-  'color:#d7fbec;font-size:12.5px;font-weight:600;cursor:pointer}',
-  '.aim-read:disabled{opacity:.6}',
-  '.aim-count{font-size:11.5px;color:#8b9ab3;font-variant-numeric:tabular-nums}',
-  '.aim-label{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;',
-  'color:#8b9ab3}',
-  '.aim-still-wrap{display:flex;flex-direction:column;gap:4px}',
-  '#aimStill{width:100%;border-radius:8px;border:1px solid #1e283a}',
-  '.aim-result{border-top:1px solid #1e283a;padding-top:10px}',
-  '.aim-result-head{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;',
-  'color:#6ee7b7;margin-bottom:6px}',
-  '.aim-result-body{font-size:13.5px}',
-  '.aim-result-body p{margin:0 0 8px}',
-  '.aim-result-body code{background:rgba(255,255,255,.07);padding:1px 5px;border-radius:5px}',
-].join('\n');
 
 function aimMarkup() {
   return [
@@ -636,22 +613,11 @@ function aimMarkup() {
   ].join('');
 }
 
-function aimDocument() {
-  return '<!doctype html><html lang="en"><head><meta charset="utf-8" />' +
-    '<meta name="viewport" content="width=device-width, initial-scale=1" />' +
-    '<title>Aim · Sage</title><style>' + AIM_CSS + '</style></head><body>' +
-    '<div class="aim-viewer" id="aimViewer">' + aimMarkup() + '</div></body></html>';
-}
-
 function aimEl(id) {
-  if (aim.win && !aim.win.closed && aim.doc) return aim.doc.getElementById(id);
-  if (aim.inPage) return document.getElementById(id);
-  return null;
+  return document.getElementById(id);
 }
 
 function openAimInPage() {
-  aim.win = null;
-  aim.doc = null;
   aim.inPage = true;
   const host = $('aimViewer');
   if (!host) return;
@@ -660,31 +626,14 @@ function openAimInPage() {
 }
 
 function openAimViewer() {
-  if (aim.win && !aim.win.closed) return aim.doc;
-  if (aim.inPage && $('aimViewer') && !$('aimViewer').hidden) return document;
-  // WKWebView (the iOS app) has no real second window, so use the panel there.
-  if (!IS_NATIVE) {
-    try {
-      const win = window.open('', 'sage-aim', 'popup=yes,width=520,height=940');
-      if (win && !win.closed && win.document) {
-        win.document.open();
-        win.document.write(aimDocument());
-        win.document.close();
-        if (win.document.getElementById('aimStop')) {
-          aim.win = win;
-          aim.doc = win.document;
-        } else {
-          win.close();
-        }
-      }
-    } catch {
-      /* a blocked or unreadable popup falls through to the in-page view */
-    }
-  }
-  if (!aim.win) openAimInPage();
+  // The viewer is part of the page, always. A second window looked reasonable
+  // until it was used: it lands behind the browser, has no room on a phone, and
+  // separates the picture from the answer that belongs underneath it.
+  openAimInPage();
   aimWire();
-  aimWatch();
-  return aim.win ? aim.doc : document;
+  const host = $('aimViewer');
+  if (host && host.scrollIntoView) host.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  return document;
 }
 
 function aimWire() {
@@ -692,47 +641,12 @@ function aimWire() {
   if (read && !read.onclick) read.onclick = () => aimReadNow();
   const stop = aimEl('aimStop');
   if (stop && !stop.onclick) {
-    stop.onclick = () => {
-      const win = aim.win;
-      stopCamera();
-      try {
-        if (win && !win.closed) win.close();
-      } catch {
-        /* already gone */
-      }
-    };
+    stop.onclick = () => stopCamera();
   }
-}
-
-function aimWatch() {
-  clearInterval(aim.watch);
-  aim.watch = null;
-  const win = aim.win;
-  if (!win) return;
-  // Closing the viewer ends the capture: it is the only place the picture is
-  // visible, so leaving the camera on would be invisible recording.
-  aim.watch = setInterval(() => {
-    if (!win.closed) return;
-    clearInterval(aim.watch);
-    aim.watch = null;
-    aim.win = null;
-    aim.doc = null;
-    if (cap.cameraOn) stopCamera();
-  }, 700);
 }
 
 function closeAimViewer() {
-  clearInterval(aim.watch);
-  aim.watch = null;
-  const doc = aim.doc;
-  aim.win = null;
-  aim.doc = null;
   aim.inPage = false;
-  try {
-    doc?.defaultView?.close();
-  } catch {
-    /* already closed */
-  }
   const host = $('aimViewer');
   if (host) {
     host.innerHTML = '';
@@ -1801,8 +1715,6 @@ function takeClaimFromUrl() {
   if (document.readyState === 'complete') setTimeout(run, 500);
   else window.addEventListener('load', () => setTimeout(run, 500));
 })();
-
-
 
 function gatewayBase() {
   return (state.settings.gatewayBase || GATEWAY_DEFAULT).replace(/\/+$/, '');
