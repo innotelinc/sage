@@ -1100,6 +1100,14 @@ async function ensureCreative(app, localizationId) {
   const have = placed?.data || [];
   const missing = CREATIVE_TYPES.filter((type) => !have.some((item) => item.attributes?.placementType === type));
   if (!missing.length) return `both slots already carry it (${have.length} placement(s))`;
+  // A group holds exactly one asset per placement type, so the slot is vacated before it
+  // is refilled — an archived image keeps its placement until it is deleted.
+  const onVersion = await call('GET', `/v1/appStoreVersionLocalizations/${localizationId}/placements?limit=20`).catch(() => null);
+  for (const existing of onVersion?.data || []) {
+    if (!CREATIVE_TYPES.includes(existing.attributes?.placementType)) continue;
+    await call('DELETE', `/v1/appAssetLibraryPlacements/${existing.id}`).catch(() => null);
+    console.log(`  header · cleared the old ${existing.attributes.placementType} placement`);
+  }
   for (const type of missing) {
     await call('POST', '/v1/appAssetLibraryPlacements', {
       data: {
