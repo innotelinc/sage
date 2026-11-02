@@ -405,6 +405,10 @@ async function readiness(app) {
   line('age rating', included.some((item) => item.type === 'ageRatingDeclarations') ? 'set' : 'MISSING');
   line('primary category', info?.relationships?.primaryCategory?.data?.id ? 'set' : 'MISSING');
   line('version state', version.attributes?.appStoreState || 'unknown');
+  const full = await soft(`/v1/appStoreVersions/${version.id}?include=build`);
+  const attrs = full?.data?.attributes || {};
+  const blanks = Object.keys(attrs).filter((k) => attrs[k] === null || attrs[k] === '');
+  line('version blanks', blanks.length ? blanks.join(', ') : 'none');
 }
 
 async function report(app) {
@@ -728,6 +732,62 @@ async function ensureCompliance(app, version) {
   }
 }
 
+/** One submission holding the version and the products, with any refusal spelled out. */
+async function placeInSubmission(app, version) {
+  const subs = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&limit=10`);
+  const drafts = (subs?.data || []).filter((d) => d.attributes?.state === 'READY_FOR_REVIEW');
+  const item = (id, rel, type, value) => ({
+    data: {
+      type: 'reviewSubmissionItems',
+      relationships: {
+        reviewSubmission: { data: { type: 'reviewSubmissions', id } },
+        [rel]: { data: { type, id: value } },
+      },
+    },
+  });
+  const explain = (error) => {
+    console.log(`  submission · ${error.message}`);
+    if (error.data) console.log(`  submission · it said: ${JSON.stringify(error.data).slice(0, 900)}`);
+  };
+  for (const draft of drafts) {
+    try {
+      await call('POST', '/v1/reviewSubmissionItems', item(draft.id, 'appStoreVersion', 'appStoreVersions', version.id));
+      const items = await call('GET', `/v1/reviewSubmissions/${draft.id}/items?limit=50`);
+      console.log(`  submission · version ${version.attributes?.versionString} in draft ${draft.id} · ${(items?.data || []).length} items`);
+      return;
+    } catch (error) {
+      explain(error);
+    }
+  }
+  let made;
+  try {
+    made = await call('POST', '/v1/reviewSubmissions', {
+      data: { type: 'reviewSubmissions', attributes: { platform: 'IOS' }, relationships: { app: { data: { type: 'apps', id: app } } } },
+    });
+  } catch (error) {
+    explain(error);
+    return;
+  }
+  const id = made.data.id;
+  console.log(`  submission · created draft ${id}`);
+  try {
+    await call('POST', '/v1/reviewSubmissionItems', item(id, 'appStoreVersion', 'appStoreVersions', version.id));
+    console.log('  submission · the version went in');
+  } catch (error) {
+    explain(error);
+  }
+  const products = await call('GET', `/v1/apps/${app}/inAppPurchasesV2?limit=200`);
+  for (const product of products?.data || []) {
+    try {
+      await call('POST', '/v1/reviewSubmissionItems', item(id, 'inAppPurchase', 'inAppPurchases', product.id));
+    } catch (error) {
+      explain(error);
+    }
+  }
+  const items = await call('GET', `/v1/reviewSubmissions/${id}/items?limit=50`).catch(() => null);
+  console.log(`  submission · ${(items?.data || []).length} items in draft ${id}`);
+}
+
 /** Everything App Review needs, then the version joins the products in the draft. */
 async function ensureListing(app) {
   const version = await iosVersion(app);
@@ -736,29 +796,7 @@ async function ensureListing(app) {
   await ensureCompliance(app, version);
   await ensureAppInfo(app);
   console.log(`  screenshots · ${await ensureStoreShots(localization.id)}`);
-  try {
-    const subs = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&limit=10`);
-    const open = (subs?.data || []).find((item) => item.attributes?.state === 'READY_FOR_REVIEW');
-    if (!open) {
-      console.log('  submission · none open');
-      return;
-    }
-    await call('POST', '/v1/reviewSubmissionItems', {
-      data: {
-        type: 'reviewSubmissionItems',
-        relationships: {
-          reviewSubmission: { data: { type: 'reviewSubmissions', id: open.id } },
-          appStoreVersion: { data: { type: 'appStoreVersions', id: version.id } },
-        },
-      },
-    });
-    console.log(`  submission · version ${version.attributes?.versionString} added — ready to submit`);
-    const items = await call('GET', `/v1/reviewSubmissions/${open.id}/items?limit=50`);
-    const count = (items?.data || []).length;
-    console.log(`  submission · ${count} items in the draft (the version plus the three session products)`);
-  } catch (error) {
-    console.log(`  submission · version not added yet: ${error.message}`);
-  }
+  await placeInSubmission(app, version);
 }
 
 const app = await resolveAppId();
