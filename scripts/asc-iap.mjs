@@ -31,6 +31,7 @@ const LISTING = /^(1|true|yes)$/i.test(String(process.env.LISTING || ''));
 const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+$/, '');
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
 const PROBE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_PROBE || ''));
+const SHOT_DIR_DUO = (process.env.APP_STORE_SHOTS_DUO || '').trim();
 const CREATIVE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_CREATIVE || ''));
 const HEADER_ASSET = (process.env.APP_STORE_HEADER || 'deploy/ios/store-header/header-universal.png').trim();
 const CREATIVE_TYPES = ['PRODUCT_PAGE_HEADER_ASSET', 'APP_STORE_SEARCH_RESULTS_ASSET'];
@@ -1271,10 +1272,24 @@ async function ensureListing(app) {
   await ensureAgeRating(app);
   await ensureAppInfo(app);
   await ensureAppPrice(app);
-  if (REPLACE_SHOTS || PROBE) await releaseVersion(app, version.id);
+  // A screenshot set can only be created while the version is outside a submission, so
+  // a slot that does not exist yet releases the draft just like a reshoot does.
+  const wanted = [
+    ['APP_IPHONE_61', SHOT_DIR_PHONE],
+    ['APP_IPHONE_67', SHOT_DIR],
+    ['APP_IPAD_PRO_3GEN_129', SHOT_DIR_IPAD],
+    ['APP_IPHONE_DUO', SHOT_DIR_DUO],
+  ].filter(([, directory]) => directory);
+  const present = new Set(
+    ((await call('GET', `/v1/appStoreVersionLocalizations/${localization.id}/appScreenshotSets?limit=30`).catch(() => null))?.data || [])
+      .map((item) => item.attributes?.screenshotDisplayType),
+  );
+  const absent = wanted.map(([type]) => type).filter((type) => !present.has(type));
+  if (REPLACE_SHOTS || PROBE || absent.length) await releaseVersion(app, version.id);
   console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_61', SHOT_DIR_PHONE)}`);
   if (SHOT_DIR) console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_67', SHOT_DIR)}`);
   console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPAD_PRO_3GEN_129', SHOT_DIR_IPAD)}`);
+  console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_DUO', SHOT_DIR_DUO)}`);
   if (CREATIVE) console.log(`  header · ${await ensureCreative(app, localization.id)}`);
   if (PROBE) await probeDimensions(localization.id);
   await shotStates(localization.id);

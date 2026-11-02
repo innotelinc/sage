@@ -60,5 +60,6 @@ jobs:
           APP_STORE_SHOTS_PHONE: deploy/ios/store-phone
           APP_STORE_SHOTS: deploy/ios/store
           APP_STORE_SHOTS_IPAD: deploy/ios/store-ipad
+          APP_STORE_SHOTS_DUO: deploy/ios/store-duo
           APPLE_REVIEW_PHONE: ${{ secrets.APPLE_REVIEW_PHONE }}
         run: node scripts/asc-iap.mjs

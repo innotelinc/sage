@@ -30,6 +30,9 @@ const PORT = 9333;
 const PROFILES = [
   { dir: 'deploy/ios/store-phone', width: 402, height: 874, scale: 3, mobile: true, label: 'iPhone 6.3' },
   { dir: 'deploy/ios/store-ipad', width: 1032, height: 1376, scale: 2, mobile: false, label: 'iPad 13' },
+  // 669x951 at 3 is 2007x2853 — the Duo's 7.6 inch inner display, the surface the app
+  // actually runs on when the phone is open.
+  { dir: 'deploy/ios/store-duo', width: 669, height: 951, scale: 3, mobile: true, label: 'iPhone Duo' },
 ];
 
 const CLOSE_DIALOGS = `document.querySelectorAll('dialog[open]').forEach((d) => d.close());`;
@@ -151,7 +154,9 @@ try {
   await send('Page.enable');
   await send('Runtime.enable');
 
+  const only = (process.env.SAGE_PROFILES || '').split(',').map((item) => item.trim()).filter(Boolean);
   for (const profile of PROFILES) {
+    if (only.length && !only.includes(profile.dir)) continue;
     // Start from an empty directory so a renamed state can never leave a stale image
     // behind and inflate the set Apple receives.
     await rm(profile.dir, { recursive: true, force: true });
