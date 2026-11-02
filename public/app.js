@@ -531,6 +531,8 @@ async function toggleWatch() {
   updateStatus();
   if (surface === 'browser') {
     toast('You shared one tab — that ends the moment you leave it. Share the entire screen to keep watching another app.', 'error');
+  } else if (surface === 'window') {
+    toast('You shared one window — capture pauses the moment you leave it. Share the entire screen to keep watching another app.', 'error');
   } else {
     toast('Watching the shared screen.');
   }
@@ -778,6 +780,9 @@ function stopSnapLoop() {
 }
 
 function snapFrame() {
+  // A paused media element still reports videoWidth, so frames would stop
+  // silently. Nudge the hidden element back if the compositor paused it.
+  if (cap.screenVideo && cap.screenVideo.paused) cap.screenVideo.play().catch(() => {});
   const source = cap.screenVideo?.videoWidth
     ? cap.screenVideo
     : cap.cameraVideo?.videoWidth
