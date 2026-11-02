@@ -64,6 +64,32 @@ npx cap add ios && npx cap sync ios
 open ios/App/App.xcodeproj     # set the team, then Product > Archive
 ```
 
+## App icon and App Store listing
+
+The Xcode project is generated inside the workflow, so it starts with whatever
+icon Capacitor's template ships - the placeholder. `deploy/ios/AppIcon.appiconset`
+is Sage's icon, and the **Install app icon** step copies it over the generated
+catalog before the archive; `ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon` is pinned
+on the `xcodebuild` line so the catalog is the one compiled in.
+
+Regenerate after editing the artwork:
+
+```bash
+node scripts/make-icons.mjs     # sharp is already a devDependency
+```
+
+- `deploy/ios/icon-source.svg` - 1024 square, full bleed. **No corner radius:** iOS
+  applies its own mask, so baked corners double-round. `public/icon.svg` keeps its
+  rounded rect because browsers do not mask it.
+- `deploy/ios/AppIcon.appiconset/` - 18 slots (iPhone and iPad 20/29/40/60/76/83.5
+  plus `ios-marketing`), stored as 15 files where two slots share a pixel size.
+- `deploy/ios/app-store-icon-1024.png` - the same 1024 image as a loose file, for
+  **App Store Connect -> App Information -> App Icon**.
+
+Every PNG is flattened onto `#080b12` with the alpha channel removed. That is not
+cosmetic: uploads are rejected when the large icon is transparent, and the workflow
+re-checks it with `sips -g hasAlpha` instead of trusting the committed file.
+
 ## Still unverified
 
 - **Device behaviour.** The build uploads, but nobody has installed it yet:
