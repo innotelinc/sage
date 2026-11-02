@@ -1,8 +1,7 @@
 /* Sage profile — the sheet that says who Sage is.
-   Built on the reference profile pattern: cover, round avatar, identity row,
-   tab-like stat strip, then panes. app.js owns the persona (it builds the
-   system prompt from it); this file only presents it and hands edits back
-   through window.sageProfile, so there is one copy of the truth.
+   app.js owns the persona (it builds the system prompt from it); this file only
+   presents it and hands edits back through window.sageProfile, so there is one
+   copy of the truth and no second place for a name to go stale.
 
    Billing is deliberately not wired: the card says so plainly, the button is
    disabled, and nothing here talks to Stripe. */
@@ -27,13 +26,6 @@ function initialsOf(name) {
   if (!parts.length) return 'S';
   if (parts.length > 1) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   return parts[0][0].toUpperCase();
-}
-
-function slugOf(name) {
-  return String(name || 'sage')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'sage';
 }
 
 function values() {
@@ -61,9 +53,6 @@ function render() {
   const title = $('profileTitle');
   if (title) title.textContent = p.name;
 
-  const handle = $('profileHandle');
-  if (handle) handle.textContent = `@${slugOf(p.name)} · study double`;
-
   const course = $('profileCourse');
   if (course) course.textContent = p.course || 'No course set yet — name the course Sage is taking.';
 
@@ -85,18 +74,11 @@ function render() {
     ];
     for (const text of items) {
       const chip = document.createElement('span');
-      chip.className = 'wp-chip';
+      chip.className = 'sf-chip';
       chip.textContent = text;
       chips.append(chip);
     }
   }
-
-  const statCourse = $('statCourse');
-  if (statCourse) statCourse.textContent = p.course || 'Not set';
-  const statVoice = $('statVoice');
-  if (statVoice) statVoice.textContent = `${p.tone} · ${p.depth}`;
-  const statCadence = $('statCadence');
-  if (statCadence) statCadence.textContent = `every ${p.interval}s`;
 
   const preview = $('voicePreview');
   if (preview) {
@@ -127,8 +109,6 @@ function openProfile() {
   render();
   const status = $('profileStatus');
   if (status) status.textContent = '';
-  // Whop-style pages open at the top rather than wherever the last visit ended.
-  dialog.querySelector('.wp-body')?.scrollTo?.(0, 0);
   if (!dialog.open) dialog.showModal();
 }
 
@@ -154,9 +134,7 @@ function bind() {
   $('btnProfile')?.addEventListener('click', openProfile);
   $('btnCloseProfile')?.addEventListener('click', () => $('profileDialog')?.close());
   $('btnProfileClose')?.addEventListener('click', () => $('profileDialog')?.close());
-  $('btnProfileCloseFoot')?.addEventListener('click', () => $('profileDialog')?.close());
   $('btnSaveProfile')?.addEventListener('click', save);
-  $('btnSaveProfileFoot')?.addEventListener('click', save);
 
   // Plumbing lives in Settings: the profile points at it rather than duplicating it.
   $('btnPlumbing')?.addEventListener('click', () => {

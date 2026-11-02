@@ -34,7 +34,7 @@
     <title>Sage · course agent</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=3.2.0" />
+    <link rel="stylesheet" href="/styles.css?v=3.3.0" />
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -383,105 +383,85 @@
     </div>
 
     <!-- ── profile: who Sage is ─────────────────────────────────── -->
-    <dialog id="profileDialog" class="sheet wp-sheet" aria-labelledby="profileTitle">
+    <dialog id="profileDialog" class="sheet" aria-labelledby="profileTitle">
       <form method="dialog" id="profileForm">
-        <div class="wp-cover">
-          <span class="wp-cover-glow" aria-hidden="true"></span>
-          <button type="button" class="wp-close" id="btnCloseProfile" aria-label="Close profile" title="Close">✕</button>
-        </div>
-
-        <header class="wp-head">
-          <span class="wp-avatar" id="profileAvatar" aria-hidden="true">S</span>
-          <div class="wp-id">
+        <header class="sheet-hero">
+          <span class="avatar" id="profileAvatar" aria-hidden="true">S</span>
+          <div class="sheet-id">
+            <p class="eyebrow">Your study double</p>
             <h3 id="profileTitle">Sage</h3>
-            <p class="wp-handle" id="profileHandle">@sage · study double</p>
-            <p class="wp-course" id="profileCourse">No course set yet — name the course Sage is taking.</p>
+            <p class="mini muted" id="profileCourse">No course set yet.</p>
           </div>
-          <div class="wp-head-actions">
-            <button type="button" class="wp-btn wp-btn-ghost" id="btnProfileClose">Done</button>
-            <button type="button" class="wp-btn wp-btn-primary" id="btnSaveProfile">Save profile</button>
-          </div>
+          <button type="button" class="dialog-close" id="btnCloseProfile" aria-label="Close profile">✕</button>
         </header>
 
-        <div class="wp-chips" id="profileChips" aria-live="polite"></div>
+        <div class="sf-chips" id="profileChips" aria-live="polite"></div>
 
-        <div class="wp-stats" role="list">
-          <div class="wp-stat" role="listitem"><span>Course</span><strong id="statCourse">Not set</strong></div>
-          <div class="wp-stat" role="listitem"><span>Voice</span><strong id="statVoice">warm · balanced</strong></div>
-          <div class="wp-stat" role="listitem"><span>Cadence</span><strong id="statCadence">every 20s</strong></div>
-        </div>
-
-        <div class="wp-body">
-          <div class="wp-col">
-            <section class="wp-card" aria-labelledby="wpIdentity">
-              <h4 class="wp-card-title" id="wpIdentity">Identity</h4>
-              <p class="wp-sub">Sage sits in your course as you. This is the name it answers to and the material it is taking.</p>
-              <div class="wp-fields">
-                <label class="wp-field"><span>Name Sage answers to</span><input id="setName" type="text" maxlength="30" autocomplete="off" /></label>
-                <label class="wp-field"><span>Course</span><input id="setCourse" type="text" maxlength="120" placeholder="e.g. BIO 201 · Physiology" /></label>
-              </div>
-            </section>
-
-            <section class="wp-card" aria-labelledby="wpVoice">
-              <h4 class="wp-card-title" id="wpVoice">Voice</h4>
-              <p class="wp-sub">These reach the system prompt, not a label — every answer, quiz and essay is written this way.</p>
-              <div class="wp-fields">
-                <label class="wp-field"><span>Tone</span>
-                  <select id="setTone">
-                    <option value="warm">warm</option>
-                    <option value="plain">plain</option>
-                    <option value="formal">formal</option>
-                    <option value="blunt">blunt</option>
-                  </select>
-                </label>
-                <label class="wp-field"><span>Depth</span>
-                  <select id="setDepth">
-                    <option value="balanced">balanced</option>
-                    <option value="concise">concise</option>
-                    <option value="detailed">detailed</option>
-                  </select>
-                </label>
-                <label class="wp-field"><span>Humour</span>
-                  <span class="wp-range"><input id="setHumour" type="range" min="0" max="5" step="1" /><output id="humourOut" for="setHumour">3</output></span>
-                </label>
-                <label class="wp-field"><span>Risk</span>
-                  <span class="wp-range"><input id="setRisk" type="range" min="0" max="5" step="1" /><output id="riskOut" for="setRisk">2</output></span>
-                </label>
-                <label class="wp-field"><span>Language</span><input id="setLanguage" type="text" placeholder="auto — match the material" maxlength="40" /></label>
-                <label class="wp-field"><span>Note cadence (s)</span><input id="setInterval" type="number" min="8" max="120" step="2" /></label>
-              </div>
-            </section>
+        <section class="sf-block">
+          <h4 class="sf-title">Identity</h4>
+          <p class="mini muted">Sage sits in your course as you. This is the name it answers to and the material it is taking.</p>
+          <div class="grid2">
+            <label>Name Sage answers to <input id="setName" type="text" maxlength="30" autocomplete="off" /></label>
+            <label>Course <input id="setCourse" type="text" maxlength="120" placeholder="e.g. BIO 201 · Physiology" /></label>
           </div>
+        </section>
 
-          <aside class="wp-col wp-col-side">
-            <section class="wp-card wp-card-preview" aria-labelledby="wpSound">
-              <h4 class="wp-card-title" id="wpSound">How it sounds</h4>
-              <p class="wp-quote" id="voicePreview"></p>
-            </section>
+        <section class="sf-block">
+          <h4 class="sf-title">Voice</h4>
+          <p class="mini muted">These reach the system prompt, not a label — every answer, quiz and essay is written this way.</p>
+          <div class="grid2">
+            <label>Tone
+              <select id="setTone">
+                <option value="warm">warm</option>
+                <option value="plain">plain</option>
+                <option value="formal">formal</option>
+                <option value="blunt">blunt</option>
+              </select>
+            </label>
+            <label>Depth
+              <select id="setDepth">
+                <option value="balanced">balanced</option>
+                <option value="concise">concise</option>
+                <option value="detailed">detailed</option>
+              </select>
+            </label>
+            <label>Humour
+              <span class="range-row"><input id="setHumour" type="range" min="0" max="5" step="1" /><output id="humourOut" for="setHumour">3</output></span>
+            </label>
+            <label>Risk
+              <span class="range-row"><input id="setRisk" type="range" min="0" max="5" step="1" /><output id="riskOut" for="setRisk">2</output></span>
+            </label>
+            <label>Language <input id="setLanguage" type="text" placeholder="auto — match the material" maxlength="40" /></label>
+            <label>Note cadence (s) <input id="setInterval" type="number" min="8" max="120" step="2" /></label>
+          </div>
+          <p class="voice-preview" id="voicePreview"></p>
+        </section>
 
-            <section class="wp-card" aria-labelledby="wpHabits">
-              <h4 class="wp-card-title" id="wpHabits">Habits</h4>
-              <label class="wp-switch"><input type="checkbox" id="setAutoNotes" /><span>Analyse capture as it arrives</span></label>
-              <label class="wp-switch"><input type="checkbox" id="setTts" /><span>Speak answers aloud</span></label>
-            </section>
+        <section class="sf-block">
+          <h4 class="sf-title">Working habits</h4>
+          <label class="check"><input type="checkbox" id="setAutoNotes" /> analyse capture as it arrives</label>
+          <label class="check"><input type="checkbox" id="setTts" /> speak answers aloud</label>
+        </section>
 
-            <section class="wp-card" aria-labelledby="wpBilling">
-              <div class="wp-card-head">
-                <h4 class="wp-card-title" id="wpBilling">Billing</h4>
-                <span class="wp-badge">Not linked</span>
-              </div>
-              <p class="wp-sub">No Stripe account is connected to this build, so nothing in Sage can charge you. When billing is linked, the plan, the card and the invoices will sit here — and not before you say so.</p>
-              <button type="button" class="wp-btn wp-btn-ghost wp-btn-block" id="btnBilling" disabled aria-disabled="true" title="Stripe is not linked yet">Connect billing</button>
-            </section>
+        <section class="sf-block">
+          <h4 class="sf-title">Billing</h4>
+          <div class="billing-card">
+            <span class="billing-dot" aria-hidden="true"></span>
+            <div>
+              <strong>Not linked</strong>
+              <p class="mini muted">No Stripe account is connected to this build, so nothing in Sage can charge you. When billing is linked, the plan, the card and the invoices will sit here — and not before you say so.</p>
+            </div>
+            <button type="button" class="btn ghost small" id="btnBilling" disabled aria-disabled="true" title="Stripe is not linked yet">Connect billing</button>
+          </div>
+          <p class="mini muted">Gateway keys, sessions and the access code stay in <button type="button" class="link-btn" id="btnPlumbing">Settings</button> — plumbing, not profile.</p>
+        </section>
 
-            <p class="wp-foot-note">Gateway keys, sessions and the access code stay in <button type="button" class="wp-link" id="btnPlumbing">Settings</button> — plumbing, not profile.</p>
-          </aside>
-        </div>
-
-        <footer class="wp-foot">
-          <span class="wp-status" id="profileStatus" role="status" aria-live="polite"></span>
-          <button type="button" class="wp-btn wp-btn-ghost" id="btnProfileCloseFoot">Close</button>
-          <button type="button" class="wp-btn wp-btn-primary" id="btnSaveProfileFoot">Save profile</button>
+        <footer class="sheet-foot">
+          <span class="mini muted" id="profileStatus" role="status" aria-live="polite"></span>
+          <div class="sheet-actions">
+            <button type="button" class="btn ghost" id="btnProfileClose">Close</button>
+            <button type="button" class="btn primary" id="btnSaveProfile">Save profile</button>
+          </div>
         </footer>
       </form>
     </dialog>
@@ -627,8 +607,8 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=3.2.0"></script>
-    <script type="module" src="/shell.js?v=3.2.0"></script>
-    <script type="module" src="/profile.js?v=3.2.0"></script>
+    <script type="module" src="/app.js?v=3.3.0"></script>
+    <script type="module" src="/shell.js?v=3.3.0"></script>
+    <script type="module" src="/profile.js?v=3.3.0"></script>
   </body>
 </html>
