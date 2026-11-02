@@ -1,15 +1,62 @@
 {
   "name": "sage-course-agent",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.mjs",
   "description": "A course-taking agent: listens, watches, reads, evaluates, answers quizzes and writes essays in your voice. A product of Innotel Labs (innotel.us).",
   "author": "Innotel Labs (https://innotel.us)",
   "scripts": {
     "dev": "node server.mjs",
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "desktop": "electron .",
+    "dist:win": "electron-builder --win portable nsis --publish never"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "us.innotel.sage",
+    "productName": "Sage",
+    "copyright": "Innotel Labs",
+    "asar": true,
+    "directories": {
+      "output": "dist/desktop",
+      "buildResources": "electron"
+    },
+    "files": [
+      "electron/**",
+      "server.mjs",
+      "worker.mjs",
+      "src/**",
+      "public/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        },
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "Sage-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Sage-${version}-portable.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Sage"
+    }
   }
 }

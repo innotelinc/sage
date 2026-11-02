@@ -1,0 +1,16 @@
+{
+  "appId": "us.innotel.sage",
+  "appName": "Sage",
+  "webDir": "public",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "hostname": "app.sage.local"
+  },
+  "android": {
+    "backgroundColor": "#080b12",
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  }
+}
