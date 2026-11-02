@@ -40,23 +40,15 @@
       "target": [
         {
           "target": "portable",
-          "arch": ["x64"]
-        },
-        {
-          "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "artifactName": "Sage-${version}-${arch}.${ext}"
+      "artifactName": "Sage-${version}-portable.${ext}"
     },
     "portable": {
       "artifactName": "Sage-${version}-portable.exe"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "shortcutName": "Sage"
     }
   }
 }
