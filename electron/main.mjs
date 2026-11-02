@@ -65,6 +65,10 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Chromium throttles timers in an occluded or minimised window. The frame
+      // sampler is a timer, so without this the lecture stops being captured the
+      // moment another application takes the screen.
+      backgroundThrottling: false,
     },
   });
 
@@ -93,7 +97,10 @@ app.whenReady().then(async () => {
         })
         .catch(() => callback({}));
     },
-    { useSystemPicker: true },
+    // The OS picker lets you choose a single window, and a window capture pauses
+    // as soon as that window is not in front — which is exactly when a lecture
+    // needs watching. Answering the request ourselves always shares the desktop.
+    { useSystemPicker: false },
   );
 
   try {
