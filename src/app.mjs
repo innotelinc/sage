@@ -100,10 +100,17 @@ function isDataImage(value) {
   return typeof value === 'string' && /^data:image\/(png|jpe?g|webp|gif);base64,/.test(value) && value.length < 6_000_000;
 }
 
-function authorised(request, cfg) {
-  if (!cfg.accessCode) return true;
+// Without the panel the environment decides, exactly as before; the Node server
+// injects a store instead so the code can be replaced while it runs.
+const environmentOnly = {
+  accessRequired: (envCode) => Boolean(envCode),
+  accessAccepted: (candidate, envCode) => Boolean(envCode) && String(candidate || '') === envCode,
+};
+
+function authorised(request, cfg, runtime) {
+  if (!runtime.accessRequired(cfg.accessCode)) return true;
   const provided = request.headers.get('x-access-code') || '';
-  return provided && provided === cfg.accessCode;
+  return provided && runtime.accessAccepted(provided, cfg.accessCode);
 }
 
 /** A rejected key is a user problem, not a server one: say so plainly. */
@@ -491,7 +498,7 @@ async function handleClaim(request, cfg) {
   });
 }
 
-export async function handleRequest(request, env = {}) {
+export async function handleRequest(request, env = {}, runtime = environmentOnly) {
   const url = new URL(request.url);
   let cfg = resolveConfig(env);
 
@@ -516,12 +523,12 @@ export async function handleRequest(request, env = {}) {
       chatModel: cfg.chatModel,
       visionModel: cfg.visionModel,
       transcribeModel: cfg.transcribeModel,
-      authRequired: Boolean(cfg.accessCode),
+      authRequired: Boolean(runtime.accessRequired(cfg.accessCode)),
       modes: Object.keys(MODES),
     });
   }
 
-  if (!authorised(request, cfg)) {
+  if (!authorised(request, cfg, runtime)) {
     return json({ error: 'unauthorised', message: 'Wrong or missing access code.' }, 401);
   }
 

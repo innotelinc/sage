@@ -10,6 +10,13 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { handleRequest } from './src/app.mjs';
+import { handleAdmin } from './src/admin.mjs';
+import { loadSettings, accessRequired, accessAccepted } from './src/settings.mjs';
+import { loadUsage, recordRequest } from './src/usage.mjs';
+
+// The operator panel can replace the access code without a restart, so the
+// shared handler asks this store instead of reading the environment itself.
+const runtimeSettings = { accessRequired, accessAccepted };
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(root, 'public');
@@ -118,6 +125,26 @@ function applyCors(req, res) {
 async function handler(req, res) {
   const url = new URL(req.url, 'http://localhost');
 
+  if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+    const adminBody = await readBody(req);
+    try {
+      const response = await handleAdmin(toRequest(req, adminBody.length ? adminBody : undefined), process.env);
+      const headers = {};
+      for (const [key, value] of response.headers.entries()) {
+        if (key !== 'set-cookie') headers[key] = value;
+      }
+      const cookies = typeof response.headers.getSetCookie === 'function' ? response.headers.getSetCookie() : [];
+      for (const [key, value] of Object.entries(headers)) res.setHeader(key, value);
+      if (cookies.length) res.setHeader('set-cookie', cookies);
+      res.writeHead(response.status);
+      res.end(Buffer.from(await response.arrayBuffer()));
+    } catch (error) {
+      console.error('Admin error:', error);
+      res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' }).end('Panel error: ' + error.message);
+    }
+    return;
+  }
+
   if (url.pathname.startsWith('/api/')) {
     applyCors(req, res);
     if (req.method === 'OPTIONS') {
@@ -126,7 +153,8 @@ async function handler(req, res) {
     }
     try {
       const body = await readBody(req);
-      const response = await handleRequest(toRequest(req, body.length ? body : undefined), process.env);
+      const response = await handleRequest(toRequest(req, body.length ? body : undefined), process.env, runtimeSettings);
+      recordRequest(url.pathname, response.status);
       res.writeHead(response.status, Object.fromEntries(response.headers.entries()));
       const buffer = Buffer.from(await response.arrayBuffer());
       res.end(buffer);
@@ -144,6 +172,13 @@ async function handler(req, res) {
 
   await sendStatic(req, res, url.pathname);
 }
+
+// The panel's settings file decides the access code, so it is read before the
+// first request: a fresh instance follows ACCESS_CODE, an edited one follows
+// what the operator saved.
+const settingsState = await loadSettings();
+await loadUsage();
+if (settingsState.error) console.error('Settings file unreadable:', settingsState.error);
 
 const port = Number(process.env.PORT) || 8787;
 
@@ -170,5 +205,7 @@ server.listen(port, '0.0.0.0', () => {
     }
   }
   console.log(`  model:   ${process.env.AI_CHAT_MODEL || 'gpt-4o-mini'} via ${process.env.AI_BASE_URL || 'https://gateway.innotel.us/v1'}`);
-  console.log(`  key:     ${configured ? 'configured' : 'MISSING — set OPENAI_API_KEY or enter a gateway key in the app'}\n`);
+  console.log(`  key:     ${configured ? 'configured' : 'MISSING — set OPENAI_API_KEY or enter a gateway key in the app'}`);
+  console.log(`  access:  ${accessRequired(process.env.ACCESS_CODE) ? 'code required (panel or ACCESS_CODE)' : 'open'}`);
+  console.log(`  panel:   ${scheme}://localhost:${port}/admin${process.env.SAGE_ADMIN_SECRET ? '' : '  (needs SAGE_ADMIN_SECRET)'}\n`);
 });
