@@ -4,6 +4,19 @@
 const $ = (id) => document.getElementById(id);
 const LS_KEY = 'sage.course-agent.v1';
 const IS_NATIVE = /^(capacitor|ionic):$/.test(location.protocol) || Boolean(window.__SAGE_NATIVE__);
+// The Android shell carries its own capture (a foreground service holding a
+// MediaProjection). A page's own getDisplayMedia ends the moment the browser
+// loses the foreground, and the WebView does not offer it at all, which is why
+// this exists: the exam is in the other app.
+const NATIVE_SCREEN = (() => {
+  const bridge = window.Capacitor;
+  if (!bridge?.isNativePlatform?.() || bridge.getPlatform?.() !== 'android') return null;
+  try {
+    return (bridge.registerPlugin ? bridge.registerPlugin('SageScreen') : bridge.Plugins?.SageScreen) || null;
+  } catch {
+    return null;
+  }
+})();
 const GATEWAY_DEFAULT = 'https://gateway.innotel.us/v1';
 
 /* ── state ─────────────────────────────────────────────────── */
@@ -537,6 +550,7 @@ const cap = {
   recorder: null,
   recTimer: null,
   screenStream: null,
+  nativeFrames: null,
   cameraStream: null,
   screenVideo: null,
   cameraVideo: null,
@@ -804,6 +818,7 @@ function stopListening() {
 
 async function toggleWatch() {
   if (cap.watchOn) return stopWatch();
+  if (NATIVE_SCREEN) return startNativeWatch();
   if (!navigator.mediaDevices?.getDisplayMedia) {
     offerScreenFallback();
     return;
@@ -849,8 +864,62 @@ async function toggleWatch() {
   }
 }
 
+// Native capture arrives as finished JPEGs rather than a stream: the service
+// decides when a frame is worth sending, so this only has to read it.
+async function startNativeWatch() {
+  try {
+    cap.nativeFrames = await NATIVE_SCREEN.addListener('frame', (frame) => {
+      if (!cap.watchOn || !frame?.data) return;
+      const data = String(frame.data).startsWith('data:')
+        ? frame.data
+        : `data:image/jpeg;base64,${frame.data}`;
+      cap.frame = data;
+      cap.frames += 1;
+      aimFrame(data);
+      if (state.settings.autoNotes && Date.now() - cap.lastAnalyse > 16000) {
+        cap.lastAnalyse = Date.now();
+        analyseFrame(data);
+      }
+      aimLiveStatus();
+      updateStatus();
+    });
+  } catch {
+    cap.nativeFrames = null;
+  }
+  try {
+    await NATIVE_SCREEN.start({ intervalMs: 1500 });
+  } catch (error) {
+    try {
+      cap.nativeFrames?.remove?.();
+    } catch {
+      /* ignore */
+    }
+    cap.nativeFrames = null;
+    const refused = /not allowed|not granted|cancel/i.test(String(error?.message || ''));
+    toast(refused ? 'Screen capture was not allowed.' : `Screen capture failed: ${error?.message || error}`, 'error');
+    return;
+  }
+  cap.watchOn = true;
+  updateStatus();
+  aimStatus('watching the screen');
+  toast('Watching the screen — switch to the course app; the notification keeps it running.');
+}
+
 function stopWatch() {
   cap.watchOn = false;
+  if (cap.nativeFrames || NATIVE_SCREEN) {
+    try {
+      cap.nativeFrames?.remove?.();
+    } catch {
+      /* ignore */
+    }
+    cap.nativeFrames = null;
+    try {
+      NATIVE_SCREEN?.stop?.();
+    } catch {
+      /* ignore */
+    }
+  }
   cap.screenStream?.getTracks().forEach((t) => t.stop());
   cap.screenStream = null;
   cap.screenVideo = null;

@@ -116,7 +116,8 @@ A web page cannot read an iPhone screen or a cast stream. This is what actually 
 
 | Source | Capturable | How |
 | --- | --- | --- |
-| Android Chrome — whole phone screen | **yes** | *Watch* → pick the screen, including other apps |
+| Android app — whole phone screen, in another app | **yes** | *Watch* → capture runs as a foreground service, so it keeps sampling while the course app is in front. The notification says when it is on |
+| Android Chrome — whole phone screen | **yes** | *Watch* → pick the screen. Chrome ends the capture when it leaves the foreground; the app does not |
 | Desktop browser — tab, window or screen | **yes** | *Watch* → pick the surface |
 | Mirrored iPhone (AirPlay to a Mac/PC) | **yes** | *Watch* the mirroring window |
 | iPhone screen directly | **no** | iOS has no capture API — mirror it to a computer and use the **relay**, or upload a screen recording in *Read* |
@@ -252,6 +253,7 @@ expose the app publicly, set `ACCESS_CODE` so only you can spend your credits.
 - **v2.4** — shipped: several courses in one workspace — each with its own persona, memory and record, a switcher in the header, and a timetable that hands a class's window to its own course so the right course answers while you are looking at another; a study pack imports into the course of the same name, or arrives as a new one.
 - **v2.5** — shipped: course memory on the server — the workspace follows you between the phone and the browser under one identity (a panel session, or the access code), saved whole and renamed into place so a half-written copy is never read back, the newer save winning when two devices disagree, and nothing kept
 at all on an instance with no code and no sign-in.
+- **v2.5.1** — shipped: watching the screen after you leave the app — the Android build now captures through its own foreground service (a MediaProjection of the whole display) instead of the browser's, so *Watch* keeps sampling when the course app comes to the front, and an ongoing notification says it is still running so it is never silent.
 - **v3.0** — planned: native capture — a broadcast extension that records the screen while a lesson video plays, an on-device fallback that keeps working when the network drops, and hands-free study that survives a locked phone.
 - Native iOS capture, which no web page can do.
 

@@ -49,6 +49,12 @@ jobs:
           npx cap sync android
           echo "generated:"; ls -1 android/app/src/main
 
+      - name: Add the app's own screen-capture plugin
+        run: |
+          mkdir -p android/app/src/main/java/us/innotel/sage
+          cp deploy/android/native/SageScreenPlugin.java              deploy/android/native/SageScreenService.java              deploy/android/native/MainActivity.java              android/app/src/main/java/us/innotel/sage/
+          ls -1 android/app/src/main/java/us/innotel/sage
+
       - name: Merge the permissions the app uses
         run: node deploy/android/merge-manifest.mjs
 
