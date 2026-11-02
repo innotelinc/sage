@@ -828,6 +828,38 @@ async function ensureCompliance(app, version) {
   }
 }
 
+/**
+ * A product joins a submission through its in-app purchase *version*, which is the
+ * relationship name Apple's schema actually has — `inAppPurchase` is not one.
+ */
+async function addProducts(app, submissionId) {
+  const products = await call('GET', `/v1/apps/${app}/inAppPurchasesV2?limit=200`);
+  for (const product of products?.data || []) {
+    const label = product.attributes?.productId || product.id;
+    const versions = await call('GET', `/v2/inAppPurchases/${product.id}/versions?limit=10`).catch(() => null);
+    const versionRecord = (versions?.data || [])[0];
+    if (!versionRecord) {
+      console.log(`  submission · ${label} has no version to submit`);
+      continue;
+    }
+    try {
+      await call('POST', '/v1/reviewSubmissionItems', {
+        data: {
+          type: 'reviewSubmissionItems',
+          relationships: {
+            reviewSubmission: { data: { type: 'reviewSubmissions', id: submissionId } },
+            inAppPurchaseVersion: { data: { type: 'inAppPurchaseVersions', id: versionRecord.id } },
+          },
+        },
+      });
+      console.log(`  submission · ${label} added`);
+    } catch (error) {
+      console.log(`  submission · ${label} refused: ${error.message}`);
+      if (error.data) console.log(`  submission · it said: ${JSON.stringify(error.data).slice(0, 600)}`);
+    }
+  }
+}
+
 /** One submission holding the version and the products, with any refusal spelled out. */
 async function placeInSubmission(app, version) {
   const subs = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&limit=10`);
@@ -857,14 +889,26 @@ async function placeInSubmission(app, version) {
     if (error.data) console.log(`  submission · it said: ${JSON.stringify(error.data).slice(0, 6000)}`);
   };
   for (const draft of drafts) {
+    let placed = false;
     try {
       await call('POST', '/v1/reviewSubmissionItems', item(draft.id, 'appStoreVersion', 'appStoreVersions', version.id));
-      const items = await call('GET', `/v1/reviewSubmissions/${draft.id}/items?limit=50`);
-      console.log(`  submission · version ${version.attributes?.versionString} in draft ${draft.id} · ${(items?.data || []).length} items`);
-      return;
+      placed = true;
+      console.log(`  submission · version ${version.attributes?.versionString} added to draft ${draft.id}`);
     } catch (error) {
-      explain(error);
+      // Already being in the draft is the outcome we want, not a failure: the run is
+      // repeatable and the version goes in on the first pass.
+      if (/STATE_ERROR|ENTITY_STATE_INVALID|already/i.test(error.message)) {
+        placed = true;
+        console.log(`  submission · version ${version.attributes?.versionString} is already in draft ${draft.id}`);
+      } else {
+        explain(error);
+      }
     }
+    if (!placed) continue;
+    await addProducts(app, draft.id);
+    const items = await call('GET', `/v1/reviewSubmissions/${draft.id}/items?limit=50`);
+    console.log(`  submission · draft ${draft.id} holds ${(items?.data || []).length} items`);
+    return;
   }
   if (drafts.length) {
     console.log('  submission · the existing drafts refused the version; not creating another');
