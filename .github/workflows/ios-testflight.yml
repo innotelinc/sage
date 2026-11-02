@@ -91,6 +91,8 @@ jobs:
           fi
 
       - name: Merge usage descriptions into Info.plist
+        env:
+          IOS_MARKETING_VERSION: '1.0'
         run: |
           PLIST=ios/App/App/Info.plist
           set_key() { /usr/libexec/PlistBuddy -c "Set :$1 $2" "$PLIST" 2>/dev/null \
@@ -101,11 +103,16 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}" "$PLIST"
+          # App Store Connect refuses a delivery whose extension version differs
+          # from the app it ships inside, so this is written here and handed to
+          # the extension below rather than left to two defaults.
+          set_key CFBundleShortVersionString "$IOS_MARKETING_VERSION"
 
       - name: Add the screen-broadcast extension
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           IOS_BUILD_NUMBER: ${{ github.run_number }}
+          IOS_MARKETING_VERSION: '1.0'
         run: |
           # An in-app recorder is suspended with the app, so the thing that keeps
           # recording in another app has to be a ReplayKit broadcast extension —
@@ -116,7 +123,6 @@ jobs:
           cp deploy/ios/broadcast/SageBroadcastPlugin.swift ios/App/App/
           ls -1 ios/App/SageBroadcast
           gem install xcodeproj --no-document > /dev/null
-          export IOS_MARKETING_VERSION=$(node -p "require('./package.json').version")
           ruby deploy/ios/add-broadcast-target.rb
           /usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" ios/App/SageBroadcast/Info.plist
       - name: Install native dependencies
@@ -175,6 +181,13 @@ jobs:
           echo "embedded extensions: $EXTS"
           ls -1 "$APP/PlugIns" 2>/dev/null || true
           test -d "$APP/PlugIns/SageBroadcast.appex" || { echo "the broadcast extension was not embedded"; exit 1; }
+          APP_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
+          EXT_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/PlugIns/SageBroadcast.appex/Info.plist")
+          APP_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
+          EXT_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/PlugIns/SageBroadcast.appex/Info.plist")
+          echo "app $APP_VER ($APP_BUILD) extension $EXT_VER ($EXT_BUILD)"
+          test "$APP_VER" = "$EXT_VER" || { echo "ITMS-90473: extension version $EXT_VER differs from app $APP_VER"; exit 1; }
+          test "$APP_BUILD" = "$EXT_BUILD" || { echo "ITMS-90473: extension build $EXT_BUILD differs from app $APP_BUILD"; exit 1; }
           /usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier"             "$APP/PlugIns/SageBroadcast.appex/Info.plist"
 
       - name: Export .ipa
