@@ -218,6 +218,7 @@ live in the device's `localStorage`; the server keeps no state. If you expose th
 - **v1.2** — shipped: automatic model choice — the app ranks the models the key in use can actually call, uses the best one, and falls back to the configured default if the gateway refuses it; and sessions bought at Magnate that install themselves from the receipt, with no key to copy.
 - **v1.3** — shipped: per-task model routing — running notes and spoken phrasing take the fastest model the key can call, while answers, quizzes and essays take the strongest; both chosen automatically, no setting to get wrong.
 - **v1.4** — shipped: the session clock — a bought session's remaining minutes are shown, and capture stops by itself when the window closes instead of spending turns on 401s.
+- **v1.5** — shipped: capture that survives playback — the microphone is taken back by itself when a lesson video interrupts it, Apple's own screen recorder can be imported and read in one tap, Settings closes with an ✕ and never opens itself when you return to the app, and an answered question's photo is cleared rather than reused for the next one.
 - Native iOS capture, which no web page can do.
 
 ---

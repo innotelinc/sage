@@ -25,6 +25,7 @@ const defaultState = () => ({
   memory: [],
   evolution: [],
   session: { transcript: [], notes: [] },
+  ui: { tab: 'live' },
 });
 
 let state = defaultState();
@@ -163,8 +164,11 @@ async function api(path, options = {}) {
   const data = await res.json().catch(() => ({ error: 'bad_response', message: `HTTP ${res.status}` }));
   if (!res.ok) {
     if (res.status === 401) {
-      toast('Access code needed. Set it in Settings.', 'error');
-      openSettings();
+      // A 401 can arrive from a background timer at the exact moment the app
+      // comes back to the foreground. Opening Settings on the user's behalf made
+      // every return look like the app had thrown them into a menu, so point at
+      // the gear and let them decide.
+      toast('That key was refused (401). Tap ⚙ if it needs replacing.', 'error');
     }
     throw new Error(data.message || `HTTP ${res.status}`);
   }
@@ -237,6 +241,7 @@ const cap = {
   watchOn: false,
   cameraOn: false,
   study: false,
+  restarting: false,
 };
 
 function recLang() {
@@ -430,6 +435,27 @@ async function startListening() {
     return;
   }
   cap.listenOn = true;
+  // iOS suspends the capture audio session the instant anything else claims it —
+  // a lesson video with sound is enough — and the microphone track ends without
+  // the page ever being told. Notice that and take the microphone back.
+  cap.micStream.getAudioTracks().forEach((track) => {
+    const recover = () => {
+      if (!cap.listenOn || cap.restarting) return;
+      cap.restarting = true;
+      toast('Playback took the microphone — listening again.', 'error');
+      stopListening();
+      setTimeout(() => {
+        cap.restarting = false;
+        if (!cap.listenOn) startListening();
+      }, 600);
+    };
+    track.addEventListener('ended', recover);
+    track.addEventListener('mute', () => {
+      setTimeout(() => {
+        if (track.readyState === 'ended') recover();
+      }, 1200);
+    });
+  });
   const SR = IS_NATIVE || dictationOff ? null : window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SR) startRecognition(SR);
   else if (transcribeBlocked) {
@@ -1082,13 +1108,16 @@ function renderThumbs(container, items) {
   items.forEach((item, index) => {
     const div = document.createElement('div');
     div.className = 'thumb';
-    div.innerHTML = `<img src="${item.preview}" alt="" /><span data-remove="${index}">✕</span>`;
+    div.innerHTML = `<img src="${item.preview}" alt="${escapeHtml(item.name || 'attached photo')}" />
+      <button type="button" class="thumb-x" data-remove="${index}" aria-label="Remove this photo" title="Remove">✕</button>`;
     container.appendChild(div);
   });
+  // One delegated listener: the ✕ is a real 30px button, and closest() finds it
+  // even when the tap lands on its edge.
   container.onclick = (event) => {
-    const index = event.target.dataset?.remove;
-    if (index === undefined) return;
-    items.splice(Number(index), 1);
+    const button = event.target.closest('[data-remove]');
+    if (!button) return;
+    items.splice(Number(button.dataset.remove), 1);
     renderThumbs(container, items);
   };
 }
@@ -1112,6 +1141,12 @@ async function collectFiles(fileList, { max = 6 } = {}) {
 
 /* ── answer tab ────────────────────────────────────────────── */
 const answerFiles = [];
+function clearAnswerFiles() {
+  answerFiles.length = 0;
+  renderThumbs($('answerThumbs'), answerFiles);
+  $('answerFileCount').textContent = '';
+  $('btnClearAnswerFiles').hidden = true;
+}
 async function onAnswerFiles(event) {
   const files = [...event.target.files];
   for (const file of files.slice(0, 4)) {
@@ -1120,6 +1155,7 @@ async function onAnswerFiles(event) {
   }
   renderThumbs($('answerThumbs'), answerFiles);
   $('answerFileCount').textContent = answerFiles.length ? `${answerFiles.length} attached` : '';
+  $('btnClearAnswerFiles').hidden = !answerFiles.length;
   event.target.value = '';
 }
 
@@ -1138,6 +1174,9 @@ async function answerQuestion() {
     toast(`Answer failed: ${error.message}`, 'error');
   } finally {
     busy(button, false);
+    // The photo existed only to be read. Caching it past the answer meant the
+    // next question silently inherited the previous one's page.
+    clearAnswerFiles();
   }
 }
 
@@ -1260,6 +1299,7 @@ async function writeEssay() {
 
 /* ── read tab ──────────────────────────────────────────────── */
 const readFiles = [];
+let autoProcessRead = false;
 async function onReadFiles(event) {
   const files = [...event.target.files];
   for (const file of files.slice(0, 6)) {
@@ -1276,6 +1316,12 @@ async function onReadFiles(event) {
   renderThumbs($('readThumbs'), readFiles.filter((f) => f.preview));
   $('readFilesLabel').textContent = readFiles.length ? `${readFiles.length} thing(s) loaded` : '＋ files, photos, screen recording';
   event.target.value = '';
+  // An Apple screen recording was imported through the Watch button: read it
+  // straight away instead of making the user find the second button.
+  if (autoProcessRead) {
+    autoProcessRead = false;
+    runRead();
+  }
 }
 
 async function runRead() {
@@ -1674,6 +1720,8 @@ async function testConnection() {
 /* Screen capture is unavailable on iOS in every browser and app shell, so the
    Watch button offers the routes that do work rather than failing. */
 function openTab(name) {
+  state.ui = { ...(state.ui || {}), tab: name };
+  persist();
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${name}`));
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1698,6 +1746,8 @@ function bind() {
       panel.classList.toggle('active', panel.id === `tab-${tab.dataset.tab}`);
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    state.ui = { ...(state.ui || {}), tab: tab.dataset.tab };
+    persist();
   });
 
   $('btnSettings').onclick = openSettings;
@@ -1712,16 +1762,20 @@ function bind() {
     $('relayCode').focus();
     toast('Open /relay.html on the computer showing the class, share the window there, then enter its code.');
   };
-  $('btnScreenUpload').onclick = () => {
+  $('btnScreenRecord').onclick = () => {
     $('screenDialog').close();
     openTab('read');
-    $('readFiles').click();
+    autoProcessRead = true;
+    toast('Pick the screen recording from Photos — it is read into frames and notes automatically.');
+    setTimeout(() => $('readFiles').click(), 250);
   };
   $('btnScreenCamera').onclick = () => {
     $('screenDialog').close();
     toggleCamera();
   };
   $('btnScreenClose').onclick = () => $('screenDialog').close();
+  $('btnCloseSettings').onclick = () => $('settingsDialog').close();
+  $('btnClearAnswerFiles').onclick = clearAnswerFiles;
 
   $('btnListen').onclick = startListening;
   $('btnScreen').onclick = toggleWatch;
@@ -1888,6 +1942,8 @@ $('ttsToggle').checked = state.settings.tts;
 renderMemory();
 hydrateFeeds();
 updateStatus();
+// Come back to the tab the user left, not to whatever boot defaults to.
+if (state.ui?.tab && state.ui.tab !== 'live') openTab(state.ui.tab);
 checkHealth();
 loadVoices();
 if ('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged = loadVoices;
