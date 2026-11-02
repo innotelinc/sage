@@ -887,14 +887,10 @@ async function placeInSubmission(app, version) {
   } catch (error) {
     explain(error);
   }
-  const products = await call('GET', `/v1/apps/${app}/inAppPurchasesV2?limit=200`);
-  for (const product of products?.data || []) {
-    try {
-      await call('POST', '/v1/reviewSubmissionItems', item(id, 'inAppPurchase', 'inAppPurchases', product.id));
-    } catch (error) {
-      explain(error);
-    }
-  }
+  // The three products do not travel as reviewSubmissionItems: Apple has no
+  // inAppPurchase relationship on that resource, and they were put in a draft through
+  // /v1/inAppPurchaseSubmissions when they were created. That endpoint is what joins
+  // them to the submission once the app version is reviewable.
   const items = await call('GET', `/v1/reviewSubmissions/${id}/items?limit=50`).catch(() => null);
   console.log(`  submission · ${(items?.data || []).length} items in draft ${id}`);
 }
