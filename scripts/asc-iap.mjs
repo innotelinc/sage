@@ -32,7 +32,7 @@ const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
 const CATEGORY = (process.env.APPLE_CATEGORY || 'EDUCATION').trim();
 const REVIEW = {
-  firstName: (process.env.APPLE_REVIEW_FIRST_NAME || 'Daren').trim(),
+  firstName: (process.env.APPLE_REVIEW_FIRST_NAME || 'Darnel').trim(),
   lastName: (process.env.APPLE_REVIEW_LAST_NAME || 'Hunter').trim(),
   email: (process.env.APPLE_REVIEW_EMAIL || 'dhunter@innotel.us').trim(),
   // App Review telephones this number before rejecting, so it has to be one that is
@@ -699,6 +699,9 @@ async function ensureListing(app) {
       },
     });
     console.log(`  submission · version ${version.attributes?.versionString} added — ready to submit`);
+    const items = await call('GET', `/v1/reviewSubmissions/${open.id}/items?limit=50`);
+    const count = (items?.data || []).length;
+    console.log(`  submission · ${count} items in the draft (the version plus the three session products)`);
   } catch (error) {
     console.log(`  submission · version not added yet: ${error.message}`);
   }
