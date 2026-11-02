@@ -1093,6 +1093,23 @@ async function ensureCreative(app, localizationId) {
   return `${missing.length} slot(s) filled`;
 }
 
+/** Apple reports per-image delivery state, which is where processing failures surface. */
+async function shotStates(localizationId) {
+  const sets = await call('GET', `/v1/appStoreVersionLocalizations/${localizationId}/appScreenshotSets?limit=20`).catch(() => null);
+  for (const set of sets?.data || []) {
+    const shots = await call('GET', `/v1/appScreenshotSets/${set.id}/appScreenshots?limit=30`).catch(() => null);
+    const counts = {};
+    for (const shot of shots?.data || []) {
+      const delivery = shot.attributes?.assetDeliveryState || {};
+      const state = delivery.state || 'unknown';
+      counts[state] = (counts[state] || 0) + 1;
+      const errors = (delivery.errors || []).map((e) => e.description || e.code).slice(0, 2);
+      if (errors.length) console.log(`  shots · ${set.attributes?.screenshotDisplayType} · ${shot.attributes?.fileName} · ${errors.join(' / ')}`);
+    }
+    console.log(`  shots · ${set.attributes?.screenshotDisplayType} · ${(shots?.data || []).length} image(s) · ${JSON.stringify(counts)}`);
+  }
+}
+
 async function draftsFor(app) {
   const filtered = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&filter[platform]=IOS&limit=10`).catch(() => null);
   if (filtered?.data) return filtered.data;
@@ -1160,6 +1177,7 @@ async function ensureListing(app) {
   if (SHOT_DIR) console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_67', SHOT_DIR)}`);
   console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPAD_PRO_3GEN_129', SHOT_DIR_IPAD)}`);
   if (CREATIVE) console.log(`  header · ${await ensureCreative(app, localization.id)}`);
+  await shotStates(localization.id);
   await placeInSubmission(app, version);
 }
 
