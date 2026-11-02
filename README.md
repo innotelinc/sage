@@ -87,7 +87,7 @@ docker run -d --name sage -p 8787:8787 --env-file .env sage
 
 Your key is passed in at runtime from `.env`; `.dockerignore` keeps `.env`, `.git` and local state out of the
 image, so a built image is safe to share. Every setting is an ordinary environment variable: `AI_BASE_URL`,
-`OPENAI_API_KEY`, `AI_CHAT_MODEL`, `AI_VISION_MODEL`, `AI_TRANSCRIBE_MODEL`, `ACCESS_CODE`, `PORT`.
+`OPENAI_API_KEY`, `AI_CHAT_MODEL`, `AI_VISION_MODEL`, `AI_TRANSCRIBE_MODEL`, `ACCESS_CODE`, `PORT`, and optionally `STT_BASE_URL`, `STT_API_KEY`, `STT_MODEL`.
 
 Run **exactly one container**. The relay keeps frames in the process's memory, so a second replica would never
 see what the first one received. Set `ACCESS_CODE` when the instance is reachable by anyone but you.
@@ -202,7 +202,7 @@ Measured against a live key, rather than assumed:
 
 A key's connection allowlist, not the 1,249-model list, is the real contract. Because no audio route is
 reachable here, server transcription answers 403; SAGE detects that once and falls back to on-device speech
-recognition instead of retrying. Enable the `openrouter` connection for the key to turn server transcription back on.
+recognition instead of retrying. Enable the `openrouter` connection for the key to turn server transcription back on — or give transcription a route of its own: when `STT_API_KEY` is set, `/api/transcribe` uses `STT_BASE_URL`/`STT_MODEL` on that key instead of the gateway, so an audio-capable provider is enough even when the chat key reaches no audio model.
 
 ## Operator panel (`/admin`)
 
