@@ -43,5 +43,6 @@ jobs:
           LISTING: ${{ inputs.listing }}
           SAGE_SITE: https://sage.innotel.tech
           APP_STORE_SHOTS: deploy/ios/store
+          APP_STORE_SHOTS_IPAD: deploy/ios/store-ipad
           APPLE_REVIEW_PHONE: ${{ secrets.APPLE_REVIEW_PHONE }}
         run: node scripts/asc-iap.mjs

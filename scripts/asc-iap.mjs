@@ -30,6 +30,7 @@ const ATTACH = /^(1|true|yes)$/i.test(String(process.env.ATTACH || ''));
 const LISTING = /^(1|true|yes)$/i.test(String(process.env.LISTING || ''));
 const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+$/, '');
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
+const SHOT_DIR_IPAD = (process.env.APP_STORE_SHOTS_IPAD || '').trim();
 const CATEGORY = (process.env.APPLE_CATEGORY || 'EDUCATION').trim();
 
 /* App Review's questionnaire, answered for what Sage is: a study tool with no chat
@@ -658,39 +659,39 @@ async function ensureAppInfo(app) {
  * URLs Apple hands back, then confirm the checksum — because App Store Connect never
  * takes an image inline.
  */
-async function ensureStoreShots(localizationId) {
-  if (!SHOT_DIR) return 'skipped (no APP_STORE_SHOTS)';
-  const sets = await call('GET', `/v1/appStoreVersionLocalizations/${localizationId}/appScreenshotSets?limit=10`);
-  let set = (sets?.data || []).find((item) => item.attributes?.screenshotDisplayType === 'APP_IPHONE_67');
+async function ensureShotSet(localizationId, displayType, directory) {
+  if (!directory) return `${displayType} · skipped (no directory)`;
+  const sets = await call('GET', `/v1/appStoreVersionLocalizations/${localizationId}/appScreenshotSets?limit=20`);
+  let set = (sets?.data || []).find((item) => item.attributes?.screenshotDisplayType === displayType);
   if (!set) {
     const made = await call('POST', '/v1/appScreenshotSets', {
       data: {
         type: 'appScreenshotSets',
-        attributes: { screenshotDisplayType: 'APP_IPHONE_67' },
+        attributes: { screenshotDisplayType: displayType },
         relationships: {
           appStoreVersionLocalization: { data: { type: 'appStoreVersionLocalizations', id: localizationId } },
         },
       },
     });
     set = made.data;
-    console.log('  screenshots · 6.7 inch set created');
+    console.log(`  ${displayType} · set created`);
   }
   let names = [];
   try {
-    names = (await readdir(SHOT_DIR)).filter((name) => /\.(png|jpe?g)$/i.test(name)).sort();
+    names = (await readdir(directory)).filter((name) => /\.(png|jpe?g)$/i.test(name)).sort();
   } catch {
-    return `missing (${SHOT_DIR} is not in the repository)`;
+    return `${displayType} · missing (${directory} is not in the repository)`;
   }
-  if (!names.length) return `missing (${SHOT_DIR} holds no images)`;
+  if (!names.length) return `${displayType} · missing (${directory} holds no images)`;
   const existing = await call('GET', `/v1/appScreenshotSets/${set.id}/appScreenshots?limit=20`);
   const current = existing?.data || [];
   // App Store Connect appends, it never replaces: a different number of local images
   // means the set has changed, so the old ones are cleared first.
-  if (current.length === names.length) return `already uploaded (${current.length})`;
+  if (current.length === names.length) return `${displayType} · already uploaded (${current.length})`;
   for (const shot of current) await call('DELETE', `/v1/appScreenshots/${shot.id}`);
-  if (current.length) console.log(`  screenshots · cleared ${current.length} old image(s)`);
+  if (current.length) console.log(`  ${displayType} · cleared ${current.length} old image(s)`);
   for (const name of names) {
-    const bytes = await readFile(join(SHOT_DIR, name));
+    const bytes = await readFile(join(directory, name));
     const reserved = await call('POST', '/v1/appScreenshots', {
       data: {
         type: 'appScreenshots',
@@ -713,9 +714,48 @@ async function ensureStoreShots(localizationId) {
         attributes: { uploaded: true, sourceFileChecksum: createHash('md5').update(bytes).digest('hex') },
       },
     });
-    console.log(`  screenshot · ${name}`);
+    console.log(`  ${displayType} · ${name}`);
   }
-  return `${names.length} uploaded`;
+  return `${displayType} · ${names.length} uploaded`;
+}
+
+/**
+ * The app itself is free — the sessions are what cost money — but App Review refuses
+ * a version until a price exists, and a price is a schedule even when it is zero.
+ */
+async function ensureAppPrice(app) {
+  const schedule = await optional(`/v1/apps/${app}/appPriceSchedule`);
+  if (schedule?.data) {
+    console.log('  app price · already set');
+    return;
+  }
+  const points = await call(
+    'GET',
+    `/v1/apps/${app}/appPricePoints?filter[territory]=USA&limit=200&fields[appPricePoints]=customerPrice`,
+  );
+  const free = (points?.data || []).find((item) => Number(item.attributes?.customerPrice) === 0);
+  if (!free) {
+    console.log('  app price · Apple returned no zero price point; set it in the web UI');
+    return;
+  }
+  await call('POST', '/v1/appPriceSchedules', {
+    data: {
+      type: 'appPriceSchedules',
+      relationships: {
+        app: { data: { type: 'apps', id: app } },
+        baseTerritory: { data: { type: 'territories', id: 'USA' } },
+        manualPrices: { data: [{ type: 'appPrices', id: '${price}' }] },
+      },
+    },
+    included: [
+      {
+        type: 'appPrices',
+        id: '${price}',
+        relationships: { appPricePoint: { data: { type: 'appPricePoints', id: free.id } } },
+      },
+    ],
+  });
+  console.log('  app price · free');
 }
 
 /**
@@ -809,6 +849,10 @@ async function placeInSubmission(app, version) {
       explain(error);
     }
   }
+  if (drafts.length) {
+    console.log('  submission · the existing drafts refused the version; not creating another');
+    return;
+  }
   let made;
   try {
     made = await call('POST', '/v1/reviewSubmissions', {
@@ -869,7 +913,9 @@ async function ensureListing(app) {
   await ensureCompliance(app, version);
   await ensureAgeRating(app);
   await ensureAppInfo(app);
-  console.log(`  screenshots · ${await ensureStoreShots(localization.id)}`);
+  await ensureAppPrice(app);
+  console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPHONE_67', SHOT_DIR)}`);
+  console.log(`  screenshots · ${await ensureShotSet(localization.id, 'APP_IPAD_PRO_3GEN_129', SHOT_DIR_IPAD)}`);
   await placeInSubmission(app, version);
 }
 
