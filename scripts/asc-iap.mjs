@@ -908,6 +908,10 @@ async function placeInSubmission(app, version) {
   };
   for (const draft of drafts) {
     let placed = false;
+    // Freshly uploaded screenshots are post-processed for several minutes, and until
+    // that finishes the version is refused for review. Waiting here keeps the draft
+    // whole instead of leaving the version outside it until someone notices.
+    for (let attempt = 1; attempt <= 11; attempt += 1) {
     try {
       await call('POST', '/v1/reviewSubmissionItems', item(draft.id, 'appStoreVersion', 'appStoreVersions', version.id));
       placed = true;
@@ -922,10 +926,18 @@ async function placeInSubmission(app, version) {
       if (held) {
         placed = true;
         console.log(`  submission · version ${version.attributes?.versionString} is already in draft ${draft.id}`);
-      } else {
-        console.log('  submission · the draft does not hold the version');
-        explain(error);
+        break;
       }
+      if (/ASSET_IN_POST_PROCESSING/.test(JSON.stringify(error.data || error.message)) && attempt < 11) {
+        console.log(`  submission · assets still processing, waiting (${attempt}/11)`);
+        await new Promise((done) => setTimeout(done, attempt <= 3 ? 15000 : 25000));
+        continue;
+      }
+      console.log('  submission · the draft does not hold the version');
+      explain(error);
+      break;
+    }
+    break;
     }
     if (!placed) continue;
     // Re-running must not stack duplicates: the draft holds the version plus one item
