@@ -243,9 +243,10 @@ live in the device's `localStorage`; the server keeps no state. If you expose th
 - **v1.4** — shipped: the session clock — a bought session's remaining minutes are shown, and capture stops by itself when the window closes instead of spending turns on 401s.
 - **v1.5** — shipped: capture that survives playback — the microphone is taken back by itself when a lesson video interrupts it, Apple's own screen recorder can be imported and read in one tap, Settings closes with an ✕ and never opens itself when you return to the app, and an answered question's photo is cleared rather than reused for the next one.
 - **v2.0** — shipped: the operator panel — the access code, model routing and a seven-day usage tally behind Cerulean SSO, changed live with no restart, so the code is set from a phone instead of a shell.
-- **v2.1** — planned: course memory on the server, so notes, corrections and the learned persona follow you between the phone and the browser instead of living in one browser's storage.
-- **v2.2** — planned: study packs — a course exported as one file (notes, corrections, quiz history, sources) and imported on another device, plus a print-ready revision sheet.
-- **v2.3** — planned: several courses in one workspace, each with its own persona and a timetable that decides which course an answer belongs to.
+- **v2.1** — shipped: Windows and Android builds, and transcription that runs on your own machine instead of through a vendor's cloud.
+- **v2.2** — shipped: the App Store and TestFlight icon the iOS job had been shipping a placeholder for, and answers that argue their case — every answer carries the reasoning, every quiz item names the options it ruled out, and every essay ends with how to explain it in your own words.
+- **v2.3** — shipped: study packs — a course exported as one file (notes, corrections, every answer, quiz item and source, with the reasoning attached) and merged on another device, plus a print-ready revision sheet.
+- **v2.4** — planned: several courses in one workspace, each with its own persona and a timetable that decides which course an answer belongs to.
 - **v3.0** — planned: native capture — a broadcast extension that records the screen while a lesson video plays, an on-device fallback that keeps working when the network drops, and hands-free study that survives a locked phone.
 - Native iOS capture, which no web page can do.
 
