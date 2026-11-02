@@ -138,6 +138,7 @@
             <span id="answerFilesLabel">＋ photo of question</span>
           </label>
           <span class="mini muted" id="answerFileCount"></span>
+          <button type="button" class="mini" id="btnClearAnswerFiles" hidden>clear photos</button>
         </div>
         <div class="thumbs" id="answerThumbs"></div>
         <button class="btn primary block" id="btnAnswer">Answer it</button>
@@ -233,6 +234,7 @@
 
     <dialog id="settingsDialog">
       <form method="dialog" id="settingsForm">
+        <button type="button" class="dialog-close" id="btnCloseSettings" aria-label="Close settings" title="Close">✕</button>
         <h3>Settings</h3>
 
         <fieldset class="admin-block">
@@ -288,7 +290,13 @@
           <label>Risk <input id="setRisk" type="range" min="0" max="5" step="1" /></label>
           <label>Language <input id="setLanguage" type="text" placeholder="auto" maxlength="40" /></label>
           <label>Note cadence (s) <input id="setInterval" type="number" min="8" max="120" step="2" /></label>
-          <label class="span2">Access code <input id="setAccess" type="password" placeholder="only if the server sets ACCESS_CODE" /></label>
+          <label class="span2">Access code <input id="setAccess" type="password" placeholder="usually empty" />
+            <span class="mini muted">
+              Server-wide password, not a key. Only needed when the Sage server itself was started with
+              <code>ACCESS_CODE</code>; it is sent as <code>x-access-code</code> on every request. Your gateway key and your
+              Magnate claim code are different things and do not belong here.
+            </span>
+          </label>
         </div>
         <label class="check"><input type="checkbox" id="setAutoNotes" /> auto-analyse capture</label>
         <label class="check"><input type="checkbox" id="setTts" /> speak answers aloud</label>
@@ -303,12 +311,17 @@
     <dialog id="screenDialog">
       <h3>Watching the screen</h3>
       <p class="mini muted">
-        iOS gives a web page no way to read the screen — no iPhone or iPad browser can, in any app shell. These
-        routes do work.
+        An app cannot read its own screen, and recording fights video playback for the microphone — that is why
+        listening stops the moment a lesson video plays. Apple's own screen recorder does not have that problem.
       </p>
+      <ol class="steps mini muted">
+        <li>Swipe down from the top-right corner and tap the record button. Add it once in Settings → Control Center.</li>
+        <li>Play the lesson. The recording keeps running while the video plays.</li>
+        <li>Stop the recording, come back to Sage, then tap <strong>Import the recording</strong> below.</li>
+      </ol>
       <div class="dialog-actions">
+        <button type="button" class="btn primary" id="btnScreenRecord">Import the recording</button>
         <button type="button" class="btn ghost" id="btnScreenRelay">Use a relay code</button>
-        <button type="button" class="btn primary" id="btnScreenUpload">Upload a recording</button>
       </div>
       <div class="dialog-actions">
         <button type="button" class="btn ghost" id="btnScreenCamera">Aim the camera</button>
