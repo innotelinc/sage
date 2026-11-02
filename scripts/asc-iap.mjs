@@ -1102,6 +1102,23 @@ async function ensureCreative(app, localizationId) {
   if (!missing.length) return `both slots already carry it (${have.length} placement(s))`;
   // A group holds exactly one asset per placement type, so the slot is vacated before it
   // is refilled — an archived image keeps its placement until it is deleted.
+  // Placements belong to the image that holds them, and an archived image keeps its
+  // placement, so every image in the library is swept rather than just the current one.
+  const everyImage = await call('GET', `/v1/appAssetLibraries/${libraryId}/images?limit=200`).catch(() => null);
+  console.log(`  header · library holds ${(everyImage?.data || []).length} image(s)`);
+  for (const held of everyImage?.data || []) {
+    if (held.id === image.id) continue;
+    const mine = await call('GET', `/v1/appAssetLibraryImages/${held.id}/placements?limit=10`).catch(() => null);
+    for (const stale of mine?.data || []) {
+      if (!CREATIVE_TYPES.includes(stale.attributes?.placementType)) continue;
+      try {
+        await call('DELETE', `/v1/appAssetLibraryPlacements/${stale.id}`);
+        console.log(`  header · cleared ${stale.attributes.placementType} from ${held.attributes?.referenceName || held.id}`);
+      } catch (error) {
+        console.log(`  header · could not clear ${stale.id}: ${error.message}`);
+      }
+    }
+  }
   const onVersion = await call('GET', `/v1/appStoreVersionLocalizations/${localizationId}/placements?limit=20`).catch(() => null);
   for (const existing of onVersion?.data || []) {
     if (!CREATIVE_TYPES.includes(existing.attributes?.placementType)) continue;
