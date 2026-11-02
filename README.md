@@ -204,6 +204,12 @@ A key's connection allowlist, not the 1,249-model list, is the real contract. Be
 reachable here, server transcription answers 403; SAGE detects that once and falls back to on-device speech
 recognition instead of retrying. Enable the `openrouter` connection for the key to turn server transcription back on — or give transcription a route of its own: when `STT_API_KEY` is set, `/api/transcribe` uses `STT_BASE_URL`/`STT_MODEL` on that key instead of the gateway, so an audio-capable provider is enough even when the chat key reaches no audio model.
 
+On the deployed instance that route is a Whisper sidecar in the SAGE container (`deploy/stt`): faster-whisper on CPU,
+int8, on `127.0.0.1:8881`, no provider key and no per-minute cost. Measured on the container's two cores with the same
+5.6s clip, `Systran/faster-whisper-base.en` transcribed in 1.3s (5.3x realtime) and `Systran/faster-whisper-small` at
+0.85x with identical text, so base.en is the default and `STT_MODEL` switches to a multilingual model when lectures
+are not in English.
+
 ## Operator panel (`/admin`)
 
 The access code, and what the instance is doing, sit behind Cerulean SSO instead of an `.env` edit and a restart:
