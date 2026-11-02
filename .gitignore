@@ -7,6 +7,4 @@ node_modules/
 threads/
 data/
 dist/
-node_modules/
-android/
-capacitor.config.json
+node_modules//android/capacitor.config.json
