@@ -138,9 +138,11 @@ to mean opening Magnate in another tab and copying a claim code back; it is now 
 | Key installs itself | the receipt page opens this app at `#claim=<code>`, which `POST /api/claim` trades for the key |
 
 On iOS the payment has to be an App Store purchase: `Settings → Session` asks StoreKit for the session
-product, and the transaction id it returns is verified against the App Store Server API before the server mints
-a key. That needs three consumables in App Store Connect and `IAP_MINT_URL` on the server (see
-`deploy/ios/README.md`); until then the phone falls back to the store page.
+product, and the **signed transaction** it returns is checked here against Apple's root certificate before a
+key is minted — no App Store Server API key is involved, and the product comes from Apple's signed payload
+rather than from the request. That needs three consumables in App Store Connect and `IAP_MINT_URL` on the
+server (see `deploy/ios/README.md`); until then the phone says so instead of offering a purchase it cannot
+complete.
 
 The browser never talks to a billing origin directly — CORS forbids it and the plan list would be a second
 place to keep in step — so both calls are proxied by the server. `MAGNATE_URL` points it at a different store,

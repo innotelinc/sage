@@ -2904,9 +2904,12 @@ async function buyWithApple(plan) {
   try {
     if (status) status.textContent = 'Waiting for the App Store…';
     const bought = await NATIVE_STORE.buy({ productId: entry.productId });
+    // What goes to the server is Apple's signature over the transaction, not the
+    // ids read out of it: only the server can say whether that signature holds.
+    if (!bought || !bought.signedTransaction) throw new Error('The App Store did not sign that purchase.');
     if (status) status.textContent = 'Purchase confirmed — installing the key…';
     const data = await api('/api/iap/purchase', {
-      body: { transactionId: bought.transactionId, productId: bought.productId, email },
+      body: { signedTransaction: bought.signedTransaction, email },
     });
     const installed = await applySessionKey(data, { silent: true });
     if (status) {

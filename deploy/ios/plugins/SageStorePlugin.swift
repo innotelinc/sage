@@ -5,10 +5,10 @@ import StoreKit
 /// In-app purchase for the session keys.
 ///
 /// Apple requires digital goods sold inside an iOS app to go through StoreKit, so
-/// the purchase happens here and nowhere else on this platform. The plugin stops
-/// at a verified transaction id: the key is minted by the server, which checks the
-/// transaction with Apple first, so a purchase made in a patched client is worth
-/// nothing.
+/// the purchase happens here and nowhere else on this platform. The plugin stops at
+/// the signed transaction: the key is minted by the server, which checks Apple's
+/// signature over that transaction before it mints, so a purchase made in a patched
+/// client is worth nothing.
 @objc(SageStorePlugin)
 public class SageStorePlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "SageStorePlugin"
@@ -61,11 +61,20 @@ public class SageStorePlugin: CAPPlugin, CAPBridgedPlugin {
                         call.reject("Apple could not verify that purchase.")
                         return
                     }
+                    // The JWS is Apple's own signature over this transaction, and the
+                    // server checks it against Apple's root before minting. Nothing
+                    // here decides whether a purchase is real: this is the evidence.
+                    let signed = verification.jwsRepresentation
+                    guard !signed.isEmpty else {
+                        call.reject("The App Store did not sign that purchase.")
+                        return
+                    }
                     // A consumable is finished once the server has acknowledged it;
                     // finishing here would lose a paid session if the mint failed.
                     call.resolve([
                         "transactionId": String(transaction.id),
                         "productId": transaction.productID,
+                        "signedTransaction": signed,
                         "json": transaction.jsonRepresentation.base64EncodedString(),
                     ])
                 case .userCancelled:

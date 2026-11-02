@@ -2,159 +2,248 @@
  * App Store purchases.
  *
  * Apple requires digital goods sold inside an iOS app to go through in-app
- * purchase, so a session bought on the phone is a StoreKit consumable rather than
- * a Stripe checkout. A confirmed purchase is not a key on its own: Apple's
- * transaction is checked against the App Store Server API first, and only a
- * verified transaction is exchanged for a session.
+ * purchase, so a session bought on the phone is a StoreKit consumable rather than a
+ * Stripe checkout. A confirmed purchase is not a key on its own: StoreKit hands back
+ * a signed transaction — a JWS whose certificate chain ends at Apple's root — and
+ * that signature is what is checked here.
+ *
+ * The check runs offline against a pinned anchor, so this server needs no App Store
+ * Server API key to know a purchase is real, and it never trusts an id the app read
+ * out of the payload: the product and the transaction are taken from Apple's own
+ * signed answer once the signature holds.
  *
  * Minting stays where it already lives — Magnate holds the gateway and issues the
- * keys — so this asks it to mint against a transaction id. If that endpoint is not
- * configured, the purchase endpoint answers 501 and the app keeps the store page
- * instead: it must never take money it cannot hand a key back for.
+ * keys — so a verified transaction is posted to IAP_MINT_URL. If that endpoint is not
+ * configured the purchase route answers 501 and the app keeps the store page: it must
+ * never take money it cannot hand a key back for.
  */
-import { createSign } from 'node:crypto';
+import { X509Certificate, verify as verifySignature } from 'node:crypto';
 
-const APPLE_API = 'https://api.storekit.itunes.apple.com';
-const APPLE_AUD = 'appstoreconnect-v1';
+/**
+ * Apple Root CA - G3, the anchor every StoreKit 2 signing chain ends at. Pinned by
+ * fingerprint rather than by name, so a chain that carries a different "Apple Root
+ * CA" of its own cannot nominate itself as the anchor.
+ * https://www.apple.com/certificateauthority/AppleRootCA-G3.cer
+ */
+const APPLE_ROOT_SHA256 = ['63343ABFB89A6A03EBB57E9B3F5FA7BE7C4F5C756F3017B3A8C488C3653E9179'];
 
-function b64(value) {
-  return Buffer.from(value).toString('base64url');
-}
+const MAX_SIGNED_LENGTH = 12000;
+const MAX_KEY_LENGTH = 200;
+const MAX_EMAIL_LENGTH = 200;
+const ENVIRONMENTS = new Set(['Production', 'Sandbox']);
+const SEEN_LIMIT = 2000;
 
-/** The App Store Server API wants an ES256 JWT; node signs DER, JOSE wants r||s. */
-function appleToken(env = {}) {
-  const issuer = String(env.APPLE_ISSUER_ID || env.ASC_ISSUER_ID || '').trim();
-  const keyId = String(env.APPLE_KEY_ID || env.ASC_KEY_ID || '').trim();
-  const key = String(env.APPLE_PRIVATE_KEY || env.ASC_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
-  const bundle = String(env.APPLE_BUNDLE_ID || 'us.innotel.sage').trim();
-  if (!issuer || !keyId || !key) return '';
+// Transaction ids already exchanged by this process. The mint route is the real
+// authority — it must refuse a transaction it has already paid out — and this is the
+// cheap guard in front of it, so a replayed request cannot walk through on the way.
+const handedOut = new Set();
 
-  const issued = Math.floor(Date.now() / 1000);
-  const head = b64(JSON.stringify({ alg: 'ES256', kid: keyId, typ: 'JWT' }));
-  const body = b64(JSON.stringify({ iss: issuer, iat: issued, exp: issued + 300, aud: APPLE_AUD, bid: bundle }));
-  const signingInput = `${head}.${body}`;
-  try {
-    const der = createSign('sha256').update(signingInput).sign(key);
-    return `${signingInput}.${derToJose(der)}`;
-  } catch {
-    // A malformed key is a configuration problem, reported as "not configured"
-    // rather than as a failed purchase.
-    return '';
-  }
-}
-
-function readInt(der, start) {
-  if (der[start] !== 0x02) throw new Error('expected an INTEGER');
-  const length = der[start + 1];
-  return { value: der.subarray(start + 2, start + 2 + length), next: start + 2 + length };
-}
-
-function stripLeadingZeros(value) {
-  let index = 0;
-  while (index < value.length - 1 && value[index] === 0) index += 1;
-  return value.subarray(index);
-}
-
-function derToJose(der) {
-  if (der[0] !== 0x30) throw new Error('expected a SEQUENCE');
-  let offset = 2;
-  if (der[1] & 0x80) offset = 2 + (der[1] & 0x7f);
-  const r = readInt(der, offset);
-  const s = readInt(der, r.next);
-  const out = Buffer.alloc(64);
-  const ri = stripLeadingZeros(r.value);
-  const si = stripLeadingZeros(s.value);
-  ri.copy(out, 32 - ri.length);
-  si.copy(out, 64 - si.length);
-  return out.toString('base64url');
+export function bundleId(env = {}) {
+  return String(env.APPLE_BUNDLE_ID || 'us.innotel.sage').trim();
 }
 
 /**
- * Product ids are optional configuration: without them the app does not know what
- * to ask the store for. They map to the plans the store page sells.
+ * Product ids are optional configuration: without them the built-in mapping between
+ * the three consumables and the plans the store page sells is used.
  */
-export function iapConfig(env = {}) {
-  const minted = Boolean(String(env.IAP_MINT_URL || '').trim());
-  const bundle = String(env.APPLE_BUNDLE_ID || 'us.innotel.sage').trim();
+export function productList(env = {}) {
   const configured = String(env.IAP_PRODUCTS || '')
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean)
     .map((entry) => {
-      const [productId, planSlug] = entry.split(':');
+      const [productId, planSlug] = entry.split(':').map((part) => String(part || '').trim());
       return productId && planSlug ? { productId, planSlug } : null;
     })
     .filter(Boolean);
-  const products = configured.length
-    ? configured
-    : ['trial', 'standard', 'intensive'].map((suffix) => ({
-        productId: `${bundle}.session.${suffix}`,
-        planSlug: `sage-session-${suffix}`,
-      }));
-  return { enabled: minted, verify: Boolean(appleToken(env)), products };
+  if (configured.length) return configured;
+  // Not derived from the bundle id: the consumables were registered as
+  // us.inotnel.sage.session.*, and renaming them would orphan the products a buyer
+  // can already see in the store.
+  return [
+    { productId: 'us.inotnel.sage.session.trial', planSlug: 'sage-session-trial' },
+    { productId: 'us.inotnel.sage.session.standard', planSlug: 'sage-session-standard' },
+    { productId: 'us.inotnel.sage.session.intensive', planSlug: 'sage-session-intensive' },
+  ];
 }
 
-async function verifiedTransaction(transactionId, env) {
-  const token = appleToken(env);
-  if (!token) return { error: 'Apple server verification is not configured.' };
-  const base = String(env.IAP_VERIFY_URL || APPLE_API).replace(/\/+$/, '');
-  let res;
-  try {
-    res = await fetch(`${base}/inApps/v1/transactions/${encodeURIComponent(transactionId)}`, {
-      headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
-      signal: AbortSignal.timeout(15000),
-    });
-  } catch (error) {
-    return { error: `Cannot reach Apple (${error.message}).` };
-  }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.signedTransactionInfo) {
-    return { error: `Apple would not confirm that transaction (${res.status}).` };
-  }
-  // The signed payload is Apple's answer; the product id in it is what decides
-  // which plan was paid for, never the id the app sent.
-  const payload = decodePayload(data.signedTransactionInfo);
-  if (!payload || !payload.productId) return { error: 'Apple returned a transaction with no product.' };
-  return { payload };
+export function iapConfig(env = {}) {
+  return {
+    // The button only appears when a verified purchase can actually become a key.
+    enabled: Boolean(String(env.IAP_MINT_URL || '').trim()),
+    // Verification needs no credentials: the App Store signs the transaction and the
+    // signature is checked against a pinned root.
+    verify: true,
+    products: productList(env),
+  };
 }
 
-function decodePayload(jws) {
-  const parts = String(jws).split('.');
-  if (parts.length < 2) return null;
+function trustAnchors(env = {}) {
+  const override = String(env.IAP_TRUST_ANCHORS || '')
+    .split(',')
+    .map((entry) => entry.replace(/[^0-9a-fA-F]/g, '').toUpperCase())
+    .filter(Boolean);
+  return override.length ? override : APPLE_ROOT_SHA256;
+}
+
+function decodePart(part) {
   try {
-    return JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    return JSON.parse(Buffer.from(String(part), 'base64url').toString('utf8'));
   } catch {
     return null;
   }
 }
 
-async function mintSession({ productId, transactionId, email }, env) {
+function validBetween(cert, now) {
+  const from = cert.validFromDate ? cert.validFromDate.getTime() : Date.parse(cert.validFrom);
+  const to = cert.validToDate ? cert.validToDate.getTime() : Date.parse(cert.validTo);
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return true;
+  return now >= from && now <= to;
+}
+
+/**
+ * Leaf → intermediate → anchor, each certificate checked against the one that issued
+ * it. The last certificate in the header has to be an anchor we already trust; its
+ * key is what proves the certificate below it, so no part of the chain is taken on
+ * the chain's own word.
+ */
+function verifyChain(x5c, anchors, now) {
+  if (!Array.isArray(x5c) || x5c.length < 2) return { error: 'the signature carries no certificate chain.' };
+  let certs;
+  try {
+    certs = x5c.map((entry) => new X509Certificate(Buffer.from(String(entry), 'base64')));
+  } catch {
+    return { error: 'the certificate chain is not readable.' };
+  }
+  const root = certs[certs.length - 1];
+  const fingerprint = root.fingerprint256.replace(/:/g, '').toUpperCase();
+  if (!anchors.includes(fingerprint)) return { error: 'the signing chain does not end at a trusted anchor.' };
+  if (!certs.every((cert) => validBetween(cert, now))) return { error: 'a certificate in the chain is outside its valid dates.' };
+  for (let index = 0; index < certs.length - 1; index += 1) {
+    const child = certs[index];
+    const issuer = certs[index + 1];
+    if (!child.checkIssued(issuer)) return { error: 'the certificate chain is not contiguous.' };
+    if (!child.verify(issuer.publicKey)) return { error: 'a certificate in the chain was not signed by its issuer.' };
+  }
+  return { leaf: certs[0] };
+}
+
+/**
+ * Checks a StoreKit 2 signed transaction and returns the payload it protects.
+ *
+ * `options.anchors` exists for tests and for a private trust store; production calls
+ * it with nothing and gets Apple's root.
+ */
+export function verifySignedTransaction(signed, options = {}) {
+  const env = options.env || {};
+  const text = String(signed || '').trim();
+  if (!text) return { error: 'the purchase carried no signed transaction.' };
+  if (text.length > MAX_SIGNED_LENGTH) return { error: 'the signed transaction is not a StoreKit one.' };
+
+  const parts = text.split('.');
+  if (parts.length !== 3) return { error: 'the signed transaction is not a JWS.' };
+  const header = decodePart(parts[0]);
+  if (!header || header.alg !== 'ES256') return { error: 'the transaction is not signed with ES256.' };
+
+  const now = Number(options.now) || Date.now();
+  const chain = verifyChain(header.x5c, options.anchors || trustAnchors(env), now);
+  if (chain.error) return { error: chain.error };
+
+  let signatureOk = false;
+  try {
+    signatureOk = verifySignature(
+      'sha256',
+      Buffer.from(`${parts[0]}.${parts[1]}`),
+      { key: chain.leaf.publicKey, dsaEncoding: 'ieee-p1363' },
+      Buffer.from(parts[2], 'base64url'),
+    );
+  } catch {
+    signatureOk = false;
+  }
+  if (!signatureOk) return { error: 'the transaction signature does not match its payload.' };
+
+  const payload = decodePart(parts[1]);
+  if (!payload) return { error: 'the transaction payload is not JSON.' };
+
+  const expectedBundle = bundleId(env);
+  if (String(payload.bundleId || '') !== expectedBundle) {
+    return { error: `the transaction is for ${payload.bundleId || 'another app'}, not ${expectedBundle}.` };
+  }
+  if (!ENVIRONMENTS.has(String(payload.environment || ''))) {
+    return { error: `the transaction environment (${payload.environment || 'unknown'}) is not a store one.` };
+  }
+  if (payload.revocationDate) return { error: 'Apple reports that purchase as refunded or revoked.' };
+  if (Number(payload.quantity || 1) !== 1) return { error: 'a session purchase must be for one session.' };
+  if (payload.type && payload.type !== 'Consumable') {
+    return { error: `the transaction is a ${payload.type}, not a session.` };
+  }
+  const products = options.products || productList(env);
+  const entry = products.find((item) => item.productId === payload.productId);
+  if (!entry) return { error: `that product (${payload.productId || 'none'}) is not a session this server sells.` };
+  if (!payload.transactionId) return { error: 'the transaction has no id.' };
+  return { payload, entry };
+}
+
+function remember(transactionId) {
+  handedOut.add(String(transactionId));
+  if (handedOut.size > SEEN_LIMIT) handedOut.delete(handedOut.values().next().value);
+}
+
+/**
+ * Asks Magnate for the key.
+ *
+ * The body is the verified transaction, not a claim about it: the plan is named so
+ * the route does not have to know this app's product ids, and the transaction id is
+ * the idempotency key the route pays out against exactly once.
+ */
+async function mintSession({ productId, planSlug, transactionId, email, payload }, env) {
   const url = String(env.IAP_MINT_URL || '').trim();
   if (!url) return { error: 'in_app_purchase is not enabled on this server', status: 501 };
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
   const token = String(env.IAP_MINT_TOKEN || '').trim();
   if (token) headers.authorization = `Bearer ${token}`;
+
+  const purchasedAt = Number(payload.purchaseDate)
+    ? new Date(Number(payload.purchaseDate)).toISOString()
+    : null;
+
   let res;
   try {
     res = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ productId, transactionId, email }),
+      body: JSON.stringify({
+        productId,
+        planSlug,
+        transactionId: String(transactionId),
+        email,
+        bundleId: payload.bundleId,
+        environment: payload.environment,
+        purchasedAt,
+      }),
       signal: AbortSignal.timeout(20000),
     });
   } catch (error) {
     return { error: `The key service is unreachable (${error.message}).`, status: 502 };
   }
+
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.key) {
-    return { error: String(data.error || `The key service refused the purchase (${res.status}).`), status: 502 };
+  const key = String(data.key || '').trim();
+  if (!res.ok || !key) {
+    return {
+      error: String(data.error || `The key service refused the purchase (${res.status}).`),
+      status: 502,
+    };
+  }
+  if (key.length > MAX_KEY_LENGTH || /\s/.test(key)) {
+    return { error: 'The key service issued a key the gateway will not accept.', status: 502 };
   }
   return {
     session: {
-      key: String(data.key),
+      key,
+      planName: String(data.planName || ''),
       expiresAt: data.expiresAt || null,
       secondsLeft: Number(data.secondsLeft) || 0,
-      planName: String(data.planName || ''),
       baseUrl: String(env.AI_BASE_URL || 'https://gateway.innotel.us/v1').replace(/\/+$/, ''),
     },
   };
@@ -177,25 +266,31 @@ export async function handleIap(request, url, env, json) {
 
   const body = await request.json().catch(() => null);
   if (!body) return json({ error: 'bad_json', message: 'Body must be JSON.' }, 400);
-  const transactionId = String(body.transactionId || '').trim().slice(0, 40);
-  const email = String(body.email || '').trim().slice(0, 200);
-  if (!/^[0-9]{1,40}$/.test(transactionId)) {
-    return json({ error: 'bad_transaction', message: 'A StoreKit transaction id is required.' }, 400);
+
+  const email = String(body.email || '').trim().slice(0, MAX_EMAIL_LENGTH);
+  const verified = verifySignedTransaction(body.signedTransaction, { env, products: config.products });
+  if (verified.error) {
+    return json({ error: 'verify_failed', message: verified.error }, 400);
   }
 
-  const verified = await verifiedTransaction(transactionId, env);
-  if (verified.error) return json({ error: 'verify_failed', message: verified.error }, 502);
-
-  const productId = String(verified.payload.productId);
-  const quantity = Number(verified.payload.quantity) || 1;
-  const revoked = verified.payload.revocationDate ? true : false;
-  if (revoked) return json({ error: 'revoked', message: 'Apple reports that purchase as refunded or revoked.' }, 409);
-  if (quantity !== 1) {
-    return json({ error: 'bad_quantity', message: 'A session purchase must be for one session.' }, 409);
+  const { payload, entry } = verified;
+  const transactionId = String(payload.transactionId);
+  if (handedOut.has(transactionId)) {
+    return json({ error: 'already_redeemed', message: 'That purchase has already been exchanged for a session.' }, 409);
   }
 
-  const minted = await mintSession({ productId, transactionId, email }, env);
+  const minted = await mintSession(
+    {
+      productId: String(payload.productId),
+      planSlug: entry.planSlug,
+      transactionId,
+      email,
+      payload,
+    },
+    env,
+  );
   if (minted.error) return json({ error: 'mint_failed', message: minted.error }, minted.status || 502);
 
-  return json({ ...minted.session, productId, transactionId });
+  remember(transactionId);
+  return json({ ...minted.session, productId: String(payload.productId), transactionId });
 }
