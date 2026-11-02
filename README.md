@@ -246,7 +246,8 @@ live in the device's `localStorage`; the server keeps no state. If you expose th
 - **v2.1** — shipped: Windows and Android builds, and transcription that runs on your own machine instead of through a vendor's cloud.
 - **v2.2** — shipped: the App Store and TestFlight icon the iOS job had been shipping a placeholder for, and answers that argue their case — every answer carries the reasoning, every quiz item names the options it ruled out, and every essay ends with how to explain it in your own words.
 - **v2.3** — shipped: study packs — a course exported as one file (notes, corrections, every answer, quiz item and source, with the reasoning attached) and merged on another device, plus a print-ready revision sheet.
-- **v2.4** — planned: several courses in one workspace, each with its own persona and a timetable that decides which course an answer belongs to.
+- **v2.4** — shipped: several courses in one workspace — each with its own persona, memory and record, a switcher in the header, and a timetable that hands a class's window to its own course so the right course answers while you are looking at another; a study pack imports into the course of the same name, or arrives as a new one.
+- **v2.5** — planned: course memory on the server, so the workspace follows you between the phone and the browser without exporting a file.
 - **v3.0** — planned: native capture — a broadcast extension that records the screen while a lesson video plays, an on-device fallback that keeps working when the network drops, and hands-free study that survives a locked phone.
 - Native iOS capture, which no web page can do.
 
