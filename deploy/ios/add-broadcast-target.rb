@@ -46,6 +46,10 @@ extension.build_configurations.each do |config|
     # here would fail to sign rather than do anything.
     'PRODUCT_NAME' => 'SageBroadcast',
     'WRAPPER_EXTENSION' => 'appex',
+    # Naming the identity matters: left to choose, automatic signing minted a
+    # fresh certificate for the new target on every run and exhausted the
+    # account's pool rather than reusing the one stored in secrets.
+    'CODE_SIGN_IDENTITY' => 'Apple Distribution',
     'CODE_SIGN_STYLE' => 'Automatic',
     'DEVELOPMENT_TEAM' => team,
     'SWIFT_VERSION' => '5.0',
@@ -57,6 +61,10 @@ extension.build_configurations.each do |config|
     'MARKETING_VERSION' => version,
     'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks'
   )
+end
+
+app.build_configurations.each do |config|
+  config.build_settings['CODE_SIGN_IDENTITY'] = 'Apple Distribution'
 end
 
 app.add_dependency(extension)
