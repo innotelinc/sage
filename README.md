@@ -231,8 +231,11 @@ a 403, not a session. The panel also reports the instance's model routing and a 
 
 The key lives in `.env`, gitignored and never served — static files come only from `public/`, and traversal is
 refused. Audio and frames leave the device only to reach the configured model provider. Transcripts and memory
-live in the device's `localStorage`; the server keeps no state. If you expose the app publicly, set
-`ACCESS_CODE` so only you can spend your credits.
+live in the device's `localStorage`. A workspace can also be kept on the server so the phone and the
+browser agree: one JSON document per identity under `SAGE_DATA_DIR` (default `data/workspaces`), keyed to
+a signed-in panel session or to the access code, written whole and renamed into place, and removed with
+`DELETE /api/workspace`. Nothing is stored there unless the app is given a code or a panel session. If you
+expose the app publicly, set `ACCESS_CODE` so only you can spend your credits.
 
 ## Roadmap
 
@@ -247,7 +250,8 @@ live in the device's `localStorage`; the server keeps no state. If you expose th
 - **v2.2** — shipped: the App Store and TestFlight icon the iOS job had been shipping a placeholder for, and answers that argue their case — every answer carries the reasoning, every quiz item names the options it ruled out, and every essay ends with how to explain it in your own words.
 - **v2.3** — shipped: study packs — a course exported as one file (notes, corrections, every answer, quiz item and source, with the reasoning attached) and merged on another device, plus a print-ready revision sheet.
 - **v2.4** — shipped: several courses in one workspace — each with its own persona, memory and record, a switcher in the header, and a timetable that hands a class's window to its own course so the right course answers while you are looking at another; a study pack imports into the course of the same name, or arrives as a new one.
-- **v2.5** — planned: course memory on the server, so the workspace follows you between the phone and the browser without exporting a file.
+- **v2.5** — shipped: course memory on the server — the workspace follows you between the phone and the browser under one identity (a panel session, or the access code), saved whole and renamed into place so a half-written copy is never read back, the newer save winning when two devices disagree, and nothing kept
+at all on an instance with no code and no sign-in.
 - **v3.0** — planned: native capture — a broadcast extension that records the screen while a lesson video plays, an on-device fallback that keeps working when the network drops, and hands-free study that survives a locked phone.
 - Native iOS capture, which no web page can do.
 

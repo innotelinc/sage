@@ -26,7 +26,7 @@
     <title>Sage · course agent</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=2.4.0" />
+    <link rel="stylesheet" href="/styles.css?v=2.5.0" />
   </head>
   <body>
     <header class="topbar">
@@ -246,6 +246,16 @@
           item with the reasoning, and the material it relied on. Import it on another device to carry the course
           across, or print the revision sheet the night before.
         </p>
+        <h4 class="section-title">Across devices</h4>
+        <div class="actions">
+          <button class="btn ghost" id="btnSyncNow">Sync now</button>
+        </div>
+        <p class="mini muted" id="syncStatus">Checking the server…</p>
+        <p class="mini muted">
+          One copy on the server, keyed to you: sign in to the panel and it follows the session, or set the access
+          code in Settings and it follows the code. That is how a course opened on the phone reaches the browser
+          without exporting a study pack. With neither, the workspace stays on this device.
+        </p>
         <div class="ask-row">
           <input id="memoryAdd" type="text" placeholder="Teach it something durable…" />
           <button class="btn" id="btnMemoryAdd">Add</button>
@@ -371,6 +381,6 @@
 
     <div class="toast" id="toast" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=2.4.0"></script>
+    <script type="module" src="/app.js?v=2.5.0"></script>
   </body>
 </html>

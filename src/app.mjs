@@ -4,6 +4,7 @@
  */
 import { buildSystemPrompt, parseMemory, parseStructured, MODES } from './persona.mjs';
 import { handleRelay } from './relay.mjs';
+import { handleWorkspace } from './workspace.mjs';
 import { synthesize, ttsConfig } from './tts.mjs';
 
 const MAX_IMAGES = 6;
@@ -536,6 +537,12 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
       authRequired: Boolean(runtime.accessRequired(cfg.accessCode)),
       modes: Object.keys(MODES),
     });
+  }
+
+  // The workspace is decided per identity, not per access code alone, so it is
+  // answered before the access-code gate: handleWorkspace does its own check.
+  if (url.pathname === '/api/workspace') {
+    return handleWorkspace(request, url, env);
   }
 
   if (!authorised(request, cfg, runtime)) {
