@@ -6,6 +6,10 @@ name: Android APK
 # release — for that, add a keystore and switch to assembleRelease.
 #
 # Actions -> Android APK -> Run workflow, or push a tag app-v*.
+#
+# No android-actions/setup-android here: v3 fails on current runners with
+# "Failed to find package 'tools'". The ubuntu image already carries the SDK and
+# its licences, so the build just points Gradle at it.
 
 on:
   workflow_dispatch:
@@ -29,7 +33,13 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: android-actions/setup-android@v3
+      - name: Inspect the preinstalled Android SDK
+        run: |
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-$ANDROID_HOME}" >> "$GITHUB_ENV"
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          echo "sdk at $SDK"
+          ls "$SDK/platforms" 2>/dev/null | tail -3
+          ls "$SDK/build-tools" 2>/dev/null | tail -3
 
       - name: Add the Android platform
         run: |
@@ -44,6 +54,8 @@ jobs:
 
       - name: Assemble the debug-signed APK
         run: |
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          echo "sdk.dir=$SDK" > android/local.properties
           cd android
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
