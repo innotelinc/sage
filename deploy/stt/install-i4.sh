@@ -26,7 +26,9 @@ bx bash -c '[ -x /opt/stt/venv/bin/python ] || python3 -m venv /opt/stt/venv'
 
 log "2. faster-whisper (CTranslate2, no torch)"
 bx bash -c '/opt/stt/venv/bin/pip install --quiet --upgrade pip'
-bxo bash -c '/opt/stt/venv/bin/pip install --quiet faster-whisper 2>&1 | tail -3'
+# PyAV 19 dropped the metadata_errors kwarg faster-whisper 1.2.1 still passes,
+# so the resolver alone installs a pair that cannot open a file. Pin it.
+bxo bash -c '/opt/stt/venv/bin/pip install --quiet faster-whisper "av>=14,<19" 2>&1 | tail -3'
 bx bash -c '/opt/stt/venv/bin/python -c "import faster_whisper, ctranslate2; print(\"faster-whisper\", faster_whisper.__version__, \"ct2\", ctranslate2.__version__)"'
 
 log "3. create the systemd unit"
