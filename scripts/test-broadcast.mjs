@@ -32,7 +32,7 @@ ok('a frame is counted and its note held for the app', () => {
   const state = recordFrame(DEVICE, 'EXAM: mitochondria make ATP');
   assert.equal(state.frames, 1);
   assert.equal(state.running, true);
-  assert.equal(state.notes.length, 0, 'the note is handed out by readNotes, not by every write');
+  assert.equal('notes' in state, false, 'the note is handed out by readNotes, not by every write');
 });
 
 ok('reading drains the notes exactly once', () => {
