@@ -566,7 +566,11 @@ async function attachVersion(app) {
   const subs = await call('GET', `/v1/reviewSubmissions?filter[app]=${app}&limit=10`);
   const open = (subs?.data || []).find((item) => item.attributes?.state === 'READY_FOR_REVIEW');
   if (!open) {
-    console.log('  no open iOS submission to add the version to');
+    // Withdrawing a version cancels the submission it was in, so after an update
+    // there is no draft to fall into. One has to be made, with the version and the
+    // products in it, or the resubmit has nothing to send.
+    console.log('  no open iOS submission · making one');
+    await placeInSubmission(app, version);
     return;
   }
   try {
