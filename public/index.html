@@ -144,7 +144,7 @@
               <button class="cap-btn" id="btnListen">
                 <span class="cap-ico" aria-hidden="true">🎙</span>
                 <span class="cap-label">Listen</span>
-                <span class="cap-sub">lecture audio → transcript</span>
+                <span class="cap-sub">audio only — no screen needed</span>
               </button>
               <button class="cap-btn" id="btnScreen">
                 <span class="cap-ico" aria-hidden="true">🖥</span>
@@ -177,6 +177,9 @@
                  reuses this markup; this copy is what shows when a popup is blocked
                  or the app runs inside the iOS shell, which has only one window. -->
             <div class="aim-viewer" id="aimViewer" hidden></div>
+
+            <!-- The recording stays on this device; a note replays it from its own offset. -->
+            <audio class="audio-player" id="audioPlayer" controls hidden preload="none"></audio>
 
             <div class="live-grid">
               <div class="col">

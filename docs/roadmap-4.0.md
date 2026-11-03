@@ -12,8 +12,9 @@ Three promises define it, and each one is a milestone rather than a slogan:
 
 Everything else in 4.x is downstream of those three. If a feature does not make one of them true, it waits.
 
-**Where this stands:** 4.0 (background capture), 4.1 (offline photos), 4.2 (citable pages) and
-4.3 (exam rehearsal) are shipped. 4.4 is the next build; 4.4 through 5.1 are designed below, in that order.
+**Where this stands:** 4.0 (background capture), 4.1 (offline photos), 4.2 (citable pages), 4.3 (exam
+rehearsal) and 4.4 (audio-only lectures) are shipped. 4.5 is the next build; 4.5 through 5.1 are designed
+below, in that order.
 
 ## 4.0 — capture that survives the background *(shipped in 4.0.0)*
 
@@ -73,7 +74,7 @@ The quiet gap between "it answers my questions" and "I can sit the paper".
 **Done means:** a 40-minute paper can be sat start to finish without the app leaking an answer, and the
 marked result names the specific points that were missed.
 
-## 4.4 — audio-only lectures
+## 4.4 — audio-only lectures *(shipped in 4.4.0)*
 
 Not every lecture has a screen. A recording is transcribed for Read, but only when the
 file is uploaded afterwards.

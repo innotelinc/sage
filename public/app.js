@@ -623,7 +623,86 @@ const cap = {
   cameraOn: false,
   study: false,
   restarting: false,
+  audioChunks: [],
+  audioStart: 0,
+  audioBytes: 0,
 };
+
+/* audio-only lectures: the recording stays on this device, so a note can be replayed */
+const AUDIO_KEEP_BYTES = 90 * 1024 * 1024;
+
+function hms(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const pad = (value) => String(value).padStart(2, '0');
+  const h = Math.floor(total / 3600);
+  const m = Math.floor(total / 60) % 60;
+  const s = total % 60;
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+function audioOffset(at) {
+  return cap.audioStart ? Math.max(0, Math.round((at - cap.audioStart) / 1000)) : 0;
+}
+
+function dropAudio() {
+  for (const chunk of cap.audioChunks) URL.revokeObjectURL(chunk.url);
+  cap.audioChunks = [];
+  cap.audioBytes = 0;
+}
+
+function keepAudio(blob, startedAt) {
+  if (!blob || !blob.size) return;
+  cap.audioChunks.push({ start: audioOffset(startedAt), blob, url: URL.createObjectURL(blob) });
+  cap.audioBytes += blob.size;
+  // An hour of lecture is worth keeping; a whole term is not.
+  while (cap.audioBytes > AUDIO_KEEP_BYTES && cap.audioChunks.length > 1) {
+    const old = cap.audioChunks.shift();
+    cap.audioBytes -= old.blob.size;
+    URL.revokeObjectURL(old.url);
+  }
+}
+
+function stampSeconds(stamp) {
+  const parts = String(stamp).split(':').map((part) => Number(part) || 0);
+  return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + (parts[1] || 0);
+}
+
+function playNoteOffset(stamp, label = 'lecture') {
+  const player = $('audioPlayer');
+  const target = stampSeconds(stamp);
+  const chunk = [...cap.audioChunks].reverse().find((entry) => entry.start <= target);
+  if (!player || !chunk) {
+    toast('That part of the recording is no longer on the device.', 'error');
+    return;
+  }
+  player.src = chunk.url;
+  player.hidden = false;
+  player.title = `${label} ${stamp}`;
+  const seek = Math.max(0, target - chunk.start);
+  const start = () => {
+    try {
+      player.currentTime = seek;
+    } catch {
+      /* the blob is not seekable yet; it plays from its start */
+    }
+    player.play().catch(() => {});
+  };
+  if (player.readyState >= 1) start();
+  else player.addEventListener('loadedmetadata', start, { once: true });
+}
+
+/* A note's [lecture M:SS] becomes a button, the way [file p.N] already does. */
+function noteBody(text) {
+  const pattern = /\[([^[\]\n]{1,60}?)[ ](\d{1,2}:\d{2}(?::\d{2})?)\]/g;
+  let out = '';
+  let last = 0;
+  for (const match of String(text).matchAll(pattern)) {
+    out += md(String(text).slice(last, match.index));
+    out += `<button type="button" class="cite-chip note-offset" data-audio="${match[2]}" data-audio-label="${escapeHtml(match[1])}">${escapeHtml(match[1])} ${match[2]}</button>`;
+    last = match.index + match[0].length;
+  }
+  return out + md(String(text).slice(last));
+}
 
 function recLang() {
   return state.language && state.language.length <= 12 ? state.language : 'en-US';
@@ -663,7 +742,8 @@ function updateStatus() {
 
 /* transcript */
 function pushTranscript(text, meta = {}) {
-  const entry = { text, at: Date.now(), ...meta };
+  const at = Date.now();
+  const entry = { text, at, ...meta, offset: cap.audioStart ? audioOffset(at) : null };
   state.session.transcript.push(entry);
   cap.words += text.split(/\s+/).filter(Boolean).length;
   const feed = $('transcript');
@@ -676,8 +756,8 @@ function pushTranscript(text, meta = {}) {
   scrollFeed(feed);
   maybeAutoAnswer(text);
   if (state.settings.autoNotes) {
-    cap.queue.push(text);
-    if (cap.queue.join(' ').length > 700) flushTranscript();
+    cap.queue.push({ text, offset: entry.offset });
+    if (cap.queue.map((item) => item.text).join(' ').length > 700) flushTranscript();
   }
   updateStatus();
 }
@@ -788,12 +868,14 @@ function startRecorder() {
     return;
   }
   const chunks = [];
+  const chunkStart = Date.now();
   rec.ondataavailable = (event) => {
     if (event.data && event.data.size) chunks.push(event.data);
   };
   rec.onstop = async () => {
     clearTimeout(cap.recTimer);
     const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+    keepAudio(blob, chunkStart);
     if (blob.size > 3000) await transcribeBlob(blob);
     if (cap.listenOn && !transcribeBlocked) startRecorder();
   };
@@ -819,6 +901,10 @@ async function startListening() {
     return;
   }
   cap.listenOn = true;
+  // A listen run is one recording: its offsets start at zero, and the last
+  // one is dropped rather than mixed into this one.
+  dropAudio();
+  cap.audioStart = Date.now();
   // iOS suspends the capture audio session the instant anything else claims it —
   // a lesson video with sound is enough — and the microphone track ends without
   // the page ever being told. Notice that and take the microphone back.
@@ -856,6 +942,7 @@ async function startListening() {
 
 function stopListening() {
   cap.listenOn = false;
+  cap.audioStart = 0;
   try {
     cap.recog?.stop();
   } catch {
@@ -1321,13 +1408,19 @@ async function analyseFrame(frame) {
 
 async function flushTranscript() {
   if (cap.flushing) return;
-  const pending = cap.queue.join('\n').trim();
+  const queued = cap.queue.splice(0, cap.queue.length);
+  const pending = queued.map((item) => item.text).join('\n').trim();
   if (!pending) return;
-  cap.queue = [];
   cap.flushing = true;
   try {
+    // The offsets travel with the fragment so the note can cite the moment it
+    // came from; the audio itself never leaves the device.
+    const stamps = queued.map((item) => item.offset).filter((value) => typeof value === 'number');
+    const range = stamps.length
+      ? `Recording offsets in this fragment: ${hms(Math.min(...stamps))} to ${hms(Math.max(...stamps))} of the lecture recording. Cite a moment as [lecture M:SS] using an offset inside that range; never invent one.`
+      : '';
     const res = await agent('note', {
-      text: `Live transcript chunk from class:\n\n${pending.slice(-6000)}`,
+      text: ['Live transcript chunk from class:', range, pending.slice(-6000)].filter(Boolean).join('\n\n'),
     });
     if (res.reply && res.reply.toLowerCase() !== 'nothing new') addNote(res.reply, 'transcript');
   } catch (error) {
@@ -1344,7 +1437,7 @@ function addNote(text, source = 'note') {
   feed.querySelector('.empty')?.remove();
   const div = document.createElement('div');
   div.className = 'line';
-  div.innerHTML = `<time>${clock()}</time>${md(text)}`;
+  div.innerHTML = `<time>${clock()}</time>${noteBody(text)}`;
   feed.appendChild(div);
   while (feed.children.length > 60) feed.firstElementChild.remove();
   scrollFeed(feed);
@@ -1367,7 +1460,7 @@ function hydrateFeeds() {
   for (const entry of state.session.notes.slice(-30)) {
     const div = document.createElement('div');
     div.className = 'line';
-    div.innerHTML = `<time>${clock(entry.at)}</time>${md(entry.text)}`;
+    div.innerHTML = `<time>${clock(entry.at)}</time>${noteBody(entry.text)}`;
     notes.appendChild(div);
   }
   if (!state.session.notes.length) notes.innerHTML = '<p class="empty">Notes appear here as it understands.</p>';
@@ -3306,6 +3399,11 @@ document.addEventListener('click', (event) => {
   const chip = event.target.closest?.('[data-cite]');
   if (chip) {
     openCitation(chip.dataset.cite, chip.dataset.locator || '');
+    return;
+  }
+  const stamp = event.target.closest?.('[data-audio]');
+  if (stamp) {
+    playNoteOffset(stamp.dataset.audio, stamp.dataset.audioLabel || 'lecture');
     return;
   }
   if (event.target.closest?.('#citeClose') || event.target.id === 'citeViewer') {

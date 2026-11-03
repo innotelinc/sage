@@ -11,7 +11,8 @@ export const MODES = {
     instructions: `You are being fed a fragment of a live class: a transcript chunk, a slide, a whiteboard, or a screenshot.
 Return 1-3 bullets capturing only what a student would write down: claims, definitions, numbers, formulas, exam hints ("this will be on the test"), and anything the instructor stressed or repeated.
 Mark exam hints with "EXAM:".
-If the fragment has no teachable content, return exactly: nothing new.`,
+If the fragment has no teachable content, return exactly: nothing new.
+When the fragment arrives with recording offsets, the note carries the moment it came from: append [lecture M:SS] to the bullet that claim belongs to, using an offset inside the range you were given. Never invent an offset, never cite one when no offsets were given, and never cite the recording for an aside.`,
   },
   answer: {
     label: 'Answer a question',

@@ -321,6 +321,7 @@ at all on an instance with no code and no sign-in.
 - **v4.1** — shipped: a kept turn keeps its photos — a question photographed in a dead spot is stored with its images in an IndexedDB store capped by total bytes and evicting oldest first, replayed once with the picture attached, and the images are dropped when the answer lands.
 - **v4.2** — shipped: a citation you can turn to — a PDF whose text streams line up with its pages is offered page by page, a grounded reply cites the page it used as [file p.N], and the page opens from the copy the course already holds; a citation to something never supplied is dropped rather than shown.
 - **v4.3** — shipped: exam rehearsal — a timed paper set from the course's own material, sat in the app with a clock that runs on the deadline rather than on the last tick, and marked question by question against the marks it set: no answer, hint or marking note appears before it is submitted, and each question comes back with the one thing that would have earned the rest.
+- **v4.4** — shipped: audio-only lectures — a lecture with no screen is taken by the microphone alone, each fragment reaches the notes with the offset range it covers, every note carries the moment it came from as [lecture M:SS], and the recording stays on the device so tapping that moment replays it from there; an offset that was never given is never cited.
 
 ---
 

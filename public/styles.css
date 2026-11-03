@@ -1298,3 +1298,7 @@ dialog.sheet form {
 .paper-answer { width: 100%; }
 .paper-mark { border-top: 1px solid var(--line); padding: 10px 0; }
 .paper-mark-head { display: flex; justify-content: space-between; gap: 10px; }
+
+/* audio-only lectures: the recording this device kept, replayed from a note's offset */
+.audio-player { width: 100%; margin: 10px 0 2px; height: 34px; }
+.note-offset { margin-left: 2px; }
