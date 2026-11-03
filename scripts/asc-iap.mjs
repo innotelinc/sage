@@ -1353,8 +1353,17 @@ async function withdrawReview(app) {
     data: { type: 'reviewSubmissions', id: live.id, attributes: { canceled: true } },
   });
   console.log(`  withdraw · submission now ${result?.data?.attributes?.state || 'unknown'}`);
-  const after = await iosVersion(app).catch(() => null);
-  console.log(`  withdraw · version now ${after?.attributes?.appStoreState || 'unknown'}`);
+  // Cancellation is a transition, not a switch. The version stays WAITING_FOR_REVIEW
+  // for a few seconds and refuses a new build until it settles, which is how the
+  // first attempt failed with INVALID_STATE on the build relationship.
+  const settle = async () => (await iosVersion(app).catch(() => null))?.attributes?.appStoreState || 'unknown';
+  let state = await settle();
+  console.log(`  withdraw · version now ${state}`);
+  for (let waited = 0; waited < 120000 && ['WAITING_FOR_REVIEW', 'IN_REVIEW'].includes(state); waited += 10000) {
+    await new Promise((done) => setTimeout(done, 10000));
+    state = await settle();
+    console.log(`  withdraw · version ${state} after ${(waited + 10000) / 1000}s`);
+  }
   return true;
 }
 
