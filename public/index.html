@@ -34,7 +34,7 @@
     <title>Sage · course agent</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=3.3.0" />
+    <link rel="stylesheet" href="/styles.css?v=3.4.0" />
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -80,8 +80,11 @@
           <button class="tab" data-tab="read" role="tab" id="nav-read" aria-controls="tab-read" aria-selected="false">
             <span class="tab-ico" aria-hidden="true">▤</span><span class="tab-label">Read</span><kbd>5</kbd>
           </button>
+          <button class="tab" data-tab="foundation" role="tab" id="nav-foundation" aria-controls="tab-foundation" aria-selected="false">
+            <span class="tab-ico" aria-hidden="true">▣</span><span class="tab-label">Foundation</span><kbd>6</kbd>
+          </button>
           <button class="tab" data-tab="memory" role="tab" id="nav-memory" aria-controls="tab-memory" aria-selected="false">
-            <span class="tab-ico" aria-hidden="true">✦</span><span class="tab-label">Memory</span><kbd>6</kbd>
+            <span class="tab-ico" aria-hidden="true">✦</span><span class="tab-label">Memory</span><kbd>7</kbd>
           </button>
         </nav>
 
@@ -227,6 +230,7 @@
               <button type="button" class="mini" id="btnClearAnswerFiles" hidden>clear photos</button>
             </div>
             <div class="thumbs" id="answerThumbs"></div>
+            <p class="mini muted foundation-hint" id="answerFoundationHint"></p>
             <button class="btn primary block" id="btnAnswer">Answer it</button>
             <div class="result" id="answerResult" hidden></div>
           </section>
@@ -246,6 +250,7 @@
               <span class="mini muted" id="quizFileCount"></span>
             </div>
             <div class="thumbs" id="quizThumbs"></div>
+            <p class="mini muted foundation-hint" id="quizFoundationHint"></p>
             <div class="actions">
               <button class="btn primary" id="btnQuizSolve">Solve all</button>
               <button class="btn ghost" id="btnQuizStop" disabled>Stop</button>
@@ -299,12 +304,35 @@
               <span id="readFilesLabel">＋ files, photos, screen recording</span>
             </label>
             <div class="thumbs" id="readThumbs"></div>
+            <p class="mini muted foundation-hint" id="readFoundationHint"></p>
             <textarea id="readPaste" rows="4" placeholder="…or paste text / notes here"></textarea>
             <button class="btn primary block" id="btnRead">Read &amp; extract</button>
             <div class="result" id="readResult" hidden><div class="prose" id="readOutput"></div></div>
           </section>
 
           <!-- ── MEMORY ───────────────────────────────────────────── -->
+          <!-- foundation documents: the material this course answers from -->
+          <section class="panel" id="tab-foundation" role="tabpanel" aria-labelledby="nav-foundation" tabindex="-1">
+            <div class="page-head">
+              <h1>Foundation documents</h1>
+              <p class="page-sub">The PDF, handout, notes, screenshots or recording this course answers from. Each one is read once, then used by Answer, Quiz and Read.</p>
+            </div>
+            <label class="file-btn block">
+              <input type="file" id="foundationFiles" accept=".pdf,.txt,.md,.csv,.vtt,.srt,.doc,.docx,image/*,audio/*" multiple hidden />
+              <span id="foundationFilesLabel">＋ PDF, text, doc, screenshot or audio</span>
+            </label>
+            <div class="field-row">
+              <span class="mini muted" id="foundationStatus">Nothing added yet.</span>
+              <button type="button" class="mini" id="btnFoundationClear" hidden>remove all</button>
+            </div>
+            <div id="foundationList" class="stack"></div>
+            <p class="mini muted">
+              A PDF or Word file is read for its text here; a screenshot is read by the vision model; a recording is
+              transcribed. A scanned PDF with no text layer needs its pages added as images instead. Documents belong
+              to the course you are in, so switching course switches the material.
+            </p>
+          </section>
+
           <section class="panel" id="tab-memory" role="tabpanel" aria-labelledby="nav-memory" tabindex="-1">
             <div class="page-head">
               <h1>Memory</h1>
@@ -594,7 +622,7 @@
       <h3 id="shortcutsTitle">Keyboard</h3>
       <dl class="shortcut-list">
         <dt><kbd>⌘</kbd><kbd>K</kbd></dt><dd>Command palette</dd>
-        <dt><kbd>1</kbd>…<kbd>6</kbd></dt><dd>Jump to Live, Answer, Quiz, Essay, Read, Memory</dd>
+        <dt><kbd>1</kbd>…<kbd>7</kbd></dt><dd>Jump to Live, Answer, Quiz, Essay, Read, Foundation, Memory</dd>
         <dt><kbd>/</kbd></dt><dd>Focus the question box on the current tab</dd>
         <dt><kbd>s</kbd></dt><dd>Start or stop study mode</dd>
         <dt><kbd>.</kbd></dt><dd>Stop all capture</dd>
@@ -607,7 +635,7 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=3.3.0"></script>
+    <script type="module" src="/app.js?v=3.4.0"></script>
     <script type="module" src="/shell.js?v=3.3.0"></script>
     <script type="module" src="/profile.js?v=3.3.0"></script>
   </body>

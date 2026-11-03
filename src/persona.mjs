@@ -93,6 +93,38 @@ const DEPTH_HINT = {
   detailed: 'Be thorough: answer, reasoning, and the edge cases a marker would test.',
 };
 
+/**
+ * The foundation documents, as prompt text.
+ *
+ * The budget is shared evenly rather than filled with whichever document came
+ * first: a course with six handouts needs each of them represented, and the head
+ * and tail of a long one says more about what it covers than its first page.
+ */
+export const FOUNDATION_BUDGET = 14000;
+
+export function foundationBlock(sources, budget = FOUNDATION_BUDGET) {
+  const docs = (Array.isArray(sources) ? sources : [])
+    .map((doc) => ({
+      name: String(doc?.name || 'document').slice(0, 120),
+      kind: String(doc?.kind || 'text').slice(0, 24),
+      text: String(doc?.text || ''),
+    }))
+    .filter((doc) => doc.text.trim());
+  if (!docs.length) return '';
+
+  const share = Math.max(1200, Math.floor(budget / docs.length));
+  const excerpts = docs.map((doc) => {
+    const body = doc.text.trim();
+    const excerpt =
+      body.length > share
+        ? `${body.slice(0, Math.floor(share * 0.7))}\n[… ${(body.length - share).toLocaleString()} characters omitted …]\n${body.slice(-Math.floor(share * 0.3))}`
+        : body;
+    return `### ${doc.name} (${doc.kind})\n${excerpt}`;
+  });
+
+  return [`Foundation documents your user supplied (${docs.length}):`, ...excerpts].join('\n\n');
+}
+
 export function buildSystemPrompt(opts = {}) {
   const {
     mode = 'note',
@@ -100,6 +132,7 @@ export function buildSystemPrompt(opts = {}) {
     persona = {},
     language = '',
     history = [],
+    sources = [],
   } = opts;
 
   const spec = MODES[mode] || MODES.note;
@@ -145,6 +178,16 @@ export function buildSystemPrompt(opts = {}) {
   if (history.length) {
     parts.push(
       `Recent class context, oldest first:\n${history.slice(-6).map((h) => `- ${String(h).slice(0, 400)}`).join('\n')}`
+    );
+  }
+
+  const foundation = foundationBlock(sources);
+  if (foundation) {
+    parts.push(
+      [
+        "Grounding rule: the foundation documents below are the course's own material and they outrank your general knowledge here. Answer from them first, in their vocabulary, and name the file you are using. If they do not cover the question, say so in one clause and then use general knowledge — never let general knowledge quietly override a document, and never invent a page, section or quotation that is not in them.",
+        foundation,
+      ].join('\n\n')
     );
   }
 

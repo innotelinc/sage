@@ -8,6 +8,7 @@ import { handleWorkspace } from './workspace.mjs';
 import { openSession, closeSession, accepts, recordFrame, readNotes } from './broadcast.mjs';
 import { handleStore } from './store.mjs';
 import { handleIap } from './iap.mjs';
+import { handleSources } from './sources.mjs';
 import { publicPlans } from './plans.mjs';
 import { synthesize, ttsConfig } from './tts.mjs';
 
@@ -190,10 +191,22 @@ async function handleChat(body, cfg) {
   const memory = Array.isArray(body.memory) ? body.memory.slice(-60).map((m) => String(m).slice(0, 300)) : [];
   const history = Array.isArray(body.history) ? body.history.filter((h) => typeof h === 'string').slice(-6) : [];
   const persona = body.persona && typeof body.persona === 'object' ? body.persona : {};
+  // The material the course answers from. It arrives as text — a PDF's layer, a
+  // transcript, notes — so this is a plain prompt fact, not a second upload.
+  const sources = Array.isArray(body.sources)
+    ? body.sources
+        .filter((doc) => doc && typeof doc.text === 'string' && doc.text.trim())
+        .slice(0, 8)
+        .map((doc) => ({
+          name: String(doc.name || 'document').slice(0, 120),
+          kind: String(doc.kind || 'text').slice(0, 24),
+          text: String(doc.text).slice(0, 60000),
+        }))
+    : [];
 
   if (!text && !images.length) return json({ error: 'empty', message: 'Nothing to work with.' }, 400);
 
-  const system = buildSystemPrompt({ mode, memory, persona, history, language: body.language || '' });
+  const system = buildSystemPrompt({ mode, memory, persona, history, sources, language: body.language || '' });
   const userContent = images.length
     ? [
         { type: 'text', text: text || 'Read this material and respond according to the current task.' },
@@ -630,6 +643,13 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
   // verification and the minting live here, behind the same gate as a checkout.
   if (url.pathname === '/api/iap/config' || url.pathname === '/api/iap/purchase') {
     return handleIap(request, url, env, json);
+  }
+
+  // A foundation document is read once, here: the text comes back to the app and
+  // travels with the course after that, so grounding a question never means
+  // uploading the file again.
+  if (url.pathname === '/api/sources') {
+    return handleSources(request, url, env, cfg, json);
   }
 
   // Buying a session happens in the app now; the payment itself stays Magnate's.

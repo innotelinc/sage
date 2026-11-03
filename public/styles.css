@@ -1260,3 +1260,19 @@ dialog.sheet form {
   .billing-card .btn { width: 100%; }
   .avatar { flex-basis: 48px; width: 48px; height: 48px; font-size: 17px; }
 }
+
+
+/* ── foundation documents ─────────────────────────────────── */
+.doc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.06);
+}
+.doc-row .doc-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.doc-row .doc-body strong { font-weight: 600; font-size: 0.92rem; overflow-wrap: anywhere; }
+.doc-row .check { flex: 0 0 auto; }
+.foundation-hint:empty { display: none; }

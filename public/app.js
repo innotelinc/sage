@@ -61,6 +61,7 @@ const defaultState = () => ({
     keyExpiresAt: '',
   },
   memory: [],
+  foundation: [],
   evolution: [],
   // The record a revision sheet and a study pack are built from.
   history: { answers: [], quizzes: [], essays: [], sources: [] },
@@ -100,6 +101,7 @@ function defaultCourse(seed = {}) {
     memory: Array.isArray(seed.memory) ? seed.memory : [],
     evolution: Array.isArray(seed.evolution) ? seed.evolution : [],
     history: normalizeHistory(seed.history),
+    foundation: Array.isArray(seed.foundation) ? seed.foundation : [],
     session: { transcript: [], notes: [], ...(seed.session || {}) },
   };
 }
@@ -136,6 +138,7 @@ function stashActive() {
   course.evolution = state.evolution;
   course.history = state.history;
   course.session = state.session;
+  course.foundation = state.foundation;
 }
 
 function hydrateActive() {
@@ -146,6 +149,7 @@ function hydrateActive() {
   state.evolution = course.evolution;
   state.history = course.history;
   state.session = course.session;
+  state.foundation = course.foundation;
 }
 
 let state = defaultState();
@@ -276,6 +280,7 @@ function adoptWorkspace(workspace, savedAt) {
   hydrateFeeds();
   updateStatus();
   renderPackStatus();
+  renderFoundation();
   return true;
 }
 
@@ -543,6 +548,7 @@ async function agent(mode, { text = '', images = [], maxTokens } = {}) {
       memory: state.memory,
       language: state.language,
       persona: state.persona,
+      sources: foundationFor(mode),
     },
   });
   if (res.notes?.length) addMemory(res.notes, 'learned');
@@ -1446,6 +1452,7 @@ function switchCourse(id, options = {}) {
   renderMemory();
   hydrateFeeds();
   renderPackStatus();
+  renderFoundation();
   const name = $('agentName');
   if (name) name.textContent = state.persona.name || 'Sage';
   if (!options.silent) {
@@ -1466,6 +1473,7 @@ function newCourse() {
   renderMemory();
   hydrateFeeds();
   renderPackStatus();
+  renderFoundation();
   openSettings();
   toast('New course — name it, then Save.');
 }
@@ -1621,6 +1629,7 @@ function recordHistory(kind, entry) {
   trimHistory();
   persist();
   renderPackStatus();
+  renderFoundation();
 }
 
 /* Merge, never replace: the device being imported into may already know things
@@ -3019,6 +3028,126 @@ function saveSettings() {
   if (state.settings.accessCode !== previousCode) syncWorkspace();
 }
 
+/* ── foundation documents ──────────────────────────────────── */
+/* The material a course answers from. It is read once, on the server — a PDF's
+   text layer, a Word document's paragraphs, a screenshot through the vision
+   model, a recording through transcription — and kept with the course, so
+   Answer, Quiz and Read are grounded without uploading anything again. */
+const FOUNDATION_TOTAL_CHARS = 400000;
+
+function normalizeFoundation(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((doc) => doc && typeof doc.text === 'string' && doc.text.trim())
+    .map((doc) => ({
+      id: String(doc.id || uid('f')),
+      name: String(doc.name || 'document').slice(0, 120),
+      kind: String(doc.kind || 'text').slice(0, 24),
+      chars: Number(doc.chars) || doc.text.length,
+      note: String(doc.note || '').slice(0, 200),
+      on: doc.on !== false,
+      text: doc.text,
+    }))
+    .slice(0, 12);
+}
+
+/* Only the turns that are grounded: a live note is about the room, not the
+   handout, and an essay carries its own material in the brief. */
+function foundationFor(mode) {
+  if (!['answer', 'quiz', 'read'].includes(mode)) return [];
+  return (state.foundation || [])
+    .filter((doc) => doc.on !== false && doc.text)
+    .slice(0, 8)
+    .map((doc) => ({ name: doc.name, kind: doc.kind, text: doc.text }));
+}
+
+function foundationSummary() {
+  const live = (state.foundation || []).filter((doc) => doc.on !== false);
+  if (!live.length) return '';
+  return `Answering from ${live.length} foundation document${live.length === 1 ? '' : 's'} · manage in Foundation`;
+}
+
+function renderFoundation() {
+  const list = $('foundationList');
+  if (!list) return;
+  const docs = normalizeFoundation(state.foundation);
+  state.foundation = docs;
+  list.innerHTML = '';
+  if (!docs.length) {
+    const empty = document.createElement('p');
+    empty.className = 'mini muted';
+    empty.textContent = 'Nothing yet. Add the PDF, handout, notes, screenshots or recording this course answers from.';
+    list.appendChild(empty);
+  }
+  for (const doc of docs) {
+    const row = document.createElement('div');
+    row.className = 'doc-row';
+    row.innerHTML = `
+      <label class="check"><input type="checkbox" data-doc="${doc.id}" ${doc.on ? 'checked' : ''} /> use</label>
+      <div class="doc-body">
+        <strong>${escapeHtml(doc.name)}</strong>
+        <span class="mini muted">${escapeHtml(doc.kind)} · ${Number(doc.chars || 0).toLocaleString()} characters${doc.note ? ` · ${escapeHtml(doc.note)}` : ''}</span>
+      </div>
+      <button type="button" class="mini" data-drop="${doc.id}">remove</button>
+    `;
+    list.appendChild(row);
+  }
+  const status = $('foundationStatus');
+  if (status) status.textContent = docs.length ? `${docs.filter((doc) => doc.on !== false).length} of ${docs.length} in use` : 'Nothing added yet.';
+  const clear = $('btnFoundationClear');
+  if (clear) clear.hidden = !docs.length;
+  for (const id of ['answerFoundationHint', 'quizFoundationHint', 'readFoundationHint']) {
+    const hint = $(id);
+    if (hint) hint.textContent = foundationSummary();
+  }
+}
+
+async function onFoundationFiles(event) {
+  const files = [...event.target.files].slice(0, 6);
+  event.target.value = '';
+  if (!files.length) return;
+  const status = $('foundationStatus');
+  const label = $('foundationFilesLabel');
+  label.textContent = 'reading…';
+  for (const file of files) {
+    status.textContent = `Reading ${file.name}…`;
+    try {
+      const form = new FormData();
+      form.append('file', file, file.name);
+      const res = await api('/api/sources', { form });
+      const doc = (res.docs || [])[0];
+      if (!doc) throw new Error('nothing came back for that file');
+      if (doc.error) throw new Error(doc.error);
+      if (!doc.text || !doc.text.trim()) {
+        toast(`${file.name}: ${doc.note || 'no text found — add screenshots of the pages instead.'}`, 'error');
+        continue;
+      }
+      state.foundation = normalizeFoundation([...(state.foundation || []), { ...doc, id: uid('f'), on: true }]);
+      let total = state.foundation.reduce((sum, entry) => sum + entry.text.length, 0);
+      while (total > FOUNDATION_TOTAL_CHARS && state.foundation.length > 1) {
+        total -= state.foundation[0].text.length;
+        state.foundation = state.foundation.slice(1);
+      }
+      persist();
+      renderFoundation();
+      toast(`${doc.name || file.name} added — ${Number(doc.chars || 0).toLocaleString()} characters${doc.note ? `. ${doc.note}` : ''}`);
+    } catch (error) {
+      toast(`${file.name}: ${error.message}`, 'error');
+    }
+  }
+  label.textContent = '＋ PDF, text, doc, screenshot or audio';
+  renderFoundation();
+}
+
+function clearFoundation() {
+  if (!(state.foundation || []).length) return;
+  if (!confirm('Remove every foundation document from this course?')) return;
+  state.foundation = [];
+  persist();
+  renderFoundation();
+  toast('Foundation documents cleared.');
+}
+
 async function testConnection() {
   const button = $('btnTestConn');
   busy(button, true);
@@ -3182,6 +3311,24 @@ function bind() {
 
   $('readFiles').onchange = onReadFiles;
   $('btnRead').onclick = runRead;
+
+  $('foundationFiles').onchange = onFoundationFiles;
+  $('btnFoundationClear').onclick = clearFoundation;
+  $('foundationList').addEventListener('click', (event) => {
+    const drop = event.target.dataset?.drop;
+    if (!drop) return;
+    state.foundation = (state.foundation || []).filter((doc) => doc.id !== drop);
+    persist();
+    renderFoundation();
+  });
+  $('foundationList').addEventListener('change', (event) => {
+    const id = event.target.dataset?.doc;
+    if (!id) return;
+    state.foundation = (state.foundation || []).map((doc) => (doc.id === id ? { ...doc, on: event.target.checked } : doc));
+    persist();
+    renderFoundation();
+  });
+  renderFoundation();
 
   $('btnEvolve').onclick = evolve;
   $('btnExport').onclick = exportMemory;
