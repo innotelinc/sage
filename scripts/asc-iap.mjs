@@ -30,6 +30,7 @@ const ATTACH = /^(1|true|yes)$/i.test(String(process.env.ATTACH || ''));
 const LISTING = /^(1|true|yes)$/i.test(String(process.env.LISTING || ''));
 /** The last step, and the only one that puts the app in front of App Review. */
 const PUBLISH = /^(1|true|yes)$/i.test(String(process.env.PUBLISH || ''));
+const WITHDRAW = /^(1|true|yes)$/i.test(String(process.env.WITHDRAW || ''));
 const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+$/, '');
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
 const PROBE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_PROBE || ''));
@@ -1321,6 +1322,31 @@ async function ensureListing(app) {
  * an empty one is refused by Apple anyway. This checks there is something to send
  * before sending it, then says what state came back.
  */
+/**
+ * Taking a version out of review is a DELETE on its submission. Apple cancels the
+ * submission and hands the version back editable — build, listing and review
+ * contact intact — so a newer build can be swapped in and resubmitted. PATCHing
+ * submitted:false is refused; only one of (platform, canceled, submitted) is
+ * allowed per request, and canceled is for never-submitted drafts.
+ */
+async function withdrawReview(app) {
+  const drafts = await draftsFor(app);
+  const live = (drafts || []).find((item) => ['WAITING_FOR_REVIEW', 'IN_REVIEW'].includes(item.attributes?.state));
+  if (!live) {
+    console.log('  withdraw · nothing is in review');
+    return false;
+  }
+  const version = await iosVersion(app).catch(() => null);
+  console.log(
+    `  withdraw · submission ${live.id} · ${live.attributes?.state} · version ` +
+      `${version?.attributes?.versionString} ${version?.attributes?.appStoreState}`
+  );
+  await call('DELETE', `/v1/reviewSubmissions/${live.id}`);
+  const after = await iosVersion(app).catch(() => null);
+  console.log(`  withdraw · cancelled · version now ${after?.attributes?.appStoreState || 'unknown'}`);
+  return true;
+}
+
 async function publishForReview(app) {
   const drafts = await draftsFor(app);
   const open = (drafts || []).find((item) => item.attributes?.state === 'READY_FOR_REVIEW');
@@ -1354,6 +1380,7 @@ async function publishForReview(app) {
 const app = await resolveAppId();
 console.log(`App ${BUNDLE} (${app}) · base territory ${TERRITORY}`);
 await report(app);
+if (WITHDRAW) await withdrawReview(app);
 if (ATTACH) await attachVersion(app);
 if (LISTING) await ensureListing(app);
 if (PUBLISH) await publishForReview(app);

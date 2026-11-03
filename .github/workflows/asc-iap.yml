@@ -29,6 +29,10 @@ on:
         description: Attach the newest valid build to version 1.0 and add that version to the open submission
         type: boolean
         default: false
+      withdraw:
+        description: Take version 1.0 out of review so a newer build can be attached
+        type: boolean
+        default: false
       publish:
         description: Submit the draft to App Review — the step that actually publishes
         type: boolean
@@ -57,6 +61,7 @@ jobs:
           SUBMIT: ${{ inputs.submit }}
           ATTACH: ${{ inputs.attach }}
           LISTING: ${{ inputs.listing }}
+          WITHDRAW: ${{ inputs.withdraw }}
           PUBLISH: ${{ inputs.publish }}
           REPLACE_SHOTS: ${{ inputs.reshoot }}
           APP_STORE_CREATIVE: ${{ inputs.creative }}
