@@ -469,7 +469,7 @@ async function readiness(app) {
 async function report(app) {
   const line = (label, value) => console.log(`  ${label} · ${value}`);
   try {
-    const versions = await call('GET', `/v1/apps/${app}/appStoreVersions?limit=20&include=build&fields[appStoreVersions]=versionString,platform,appStoreState,createdDate,releaseType`);
+    const versions = await call('GET', `/v1/apps/${app}/appStoreVersions?limit=20&include=build&fields[appStoreVersions]=versionString,platform,appStoreState,createdDate,releaseType,build`);
     const rows = versions?.data || [];
     if (!rows.length) line('app versions', 'NONE — nothing to attach to a submission');
     for (const version of rows) {
