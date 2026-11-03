@@ -13,7 +13,7 @@ Three promises define it, and each one is a milestone rather than a slogan:
 Everything else in 4.x is downstream of those three. If a feature does not make one of them true, it waits.
 
 **Where this stands:** 4.0 is shipped in 4.0.0 — the ReplayKit broadcast extension, the Android
-foreground service and the server session that joins them. 4.1 is shipped in 4.1.0; 4.2 and 4.3 follow.
+foreground service and the server session that joins them. 4.1 shipped in 4.1.0 and 4.2 in 4.2.0; 4.3 follows.
 
 ## 4.0 — capture that survives the background *(shipped in 4.0.0)*
 
@@ -49,7 +49,7 @@ basement tutorial room.
 **Done means:** airplane mode, photograph a question, kill the tab, restore the network, reopen — the answer
 arrives with the photo that was taken, in the right tab, once.
 
-## 4.2 — citations you can turn to
+## 4.2 — citations you can turn to *(shipped in 4.2.0)*
 
 `src/sources.mjs` already extracts text with page and paragraph boundaries; the reply only reports file
 names. The next step is to keep the anchors.

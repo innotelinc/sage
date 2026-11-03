@@ -200,7 +200,10 @@ async function handleChat(body, cfg) {
         .map((doc) => ({
           name: String(doc.name || 'document').slice(0, 120),
           kind: String(doc.kind || 'text').slice(0, 24),
-          text: String(doc.text).slice(0, 60000),
+          text: String(doc.text),
+          // Where the document says each passage sits, if extraction knew. This is
+          // what turns a file name into a page a citation can open.
+          segments: Array.isArray(doc.segments) ? doc.segments.slice(0, 120) : [].slice(0, 60000),
         }))
     : [];
 
@@ -292,6 +295,24 @@ async function handleChat(body, cfg) {
     mode,
     model,
     grounded: sources.map((doc) => doc.name),
+    // Every page a reply actually pointed at, matched back to a document it was
+    // given. A bracketed page for something that was never supplied is dropped
+    // rather than passed to the app as a citation it cannot open.
+    citations: (() => {
+      const found = [];
+      const re = /\[([^[\]\n]{1,120}?)\s+p\.(\d{1,4})\]/g;
+      let match;
+      while ((match = re.exec(String(visible || '')))) {
+        const asked = match[1].trim().toLowerCase();
+        const doc = sources.find((entry) => String(entry.name || '').toLowerCase() === asked);
+        if (!doc) continue;
+        const locator = `p.${Number(match[2])}`;
+        if (!found.some((item) => item.name === doc.name && item.locator === locator)) {
+          found.push({ name: doc.name, locator });
+        }
+      }
+      return found;
+    })(),
     usedVision: images.length > 0,
     usage: data?.usage || null,
   });

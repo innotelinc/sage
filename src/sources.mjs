@@ -169,7 +169,15 @@ export function extractPdfText(bytes, zlib = null) {
       note: 'little or no text layer — a scanned PDF cannot be read here; add screenshots of the pages instead',
     };
   }
-  return { text, pages, note: '' };
+  // A page number is only worth printing if it is true. Generated PDFs usually draw
+  // one content stream per page, and then stream order is page order; when the counts
+  // disagree (forms, reused streams) the document is offered whole rather than sliced
+  // into pages it does not have.
+  const segments =
+    pages > 1 && chunks.length === pages
+      ? chunks.map((chunk, index) => ({ locator: `p.${index + 1}`, text: tidy(chunk) }))
+      : [{ locator: 'whole document', text }];
+  return { text, pages, note: '', segments: segments.filter((segment) => segment.text) };
 }
 
 /* ── docx ──────────────────────────────────────────────────── */
@@ -331,8 +339,8 @@ export async function readDocument({ name, mime, bytes }, cfg) {
   }
 
   if (type === 'application/pdf' || ext === 'pdf') {
-    const { text, pages, note } = extractPdfText(buffer, await zlibModule());
-    return { kind: 'pdf', text, pages, note };
+    const read = extractPdfText(buffer, await zlibModule());
+    return { kind: 'pdf', text: read.text, pages: read.pages, note: read.note, segments: read.segments };
   }
 
   if (ext === 'docx' || type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
@@ -410,6 +418,10 @@ export async function handleSources(request, url, env, cfg, json) {
         chars: full.length,
         truncated: full.length > MAX_DOC_CHARS,
         pages: read.pages || 0,
+        // Where a reply may point: a page for a PDF whose streams line up with its
+        // pages, or one segment for everything else. Capped so a big document does
+        // not ship twice over the wire.
+        segments: Array.isArray(read.segments) ? read.segments.slice(0, 120) : [],
         note: read.note || '',
       });
     } catch (error) {

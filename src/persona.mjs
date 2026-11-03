@@ -109,13 +109,26 @@ export function foundationBlock(sources, budget = FOUNDATION_BUDGET) {
       name: String(doc?.name || 'document').slice(0, 120),
       kind: String(doc?.kind || 'text').slice(0, 24),
       text: String(doc?.text || ''),
+      // Where the document says a passage sits, so a reply can name it and the app
+      // can open it. Only extraction that knew the pages fills this in.
+      segments: (Array.isArray(doc?.segments) ? doc.segments : [])
+        .filter((segment) => segment && String(segment.text || '').trim())
+        .map((segment) => ({
+          locator: String(segment.locator || 'whole document').slice(0, 40),
+          text: String(segment.text),
+        })),
     }))
     .filter((doc) => doc.text.trim());
   if (!docs.length) return '';
 
   const share = Math.max(1200, Math.floor(budget / docs.length));
   const excerpts = docs.map((doc) => {
-    const body = doc.text.trim();
+    // A labelled page is what a citation can point at; an unlabelled document is
+    // offered whole, because inventing pages would make every citation a guess.
+    const body = (doc.segments.length
+      ? doc.segments.map((segment) => `[${segment.locator}] ${segment.text.trim()}`).join('\n\n')
+      : doc.text
+    ).trim();
     const excerpt =
       body.length > share
         ? `${body.slice(0, Math.floor(share * 0.7))}\n[… ${(body.length - share).toLocaleString()} characters omitted …]\n${body.slice(-Math.floor(share * 0.3))}`
@@ -186,7 +199,7 @@ export function buildSystemPrompt(opts = {}) {
   if (foundation) {
     parts.push(
       [
-        "Grounding rule: the foundation documents below are the course's own material and they outrank your general knowledge here. Answer from them first, in their vocabulary, and name the file you are using. If they do not cover the question, say so in one clause and then use general knowledge — never let general knowledge quietly override a document, and never invent a page, section or quotation that is not in them.",
+        "Grounding rule: the foundation documents below are the course's own material and they outrank your general knowledge here. Answer from them first, in their vocabulary, and name the file you are using. If they do not cover the question, say so in one clause and then use general knowledge — never let general knowledge quietly override a document, and never invent a page, section or quotation that is not in them. Where a passage is labelled [p.N], cite it as [file name p.N] at the end of the sentence that uses it, using the file's exact name as given; cite only pages you were actually shown.",
         foundation,
       ].join('\n\n')
     );

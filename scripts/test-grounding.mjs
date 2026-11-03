@@ -21,7 +21,7 @@ globalThis.fetch = async (url, init = {}) => {
   seenPrompt = (body.messages || []).map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n');
   return new Response(
     JSON.stringify({
-      choices: [{ message: { content: '{"answer":"Osmosis.","working":"Water moves to the solute.","confidence":0.9,"why":"from the handout","sayThis":"Osmosis."}' } }],
+      choices: [{ message: { content: '{"answer":"Osmosis.","working":"Water moves to the solute [lecture-3.pdf p.2].","confidence":0.9,"why":"from the handout","sayThis":"Osmosis."}' } }],
       usage: { total_tokens: 10 },
     }),
     { status: 200, headers: { 'content-type': 'application/json' } }
@@ -37,7 +37,14 @@ const post = (mode) =>
       body: JSON.stringify({
         mode,
         text: 'What is osmosis?',
-        sources: [{ name: 'lecture-3.pdf', kind: 'pdf', text: 'Osmosis moves water across a semipermeable membrane.' }],
+        sources: [
+          {
+            name: 'lecture-3.pdf',
+            kind: 'pdf',
+            text: 'Osmosis moves water across a semipermeable membrane.',
+            segments: [{ locator: 'p.2', text: 'Osmosis moves water across a semipermeable membrane.' }],
+          },
+        ],
       }),
     }),
     { AI_API_KEY: 'stub', AI_CHAT_MODEL: 'stub/chat' },
@@ -51,6 +58,11 @@ assert.equal(quiz.status, 200);
 assert.deepEqual(quizBody.grounded, ['lecture-3.pdf'], 'the reply names the document');
 assert.match(seenPrompt, /Osmosis moves water across a semipermeable membrane/);
 assert.match(seenPrompt, /Grounding rule/);
+// A labelled page is what a citation can point at, so the prompt has to carry it.
+assert.match(seenPrompt, /\[p\.2\]/, 'the page label reaches the prompt');
+assert.match(seenPrompt, /\[file name p\.N\]/, 'the model is told how to cite');
+assert.deepEqual(quizBody.citations, [{ name: 'lecture-3.pdf', locator: 'p.2' }], 'the cited page comes back');
+assert.match(seenPrompt, /Osmosis moves water across a semipermeable membrane/);
 
 const essay = await post('essay');
 const essayBody = await essay.json();

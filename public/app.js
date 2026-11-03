@@ -3097,6 +3097,15 @@ function normalizeFoundation(raw) {
       name: String(doc.name || 'document').slice(0, 120),
       kind: String(doc.kind || 'text').slice(0, 24),
       chars: Number(doc.chars) || doc.text.length,
+      // Where the document says each passage sits, when extraction knew. Kept with
+      // the course so a citation opens without re-reading the file.
+      segments: (Array.isArray(doc.segments) ? doc.segments : [])
+        .filter((segment) => segment && String(segment.text || '').trim())
+        .slice(0, 120)
+        .map((segment) => ({
+          locator: String(segment.locator || 'whole document').slice(0, 40),
+          text: String(segment.text),
+        })),
       note: String(doc.note || '').slice(0, 200),
       on: doc.on !== false,
       text: doc.text,
@@ -3111,7 +3120,7 @@ function foundationFor(mode) {
   return (state.foundation || [])
     .filter((doc) => doc.on !== false && doc.text)
     .slice(0, 8)
-    .map((doc) => ({ name: doc.name, kind: doc.kind, text: doc.text }));
+    .map((doc) => ({ name: doc.name, kind: doc.kind, text: doc.text, segments: doc.segments || [] }));
 }
 
 function foundationSummary() {
@@ -3122,9 +3131,49 @@ function foundationSummary() {
 
 function groundedNote(res) {
   const names = Array.isArray(res?.grounded) ? res.grounded.filter(Boolean) : [];
-  if (!names.length) return '';
-  return `<div class="mini muted grounded">grounded in ${escapeHtml(names.join(', '))}</div>`;
+  const cites = Array.isArray(res?.citations) ? res.citations.filter((cite) => cite && cite.name) : [];
+  if (!names.length && !cites.length) return '';
+  if (!cites.length) return `<div class="mini muted grounded">grounded in ${escapeHtml(names.join(', '))}</div>`;
+  // A page is only worth a chip if the app can open it, which is why the server
+  // drops any citation that does not match a document it was given.
+  const chips = cites
+    .map((cite) => {
+      const where = cite.locator && cite.locator !== 'whole document' ? ` · ${cite.locator}` : '';
+      return `<button type="button" class="cite-chip" data-cite="${escapeHtml(cite.name)}" data-locator="${escapeHtml(cite.locator || '')}">${escapeHtml(cite.name)}${escapeHtml(where)}</button>`;
+    })
+    .join(' ');
+  return `<div class="mini muted grounded">grounded in ${chips}</div>`;
 }
+
+/* Turning to the page: the cited passage, from the copy this course already holds. */
+function openCitation(name, locator) {
+  const viewer = $('citeViewer');
+  if (!viewer) return;
+  const doc = (state.foundation || []).find((entry) => entry.name === name);
+  $('citeTitle').textContent = locator && locator !== 'whole document' ? `${name} · ${locator}` : name;
+  const segments = Array.isArray(doc?.segments) && doc.segments.length
+    ? doc.segments
+    : [{ locator: 'whole document', text: doc?.text || 'That document is no longer part of this course.' }];
+  const shown = locator && locator !== 'whole document'
+    ? segments.filter((segment) => segment.locator === locator)
+    : segments;
+  $('citeBody').innerHTML = (shown.length ? shown : segments)
+    .map((segment) => `<div class="cite-seg"><span class="cite-loc">${escapeHtml(segment.locator)}</span><pre>${escapeHtml(String(segment.text || '').slice(0, 8000))}</pre></div>`)
+    .join('');
+  viewer.hidden = false;
+}
+
+document.addEventListener('click', (event) => {
+  const chip = event.target.closest?.('[data-cite]');
+  if (chip) {
+    openCitation(chip.dataset.cite, chip.dataset.locator || '');
+    return;
+  }
+  if (event.target.closest?.('#citeClose') || event.target.id === 'citeViewer') {
+    const viewer = $('citeViewer');
+    if (viewer) viewer.hidden = true;
+  }
+});
 
 function renderFoundation() {
   const list = $('foundationList');
