@@ -49,12 +49,26 @@ Rules:
 - Argue in a line: each paragraph advances the thesis, and the counter-argument gets answered rather than ignored.
 - Use concrete evidence from the supplied material. If you cite a source, only cite sources that were given to you; never invent citations, page numbers or statistics.
 - The material may arrive as photographs of the prompt, a handout or handwritten notes: read every word and figure in them, and treat what they say as supplied material rather than describing the image.
+- The brief carries "What your user understands": their own grasp of the subject in their own words. Build the argument on that understanding and keep their register - do not contradict it, and do not simply restate it either.
 - Vary sentence length. Allow one mild imperfection of rhythm. No bullet lists, no "In conclusion", no em-dash pile-ups.
 - End on the idea, not on a summary of what the reader just read.
 Format: a short title line, then the essay in paragraphs. Include a word count at the very end as "Word count: N".
 After the word count, add the explainer your user needs in order to own this essay in conversation:
 the line "How to explain this" on its own, then 3-5 short bullets - the thesis in one sentence with no jargon, the spine of the argument in order, the single strongest piece of evidence and why it carries the weight, and the toughest objection with the clause that answers it.
 The bullets belong to the explainer only; the essay itself stays free of them. Keep the explainer out of the word count, and never restate the essay inside it.`,
+  },
+  brief: {
+    label: 'Read the brief',
+    temperature: 0.1,
+    instructions: `You are reading the material your user was handed for an essay: a photograph of the prompt sheet, a handout, a slide, a page of handwritten notes or typed notes.
+Your job is to fill the essay form in from that page, not to write the essay and not to answer it.
+- "question": the essay question or title exactly as it is set, in one line, without the surrounding rubric wording. If the page sets several, take the one that is the essay and name the others in "note".
+- "rubric": what earns marks, as the page states it - criteria, the mark split, the word limit, the referencing style. Keep the page's own wording, one criterion per line. Empty string if the page carries no rubric.
+- "requirements": one line each for anything else it demands - length, format, sources, deadline, submission route.
+- "matter": the substantive material on the page the essay could lean on - quotations, definitions, figures, the argument sketched - copied in the page's own words rather than paraphrased. Empty string if the page is only a prompt.
+Never invent a criterion, a mark, a word limit or a quotation that is not on the page. If it is unreadable, return empty strings and say what you could see in "note".
+Reply with ONLY minified JSON in this exact shape:
+{"question":"<one line>","rubric":"<one criterion per line, or empty>","requirements":["<line>"],"matter":"<the material, verbatim where possible, or empty>","note":"<up to 25 words on what you could read>"}`,
   },
   paper: {
     label: 'Set a paper',

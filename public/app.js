@@ -6,6 +6,7 @@ import { putPhotos, getPhotos, dropPhotos } from './pending-images.js';
 
 const $ = (id) => document.getElementById(id);
 import { searchCourses } from './search.js';
+import { gatherUnderstanding } from './understand.js';
 
 const LS_KEY = 'sage.course-agent.v1';
 const IS_NATIVE = /^(capacitor|ionic):$/.test(location.protocol) || Boolean(window.__SAGE_NATIVE__);
@@ -70,7 +71,7 @@ const defaultState = () => ({
   pending: [],
   evolution: [],
   // The record a revision sheet and a study pack are built from.
-  history: { answers: [], quizzes: [], essays: [], sources: [] },
+  history: { answers: [], quizzes: [], essays: [], sources: [], papers: [] },
   session: { transcript: [], notes: [] },
   // A workspace holds several courses. The fields above are the active course's
   // own copy — the rest of the app already reads state.persona and state.memory,
@@ -1831,11 +1832,11 @@ function exportMemory() {
    The server keeps no state, so a pack is written and read in the browser. */
 const PACK_KIND = 'sage.study-pack';
 const PACK_VERSION = 1;
-const HISTORY_LIMITS = { answers: 200, quizzes: 200, essays: 40, sources: 40 };
+const HISTORY_LIMITS = { answers: 200, quizzes: 200, essays: 40, sources: 40, papers: 40 };
 const HISTORY_KEYS = Object.keys(HISTORY_LIMITS);
 
 function normalizeHistory(raw) {
-  const out = { answers: [], quizzes: [], essays: [], sources: [] };
+  const out = { answers: [], quizzes: [], essays: [], sources: [], papers: [] };
   if (!raw || typeof raw !== 'object') return out;
   for (const key of HISTORY_KEYS) {
     out[key] = Array.isArray(raw[key])
@@ -1850,7 +1851,8 @@ function trimHistory() {
 }
 
 function recordHistory(kind, entry) {
-  if (!Array.isArray(state.history?.[kind])) return;
+  if (!state.history || typeof state.history !== 'object') return;
+  if (!Array.isArray(state.history[kind])) state.history[kind] = [];
   state.history[kind].push({ ...entry, at: Date.now() });
   trimHistory();
   persist();
@@ -2700,6 +2702,18 @@ async function submitPaper(auto = false) {
     $('paperResult').hidden = false;
     $('paperResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
     $('btnPaperSubmit').disabled = true;
+    // A paper that was sat is material the essay can build on: what was
+    // solid, and the mark each answer left on the table.
+    recordHistory('papers', {
+      question: sitting.title,
+      answer: `${awarded}/${outOf}`,
+      awarded,
+      outOf,
+      summary: String((res.structured && res.structured.summary) || ''),
+      fixes: answers
+        .map((item) => ({ prompt: item.prompt, fix: String(markOf(item).fix || '') }))
+        .filter((item) => item.fix),
+    });
     if (auto) toast('Time is up: the paper was submitted as it stood.');
   } catch (error) {
     toast(`Could not mark the paper: ${error.message}`, 'error');
@@ -2709,23 +2723,139 @@ async function submitPaper(auto = false) {
 }
 
 /* ── essay tab ─────────────────────────────────────────────── */
+/* An item is either a photograph still to be read, or notes already in text. */
 const essayFiles = [];
+let understandEdited = false;
+
 function clearEssayFiles() {
   essayFiles.length = 0;
   renderThumbs($('essayThumbs'), essayFiles);
   $('essayFileCount').textContent = '';
   $('btnClearEssayFiles').hidden = true;
 }
+
+function updateUnderstandCount() {
+  const field = $('essayUnderstand');
+  const label = $('understandCount');
+  if (!field || !label) return;
+  const words = field.value.trim() ? field.value.trim().split(/\s+/).length : 0;
+  label.textContent = words ? `${words} word${words === 1 ? '' : 's'} to build on` : 'nothing gathered yet';
+}
+
+/* The course's own material, gathered as the base of the draft. The user's
+   sentences are never overwritten without being asked. */
+function renderUnderstanding({ force = false } = {}) {
+  const field = $('essayUnderstand');
+  if (!field) return null;
+  const gathered = gatherUnderstanding({
+    persona: state.persona,
+    memory: state.memory,
+    history: state.history,
+    session: state.session,
+  });
+  const hasOwn = Boolean(field.value.trim()) && understandEdited;
+  if (force && hasOwn && !confirm('Replace what you have written with a fresh gathering from this course? Your own sentences will be lost.')) {
+    updateUnderstandCount();
+    return gathered;
+  }
+  if (force || !field.value.trim()) {
+    field.value = gathered.text;
+    understandEdited = false;
+  }
+  updateUnderstandCount();
+  return gathered;
+}
+
+/* The brief: the question and the rubric, read off the page that was handed
+   over, instead of typed in by hand. */
+async function readBrief() {
+  const images = essayFiles.map((file) => file.preview).filter(Boolean);
+  const notes = essayFiles.map((file) => file.text).filter(Boolean).join('\n\n');
+  if (!images.length && !notes) return;
+  const status = $('briefStatus');
+  const button = $('btnEssay');
+  if (status) status.textContent = 'Reading the brief…';
+  busy(button, true);
+  try {
+    const res = await agent('brief', {
+      text: [
+        'Read this essay brief and fill the form in from it.',
+        images.length ? `${images.length} photograph(s) attached. Read every word on them.` : '',
+        notes ? `Notes supplied as text:\n${notes.slice(0, 6000)}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+      images,
+      maxTokens: 1600,
+    });
+    const brief = res.structured || {};
+    const filled = [];
+    const question = String(brief.question || '').trim();
+    if (question && !$('essayTopic').value.trim()) {
+      $('essayTopic').value = question.slice(0, 300);
+      filled.push('the question');
+    }
+    const requirements = Array.isArray(brief.requirements) ? brief.requirements : [];
+    const rubric = [String(brief.rubric || '').trim(), ...requirements.map((item) => String(item).trim())]
+      .filter(Boolean)
+      .join('\n');
+    if (rubric && !$('essayRubric').value.trim()) {
+      $('essayRubric').value = rubric.slice(0, 1200);
+      filled.push('the rubric');
+    }
+    const matter = String(brief.matter || '').trim();
+    if (matter) {
+      const field = $('essayUnderstand');
+      if (field && !field.value.includes('From the brief you uploaded')) {
+        const bullets = matter
+          .split(/\n+/)
+          .map((item) => item.replace(/^[-*]\s*/, '').trim())
+          .filter(Boolean)
+          .map((item) => `- ${item}`)
+          .join('\n');
+        field.value = `${field.value.trim() ? field.value.trim() + '\n\n' : ''}## From the brief you uploaded\n${bullets}`;
+        understandEdited = false;
+        updateUnderstandCount();
+        filled.push('the material');
+      }
+    }
+    const note = String(brief.note || '').trim();
+    if (status) {
+      status.textContent = filled.length
+        ? `Filled in ${filled.join(', ')} from the upload. Everything is editable.${note ? ` ${note}` : ''}`
+        : `Nothing to fill in: ${note || 'the upload did not read as a brief'}`;
+    }
+    if (!filled.length && !matter) toast(status ? status.textContent : 'Nothing to fill in.');
+  } catch (error) {
+    if (status) status.textContent = `Could not read the brief: ${error.message}`;
+    toast(`Brief not read: ${error.message}`, 'error');
+  } finally {
+    busy(button, false);
+  }
+}
+
 async function onEssayFiles(event) {
   const files = [...event.target.files];
+  let added = 0;
   for (const file of files.slice(0, 4)) {
-    const preview = await shrinkImage(file, 1100);
-    essayFiles.push({ preview });
+    if (file.type.startsWith('image/')) {
+      essayFiles.push({ preview: await shrinkImage(file, 1100), name: file.name });
+      added += 1;
+    } else {
+      const text = (await file.text()).slice(0, 12000);
+      if (text.trim()) {
+        essayFiles.push({ text, name: file.name });
+        added += 1;
+      }
+    }
   }
   renderThumbs($('essayThumbs'), essayFiles);
   $('essayFileCount').textContent = essayFiles.length ? `${essayFiles.length} attached` : '';
   $('btnClearEssayFiles').hidden = !essayFiles.length;
   event.target.value = '';
+  // The upload is the brief: it is read straight away so the question and the
+  // rubric arrive filled in, not as a photograph to retype.
+  if (added) await readBrief();
 }
 
 let lastEssay = '';
@@ -2739,7 +2869,16 @@ async function writeEssay() {
   const words = Math.max(150, Math.min(4000, Number($('essayWords').value) || 800));
   const tone = $('essayTone').value;
   const rubric = $('essayRubric').value.trim();
-  const sources = $('essaySources').value.trim();
+  // What they understand is the base of the draft. The gathered material stands
+  // in only when they have not written it themselves.
+  const gathered = gatherUnderstanding({
+    persona: state.persona,
+    memory: state.memory,
+    history: state.history,
+    session: state.session,
+  });
+  const understand = $('essayUnderstand').value.trim() || gathered.text;
+  const style = gathered.voice.join(' ');
   const button = $('btnEssay');
   busy(button, true);
   $('essayResult').hidden = true;
@@ -2747,14 +2886,17 @@ async function writeEssay() {
     const brief = [
       topic ? `Essay question: ${topic}` : 'Essay question: read it from the attached photo.',
       essayFiles.length
-        ? `Photographs supplied: ${essayFiles.length}. Read every word, label and figure in them, and treat what they say as material you may rely on.`
+        ? `Attached to the brief: ${essayFiles.length} item(s). Read every word, label and figure in them, and treat what they say as material you may rely on.`
         : '',
       `Target length: about ${words} words.`,
       tone ? `Required register: ${tone}.` : '',
       rubric ? `Rubric / what earns marks:\n${rubric}` : '',
-      sources
-        ? `Material you may rely on (do not cite anything outside it):\n${sources}`
-        : 'No material supplied: rely on well-established knowledge only, and cite nothing.',
+      understand
+        ? `What your user understands of this subject, in their own words. The draft stands on this - argue from it, keep its shape, and make it better rather than replacing it:\n${understand}`
+        : 'They have not written what they understand yet: rely on the course material and well-established knowledge, and cite nothing outside it.',
+      style
+        ? `How they have written in this course before. Match the register; never quote it:\n${style}`
+        : '',
       state.persona.course ? `Course context: ${state.persona.course}.` : '',
     ]
       .filter(Boolean)
@@ -3838,6 +3980,14 @@ function bind() {
   };
 
   $('essayFiles').onchange = onEssayFiles;
+  $('btnGatherUnderstand').onclick = () => renderUnderstanding({ force: true });
+  $('essayUnderstand').addEventListener('input', () => {
+    understandEdited = true;
+    updateUnderstandCount();
+  });
+  // Opening the tab gathers the course into an empty field, so the base is
+  // there before the first word of the brief.
+  $('nav-essay').addEventListener('click', () => renderUnderstanding());
   $('btnClearEssayFiles').onclick = clearEssayFiles;
   $('btnEssay').onclick = writeEssay;
   $('btnEssayCopy').onclick = async () => {

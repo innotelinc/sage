@@ -291,20 +291,26 @@
           <section class="panel" id="tab-essay" role="tabpanel" aria-labelledby="nav-essay" tabindex="-1">
             <div class="page-head">
               <h1>Essay</h1>
-              <p class="page-sub">Give it the prompt and the material. It writes in your voice, citing only what you gave it. Photograph the prompt, a handout or handwritten notes and it reads them first.</p>
+              <p class="page-sub">Hand it the brief: photograph the prompt or drop in your notes, and the question and rubric fill themselves in from the page. The draft is then written from what you understand \— the notes, answers, quiz items and papers this course has already gathered, in your own words.</p>
             </div>
             <input id="essayTopic" type="text" placeholder="Essay question or title" aria-label="Essay question or title" />
-            <textarea id="essayRubric" rows="2" placeholder="Rubric / what earns marks (optional)"></textarea>
-            <textarea id="essaySources" rows="4" placeholder="Source material, quotes, lecture notes it may rely on (optional)"></textarea>
+            <textarea id="essayRubric" rows="3" placeholder="Rubric / what earns marks \— filled in from the upload, editable"></textarea>
             <div class="field-row">
               <label class="file-btn">
-                <input type="file" id="essayFiles" accept="image/*" multiple hidden />
-                <span id="essayFilesLabel">＋ photo of the prompt or notes</span>
+                <input type="file" id="essayFiles" accept="image/*,.txt,.md" multiple hidden />
+                <span id="essayFilesLabel">＋ photo of the brief, or your notes</span>
               </label>
               <span class="mini muted" id="essayFileCount"></span>
-              <button type="button" class="mini" id="btnClearEssayFiles" hidden>clear photos</button>
+              <button type="button" class="mini" id="btnClearEssayFiles" hidden>clear</button>
             </div>
+            <p class="mini muted" id="briefStatus"></p>
             <div class="thumbs" id="essayThumbs"></div>
+            <p class="mini"><strong>What you understand</strong> \— how this subject hangs together in your own words, and what you would argue. What this course has already gathered from the lectures, your answers, the quiz items and the practice exams is put here to start you off; edit it into your own voice, because this is what the draft is built on.</p>
+            <textarea id="essayUnderstand" rows="7" placeholder="In your own words: what this subject is really about, how the parts connect, the argument you would make\…"></textarea>
+            <div class="field-row">
+              <button type="button" class="mini" id="btnGatherUnderstand">gather from this course</button>
+              <span class="mini muted" id="understandCount"></span>
+            </div>
             <div class="field-row">
               <label class="inline-field">words <input id="essayWords" type="number" min="150" max="4000" step="50" value="800" /></label>
               <label class="inline-field">tone
@@ -696,7 +702,7 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=4.5.0"></script>
+    <script type="module" src="/app.js?v=4.5.1"></script>
     <script type="module" src="/shell.js?v=4.5.0"></script>
     <script type="module" src="/profile.js?v=3.3.0"></script>
   </body>
