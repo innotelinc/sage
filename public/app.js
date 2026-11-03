@@ -2394,7 +2394,7 @@ async function writeEssay() {
     const res = await agent('essay', { text: brief, maxTokens: Math.min(3800, Math.round(words * 2.2)) });
     lastEssay = res.reply;
     recordHistory('essays', { question: topic, answer: res.reply });
-    $('essayOutput').innerHTML = md(res.reply);
+    $('essayOutput').innerHTML = md(res.reply) + groundedNote(res);
     $('essayResult').hidden = false;
     $('essayResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {
@@ -3223,6 +3223,11 @@ function deliverQueued(turn, res) {
   if (turn.mode === 'read') {
     $('readOutput').innerHTML = md(res.reply) + groundedNote(res);
     $('readResult').hidden = false;
+    return;
+  }
+  if (turn.mode === 'essay') {
+    $('essayOutput').innerHTML = md(res.reply) + groundedNote(res);
+    $('essayResult').hidden = false;
     return;
   }
   addNote(`Q: ${turn.text}
