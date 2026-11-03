@@ -22,6 +22,19 @@ ok('a turn is kept with what it needs to be replayed', () => {
 
 ok('an empty turn is not queued', () => {
   assert.deepEqual(enqueue([], { mode: 'answer', text: '   ' }), []);
+  assert.deepEqual(enqueue([], { mode: 'answer', text: '' }), []);
+});
+
+ok('a photographed turn is kept even with no words', () => {
+  const list = enqueue([], { mode: 'answer', text: '', images: 2 });
+  assert.equal(list.length, 1);
+  assert.equal(list[0].images, 2);
+  assert.equal(list[0].text, '');
+});
+
+ok('the image count is clamped to what the composer allows', () => {
+  assert.equal(enqueue([], { text: 'see photo', images: 99 })[0].images, 4);
+  assert.equal(enqueue([], { text: 'no photo' })[0].images, 0);
 });
 
 ok('the newest turns win when the queue is full', () => {

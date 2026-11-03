@@ -13,7 +13,7 @@ Three promises define it, and each one is a milestone rather than a slogan:
 Everything else in 4.x is downstream of those three. If a feature does not make one of them true, it waits.
 
 **Where this stands:** 4.0 is shipped in 4.0.0 — the ReplayKit broadcast extension, the Android
-foreground service and the server session that joins them. 4.1 is the next build; 4.2 and 4.3 follow.
+foreground service and the server session that joins them. 4.1 is shipped in 4.1.0; 4.2 and 4.3 follow.
 
 ## 4.0 — capture that survives the background *(shipped in 4.0.0)*
 
@@ -34,7 +34,7 @@ notification ends the capture and the charge together.
 `macos-26` runners, so the extension can only be compiled and tested through CI. Budget a debugging cycle
 that runs through `gh workflow run` rather than a local simulator.
 
-## 4.1 — offline, photos included
+## 4.1 — offline, photos included *(shipped in 4.1.0)*
 
 `public/pending.js` keeps a turn when the server cannot be reached, but deliberately keeps text only: a
 base64 photo would blow the storage quota. That is the right call today and the wrong one for a student in a

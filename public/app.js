@@ -2,6 +2,7 @@
    Capture (mic / screen / camera / files), reasoning, and a memory that persists. */
 
 import { enqueue, forget, queued, pendingLabel } from './pending.js';
+import { putPhotos, getPhotos, dropPhotos } from './pending-images.js';
 
 const $ = (id) => document.getElementById(id);
 const LS_KEY = 'sage.course-agent.v1';
@@ -559,8 +560,13 @@ async function agent(mode, { text = '', images = [], maxTokens } = {}) {
     });
   } catch (error) {
     // The one thing a dropped connection must not do is lose the question.
-    if (/Cannot reach the agent server/i.test(error.message) && String(text || '').trim()) {
-      state.pending = enqueue(state.pending, { mode, text, maxTokens, tab: (state.ui || {}).tab });
+    // A photographed question is still a question, so its photos go with it.
+    const photos = (images || []).filter((entry) => typeof entry === 'string' && entry.startsWith('data:image/')).slice(0, 4);
+    if (/Cannot reach the agent server/i.test(error.message) && (String(text || '').trim() || photos.length)) {
+      const next = enqueue(state.pending, { mode, text, images: photos.length, maxTokens, tab: (state.ui || {}).tab });
+      const entry = next[next.length - 1];
+      if (photos.length && entry) await putPhotos(entry.id, photos).catch(() => {});
+      state.pending = next;
       persist();
       updateStatus();
       throw new Error(`Kept on this device — ${pendingLabel(state.pending)}. It answers as soon as the server is back.`);
@@ -3212,11 +3218,22 @@ async function flushPending() {
   const before = queued(state.pending).length;
   for (const turn of queued(state.pending)) {
     let res;
+    // The photos kept beside this turn, if the store still has them. An evicted or
+    // refused store turns the replay back into the words alone.
+    let photos = [];
+    if (turn.images) {
+      try {
+        photos = await getPhotos(turn.id);
+      } catch {
+        photos = [];
+      }
+    }
     try {
       res = await api('/api/chat', {
         body: {
           mode: turn.mode,
           text: turn.text,
+          images: photos,
           maxTokens: turn.maxTokens || undefined,
           history: recentContext(),
           memory: state.memory,
@@ -3229,6 +3246,7 @@ async function flushPending() {
       break;
     }
     state.pending = forget(state.pending, turn.id);
+    if (photos.length) await dropPhotos(turn.id).catch(() => {});
     persist();
     deliverQueued(turn, res);
   }
