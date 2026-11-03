@@ -289,6 +289,12 @@ stripe listen --forward-to localhost:8787/api/billing/webhook
 Accounts need a filesystem, so the subscription gate is Node-only: run the container, not the Worker entry.
 `TRUSTMRR.md` covers listing the resulting SaaS for sale, and what has to be true before the numbers are worth verifying.
 
+## Availability
+
+The iPhone build is finished but **not yet in the App Store**: there is no listing to link, so the sites say
+that plainly rather than showing a download badge. Until it ships, the same app installs from Safari with
+*Share → Add to Home Screen*. The web build at `sage.innotel.tech` is the current release surface.
+
 ## Roadmap
 
 - **v1.0** — shipped: listening, watching, reading, quiz and essay surfaces, self-evolution memory, gateway wiring, PWA install.
@@ -307,6 +313,7 @@ at all on an instance with no code and no sign-in.
 - **v2.5.1** — shipped: watching the screen after you leave the app — the Android build now captures through its own foreground service (a MediaProjection of the whole display) instead of the browser's, so *Watch* keeps sampling when the course app comes to the front, and an ongoing notification says it is still running so it is never silent.
 - **v2.6** — shipped: buying a session inside the app — Settings → Session lists the plans with their prices, takes the email the receipt goes to, starts the Stripe checkout through the server, and the key installs itself when the receipt reopens the app.
 - **v2.7** — shipped: in-app purchase on iOS — the session is a StoreKit consumable, its transaction is verified against Apple before a key is minted, and the web keeps the Stripe storefront.
+- **v2.8** — shipped: foundation documents — a course carries its own PDFs, Word files, screenshots and recordings, each read once on the server and then used by Answer, Quiz and Read, with a scan that has no text layer saying so instead of pretending it was read.
 - **v3.0** — started: native capture — the iOS broadcast extension now records while another app is in front (notes are waiting when you come back; an extension cannot raise a notification), the Android build captures through its own foreground service, and an on-device fallback that keeps working when the network drops is still to come.
 - Native iOS capture, which no web page can do.
 
