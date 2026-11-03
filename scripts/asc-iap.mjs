@@ -1337,11 +1337,14 @@ async function publishForReview(app) {
   }
   const version = await iosVersion(app);
   console.log(`  publish · version ${version.attributes?.versionString} · ${version.attributes?.appStoreState}`);
+  // Apple allows exactly one of (platform, canceled, submitted) per request:
+  // sending platform alongside submitted answers 409
+  // ENTITY_ERROR.ATTRIBUTE.INVALID, which is how the first attempt failed.
   const result = await call('PATCH', `/v1/reviewSubmissions/${open.id}`, {
     data: {
       type: 'reviewSubmissions',
       id: open.id,
-      attributes: { submitted: true, platform: 'IOS' },
+      attributes: { submitted: true },
     },
   });
   console.log(`  publish · submitted · state ${result?.data?.attributes?.state || 'unknown'}`);
