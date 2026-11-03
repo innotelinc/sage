@@ -482,9 +482,12 @@ async function report(app) {
     line('app versions', `unreadable: ${error.message}`);
   }
   try {
-    const builds = await call('GET', `/v1/apps/${app}/builds?limit=5&fields[builds]=version,processingState,uploadedDate,expired`);
-    for (const build of builds?.data || []) {
-      line('build', `${build.attributes?.version} · ${build.attributes?.processingState}${build.attributes?.expired ? ' · expired' : ''}`);
+    // limit=5 showed five arbitrary builds, so a fresh upload could be VALID and
+    // invisible. Ask for all of them and sort, newest first.
+    const builds = await call('GET', `/v1/apps/${app}/builds?limit=50&fields[builds]=version,processingState,uploadedDate,expired`);
+    const rows = (builds?.data || []).sort((a, b) => Number(b.attributes?.version) - Number(a.attributes?.version));
+    for (const build of rows) {
+      line('build', `${build.attributes?.version} · ${build.attributes?.processingState}${build.attributes?.expired ? ' · expired' : ''}${build.attributes?.uploadedDate ? ` · ${build.attributes.uploadedDate}` : ''}`);
     }
   } catch (error) {
     line('builds', `unreadable: ${error.message}`);
