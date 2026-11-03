@@ -1,6 +1,8 @@
 /* Sage — course-taking agent client.
    Capture (mic / screen / camera / files), reasoning, and a memory that persists. */
 
+import { enqueue, forget, queued, pendingLabel } from './pending.js';
+
 const $ = (id) => document.getElementById(id);
 const LS_KEY = 'sage.course-agent.v1';
 const IS_NATIVE = /^(capacitor|ionic):$/.test(location.protocol) || Boolean(window.__SAGE_NATIVE__);
@@ -62,6 +64,7 @@ const defaultState = () => ({
   },
   memory: [],
   foundation: [],
+  pending: [],
   evolution: [],
   // The record a revision sheet and a study pack are built from.
   history: { answers: [], quizzes: [], essays: [], sources: [] },
@@ -208,6 +211,7 @@ function persist() {
       state.session.transcript = state.session.transcript.slice(-300);
       state.session.notes = state.session.notes.slice(-120);
       state.memory = state.memory.slice(-400);
+      state.pending = queued(state.pending).slice(-12);
       trimHistory();
       stashActive();
       state.savedAt = new Date().toISOString();
@@ -538,19 +542,31 @@ async function agent(mode, { text = '', images = [], maxTokens } = {}) {
   }
   const turn = courseForTurn();
   if (turn && turn.id !== state.activeId) switchCourse(turn.id, { auto: true });
-  const res = await api('/api/chat', {
-    body: {
-      mode,
-      text,
-      images,
-      maxTokens,
-      history: recentContext(),
-      memory: state.memory,
-      language: state.language,
-      persona: state.persona,
-      sources: foundationFor(mode),
-    },
-  });
+  let res;
+  try {
+    res = await api('/api/chat', {
+      body: {
+        mode,
+        text,
+        images,
+        maxTokens,
+        history: recentContext(),
+        memory: state.memory,
+        language: state.language,
+        persona: state.persona,
+        sources: foundationFor(mode),
+      },
+    });
+  } catch (error) {
+    // The one thing a dropped connection must not do is lose the question.
+    if (/Cannot reach the agent server/i.test(error.message) && String(text || '').trim()) {
+      state.pending = enqueue(state.pending, { mode, text, maxTokens, tab: (state.ui || {}).tab });
+      persist();
+      updateStatus();
+      throw new Error(`Kept on this device — ${pendingLabel(state.pending)}. It answers as soon as the server is back.`);
+    }
+    throw error;
+  }
   if (res.notes?.length) addMemory(res.notes, 'learned');
   return res;
 }
@@ -628,7 +644,10 @@ function updateStatus() {
   $('captureStatus').textContent = bits.length
     ? `${bits.join(' · ')} — capture is live.`
     : 'Idle. Nothing is being recorded.';
-  $('counters').textContent = `${cap.words} words · ${cap.frames} frames · ${state.memory.length} notes held`;
+  const waiting = pendingLabel(state.pending);
+  $('counters').textContent = `${cap.words} words · ${cap.frames} frames · ${state.memory.length} notes held${
+    waiting ? ` · ${waiting}` : ''
+  }`;
   $('btnListen').classList.toggle('on', cap.listenOn);
   $('btnScreen').classList.toggle('on', cap.watchOn);
   $('btnCamera').classList.toggle('on', cap.cameraOn);
@@ -3154,6 +3173,62 @@ function clearFoundation() {
   toast('Foundation documents cleared.');
 }
 
+let flushingQueue = false;
+
+/* Replay what the device kept. Each turn goes back to the tab that asked for it,
+   so an answer arrives where the user will look rather than in a toast that has
+   already gone. A turn that still cannot reach the server stays queued. */
+async function flushPending() {
+  if (flushingQueue || !queued(state.pending).length) return;
+  flushingQueue = true;
+  const before = queued(state.pending).length;
+  for (const turn of queued(state.pending)) {
+    let res;
+    try {
+      res = await api('/api/chat', {
+        body: {
+          mode: turn.mode,
+          text: turn.text,
+          maxTokens: turn.maxTokens || undefined,
+          history: recentContext(),
+          memory: state.memory,
+          language: state.language,
+          persona: state.persona,
+          sources: foundationFor(turn.mode),
+        },
+      });
+    } catch {
+      break;
+    }
+    state.pending = forget(state.pending, turn.id);
+    persist();
+    deliverQueued(turn, res);
+  }
+  flushingQueue = false;
+  updateStatus();
+  const done = before - queued(state.pending).length;
+  if (done > 0) toast(`${done} kept turn${done === 1 ? '' : 's'} answered.`);
+}
+
+function deliverQueued(turn, res) {
+  if (res.notes?.length) addMemory(res.notes, 'learned');
+  if (turn.mode === 'answer') {
+    renderAnswer(res, $('answerResult'), turn.text);
+    return;
+  }
+  if (turn.mode === 'quiz') {
+    $('quizResults').appendChild(quizCard(turn.text, res, $('quizResults').children.length));
+    return;
+  }
+  if (turn.mode === 'read') {
+    $('readOutput').innerHTML = md(res.reply) + groundedNote(res);
+    $('readResult').hidden = false;
+    return;
+  }
+  addNote(`Q: ${turn.text}
+A: ${res.reply}`.slice(0, 1400), 'queued');
+}
+
 async function testConnection() {
   const button = $('btnTestConn');
   busy(button, true);
@@ -3335,6 +3410,13 @@ function bind() {
     renderFoundation();
   });
   renderFoundation();
+
+  window.addEventListener('online', () => {
+    if (queued(state.pending).length) toast('Back online — replaying what was kept.');
+    flushPending();
+  });
+  if ($('netRetry')) $('netRetry').addEventListener('click', () => flushPending());
+  if (queued(state.pending).length) flushPending();
 
   $('btnEvolve').onclick = evolve;
   $('btnExport').onclick = exportMemory;
