@@ -12,7 +12,10 @@ Three promises define it, and each one is a milestone rather than a slogan:
 
 Everything else in 4.x is downstream of those three. If a feature does not make one of them true, it waits.
 
-## 4.0 — capture that survives the background
+**Where this stands:** 4.0 is shipped in 4.0.0 — the ReplayKit broadcast extension, the Android
+foreground service and the server session that joins them. 4.1 is the next build; 4.2 and 4.3 follow.
+
+## 4.0 — capture that survives the background *(shipped in 4.0.0)*
 
 The Android build already captures through its own foreground service. iOS does not: the browser's screen
 share ends when the app leaves the foreground, which is exactly when a student stops looking at the phone.
