@@ -642,9 +642,19 @@
       <p class="mini muted">Shortcuts stay out of the way while you are typing in a field.</p>
     </dialog>
 
+    <div class="cite-viewer" id="citeViewer" hidden>
+      <div class="cite-card" role="dialog" aria-modal="true" aria-labelledby="citeTitle">
+        <div class="cite-head">
+          <span id="citeTitle">Source</span>
+          <button type="button" class="mini" id="citeClose">close</button>
+        </div>
+        <div class="cite-body" id="citeBody"></div>
+      </div>
+    </div>
+
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=3.4.0"></script>
+    <script type="module" src="/app.js?v=4.2.2"></script>
     <script type="module" src="/shell.js?v=3.3.0"></script>
     <script type="module" src="/profile.js?v=3.3.0"></script>
   </body>
