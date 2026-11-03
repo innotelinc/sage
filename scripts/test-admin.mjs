@@ -39,12 +39,15 @@ const sso = createServer(async (req, res) => {
     for await (const chunk of req) body += chunk;
     const form = new URLSearchParams(body);
     tokenCalls += 1;
-    const ok = form.get('grant_type') === 'authorization_code' && form.get('code_verifier');
+    const spent = form.get('code') === 'spent';
+    const ok = form.get('grant_type') === 'authorization_code' && form.get('code_verifier') && !spent;
     const email = form.get('code') === 'nonadmin' ? 'stranger@example.com' : ADMIN_EMAIL;
     res.writeHead(ok ? 200 : 400, { 'content-type': 'application/json' });
     res.end(
       JSON.stringify(
-        ok
+        spent
+          ? { error: 'invalid_grant', error_description: 'The code has already been used.' }
+          : ok
           ? {
               id_token: [
                 b64({ alg: 'none', typ: 'JWT' }),
@@ -156,6 +159,38 @@ try {
   const sessionCookie = afterSignIn.jar.sage_admin || '';
   check('callback sets a signed session and returns to the panel', callback.status === 302 && callback.headers.get('location') === '/admin' && Boolean(sessionCookie));
   check('token endpoint was called once', tokenCalls === 1, `calls=${tokenCalls}`);
+
+  // A code Cerulean has already spent restarts the sign-in once, then reports.
+  const staleFirst = await fetch(`${ORIGIN}/admin`, { redirect: 'manual' });
+  const staleJar = cookiesFrom(staleFirst).jar;
+  issuedNonce = decodePayload(staleJar.sage_sso || '').nonce;
+  const staleState = new URL(staleFirst.headers.get('location') || '').searchParams.get('state');
+  const stale = await fetch(`${ORIGIN}/admin/callback?code=spent&state=${encodeURIComponent(staleState)}`, {
+    redirect: 'manual',
+    headers: { cookie: cookieHeader(staleJar) },
+  });
+  check(
+    'a spent code restarts the sign-in instead of dead-ending',
+    stale.status === 302 && stale.headers.get('location') === '/admin?again=1',
+    `${stale.status} ${stale.headers.get('location')}`,
+  );
+
+  const againFirst = await fetch(`${ORIGIN}/admin?again=1`, { redirect: 'manual' });
+  const againJar = cookiesFrom(againFirst).jar;
+  const againAttempt = decodePayload(againJar.sage_sso || '');
+  check('the retry attempt is marked so it cannot loop', againAttempt.again === 1, `again=${againAttempt.again}`);
+  issuedNonce = againAttempt.nonce;
+  const againState = new URL(againFirst.headers.get('location') || '').searchParams.get('state');
+  const againStale = await fetch(`${ORIGIN}/admin/callback?code=spent&state=${encodeURIComponent(againState)}`, {
+    redirect: 'manual',
+    headers: { cookie: cookieHeader(againJar) },
+  });
+  const againHtml = await againStale.text();
+  check(
+    'a second refusal reports the reason instead of looping',
+    againStale.status === 400 && againHtml.includes('invalid_grant'),
+    `status=${againStale.status}`,
+  );
 
   // 3. Tampering with the session is refused.
   const tampered = await fetch(`${ORIGIN}/admin`, {

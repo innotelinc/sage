@@ -272,6 +272,16 @@ export async function handleAdmin(request, env = {}) {
       cookies.push(setCookie(SESSION_COOKIE, issueSession(identity, secret), cookieOptions));
       return redirect('/admin', cookies);
     } catch (error) {
+      // An authorization code is single use, so anything that loads this URL
+      // twice — a reload, a link prefetch, a proxy retry, a tab restored from
+      // history — leaves the second request holding a code Cerulean has already
+      // spent, and the answer is invalid_grant. That is not a reason to make
+      // the operator start over by hand: run one fresh attempt, and only report
+      // the reason if that one is refused too.
+      if (!attempt.again) {
+        console.error(`[admin] sign-in restarting after a refused exchange (${request.method})`);
+        return redirect('/admin?again=1', cookies);
+      }
       return htmlResponse(
         page('Sign-in failed', `<h1>Sign-in failed</h1><p class="sub">${escapeHtml(error.message)}</p><p class="mini"><a href="/admin">Try again</a></p>`),
         400,
@@ -284,7 +294,7 @@ export async function handleAdmin(request, env = {}) {
   if (!session) {
     try {
       const doc = await discovery(cfg);
-      const attempt = newAttempt();
+      const attempt = newAttempt({ again: url.searchParams.get('again') === '1' });
       cookies.push(setCookie(SSO_COOKIE, signPayload(attempt, secret, 600), { secure, maxAgeSeconds: 600 }));
       return redirect(authorizeUrl(cfg, doc, attempt), cookies);
     } catch (error) {

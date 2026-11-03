@@ -69,13 +69,17 @@ export async function discovery(cfg) {
   return doc;
 }
 
-export function newAttempt() {
+export function newAttempt({ again = false } = {}) {
   const verifier = b64url(randomBytes(32));
   return {
     verifier,
     challenge: b64url(createHash('sha256').update(verifier).digest()),
     state: b64url(randomBytes(16)),
     nonce: b64url(randomBytes(16)),
+    // Set on the single attempt that follows a refused exchange, so a sign-in
+    // that is genuinely broken reports itself instead of looping through
+    // Cerulean. It rides in the signed cookie, so the browser cannot set it.
+    again: again ? 1 : 0,
   };
 }
 
