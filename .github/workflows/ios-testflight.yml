@@ -15,6 +15,11 @@ name: iOS TestFlight
 
 on:
   workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: CFBundleShortVersionString for this build — App Store Connect will not take a second build under a version already in review
+        type: string
+        default: '1.1'
   push:
     tags:
       - 'ios-v*'
@@ -92,7 +97,7 @@ jobs:
 
       - name: Merge usage descriptions into Info.plist
         env:
-          IOS_MARKETING_VERSION: '1.0'
+          IOS_MARKETING_VERSION: ${{ inputs.marketing_version || '1.1' }}
         run: |
           PLIST=ios/App/App/Info.plist
           set_key() { /usr/libexec/PlistBuddy -c "Set :$1 $2" "$PLIST" 2>/dev/null \
@@ -112,7 +117,7 @@ jobs:
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           IOS_BUILD_NUMBER: ${{ github.run_number }}
-          IOS_MARKETING_VERSION: '1.0'
+          IOS_MARKETING_VERSION: ${{ inputs.marketing_version || '1.1' }}
         run: |
           # An in-app recorder is suspended with the app, so the thing that keeps
           # recording in another app has to be a ReplayKit broadcast extension —
