@@ -263,11 +263,20 @@
           <section class="panel" id="tab-essay" role="tabpanel" aria-labelledby="nav-essay" tabindex="-1">
             <div class="page-head">
               <h1>Essay</h1>
-              <p class="page-sub">Give it the prompt and the material. It writes in your voice, citing only what you gave it.</p>
+              <p class="page-sub">Give it the prompt and the material. It writes in your voice, citing only what you gave it. Photograph the prompt, a handout or handwritten notes and it reads them first.</p>
             </div>
             <input id="essayTopic" type="text" placeholder="Essay question or title" aria-label="Essay question or title" />
             <textarea id="essayRubric" rows="2" placeholder="Rubric / what earns marks (optional)"></textarea>
             <textarea id="essaySources" rows="4" placeholder="Source material, quotes, lecture notes it may rely on (optional)"></textarea>
+            <div class="field-row">
+              <label class="file-btn">
+                <input type="file" id="essayFiles" accept="image/*" multiple hidden />
+                <span id="essayFilesLabel">＋ photo of the prompt or notes</span>
+              </label>
+              <span class="mini muted" id="essayFileCount"></span>
+              <button type="button" class="mini" id="btnClearEssayFiles" hidden>clear photos</button>
+            </div>
+            <div class="thumbs" id="essayThumbs"></div>
             <div class="field-row">
               <label class="inline-field">words <input id="essayWords" type="number" min="150" max="4000" step="50" value="800" /></label>
               <label class="inline-field">tone

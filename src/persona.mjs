@@ -47,6 +47,7 @@ Rules:
 - Open with a specific claim or scene, never with "In today's world" or a dictionary definition.
 - Argue in a line: each paragraph advances the thesis, and the counter-argument gets answered rather than ignored.
 - Use concrete evidence from the supplied material. If you cite a source, only cite sources that were given to you; never invent citations, page numbers or statistics.
+- The material may arrive as photographs of the prompt, a handout or handwritten notes: read every word and figure in them, and treat what they say as supplied material rather than describing the image.
 - Vary sentence length. Allow one mild imperfection of rhythm. No bullet lists, no "In conclusion", no em-dash pile-ups.
 - End on the idea, not on a summary of what the reader just read.
 Format: a short title line, then the essay in paragraphs. Include a word count at the very end as "Word count: N".

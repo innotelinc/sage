@@ -2363,11 +2363,30 @@ async function solveQuiz() {
 }
 
 /* ── essay tab ─────────────────────────────────────────────── */
+const essayFiles = [];
+function clearEssayFiles() {
+  essayFiles.length = 0;
+  renderThumbs($('essayThumbs'), essayFiles);
+  $('essayFileCount').textContent = '';
+  $('btnClearEssayFiles').hidden = true;
+}
+async function onEssayFiles(event) {
+  const files = [...event.target.files];
+  for (const file of files.slice(0, 4)) {
+    const preview = await shrinkImage(file, 1100);
+    essayFiles.push({ preview });
+  }
+  renderThumbs($('essayThumbs'), essayFiles);
+  $('essayFileCount').textContent = essayFiles.length ? `${essayFiles.length} attached` : '';
+  $('btnClearEssayFiles').hidden = !essayFiles.length;
+  event.target.value = '';
+}
+
 let lastEssay = '';
 async function writeEssay() {
   const topic = $('essayTopic').value.trim();
-  if (!topic) {
-    toast('Give it the essay question first.');
+  if (!topic && !essayFiles.length) {
+    toast('Give it the essay question, or attach a photo of it.');
     $('essayTopic').focus();
     return;
   }
@@ -2380,7 +2399,10 @@ async function writeEssay() {
   $('essayResult').hidden = true;
   try {
     const brief = [
-      `Essay question: ${topic}`,
+      topic ? `Essay question: ${topic}` : 'Essay question: read it from the attached photo.',
+      essayFiles.length
+        ? `Photographs supplied: ${essayFiles.length}. Read every word, label and figure in them, and treat what they say as material you may rely on.`
+        : '',
       `Target length: about ${words} words.`,
       tone ? `Required register: ${tone}.` : '',
       rubric ? `Rubric / what earns marks:\n${rubric}` : '',
@@ -2391,12 +2413,18 @@ async function writeEssay() {
     ]
       .filter(Boolean)
       .join('\n\n');
-    const res = await agent('essay', { text: brief, maxTokens: Math.min(3800, Math.round(words * 2.2)) });
+    const res = await agent('essay', {
+      text: brief,
+      images: essayFiles.map((f) => f.preview),
+      maxTokens: Math.min(3800, Math.round(words * 2.2)),
+    });
     lastEssay = res.reply;
     recordHistory('essays', { question: topic, answer: res.reply });
     $('essayOutput').innerHTML = md(res.reply) + groundedNote(res);
     $('essayResult').hidden = false;
     $('essayResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // The photos were read into this draft; the next essay must not inherit them.
+    clearEssayFiles();
   } catch (error) {
     toast(`Essay failed: ${error.message}`, 'error');
   } finally {
@@ -3377,6 +3405,8 @@ function bind() {
     $('quizProgress').textContent = 'Stopping…';
   };
 
+  $('essayFiles').onchange = onEssayFiles;
+  $('btnClearEssayFiles').onclick = clearEssayFiles;
   $('btnEssay').onclick = writeEssay;
   $('btnEssayCopy').onclick = async () => {
     try {

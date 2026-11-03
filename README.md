@@ -316,6 +316,7 @@ at all on an instance with no code and no sign-in.
 - **v2.8** — shipped: foundation documents — a course carries its own PDFs, Word files, screenshots and recordings, each read once on the server and then used by Answer, Quiz and Read, with a scan that has no text layer saying so instead of pretending it was read.
 - **v2.9** — shipped: grounded essays — the foundation documents now reach Essay as well, and a reply that leaned on them names the files it used, so a mark can be traced back to the page it came from.
 - **v3.0** — shipped: a turn survives the network — a question that cannot reach the server is kept on the device (text only, never a photo) and replayed the moment the connection returns, into the tab that asked; the native capture work continues separately, and no iOS build is in the App Store yet.
+- **v3.1** — shipped: Essay takes photographs — the prompt, a handout, a page of handwritten notes or a whiteboard can be attached instead of typed, read before a word is written, and then cleared so the next essay never inherits the last one's page; [v4.0](docs/roadmap-4.0.md) is scoped.
 
 ---
 
@@ -329,6 +330,7 @@ at all on an instance with no code and no sign-in.
 | --- | --- |
 | [docs/stack.md](docs/stack.md) | SAGE's role in the Innotel Platform Stack (LearningOps) |
 | [docs/interface.md](docs/interface.md) | the interface layer: rail, command palette, theme, shortcuts, deep links |
+| [docs/roadmap-4.0.md](docs/roadmap-4.0.md) | v4.0: background capture, offline photos, citable pages, exam rehearsal |
 | [README.md#architecture](README.md) | how capture, memory and routing fit together |
 
 ## License
