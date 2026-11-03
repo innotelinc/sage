@@ -25,12 +25,12 @@ on:
         description: Fill the 1.0 listing, category, privacy URL, review contact and screenshots, then add the version to the draft
         type: boolean
         default: false
-        publish:
-          description: Submit the draft to App Review — this is the step that actually publishes
-          type: boolean
-          default: false
       attach:
         description: Attach the newest valid build to version 1.0 and add that version to the open submission
+        type: boolean
+        default: false
+      publish:
+        description: Submit the draft to App Review — the step that actually publishes
         type: boolean
         default: false
 
@@ -57,7 +57,7 @@ jobs:
           SUBMIT: ${{ inputs.submit }}
           ATTACH: ${{ inputs.attach }}
           LISTING: ${{ inputs.listing }}
-            PUBLISH: ${{ inputs.publish }}
+          PUBLISH: ${{ inputs.publish }}
           REPLACE_SHOTS: ${{ inputs.reshoot }}
           APP_STORE_CREATIVE: ${{ inputs.creative }}
           APP_STORE_PROBE: ${{ inputs.probe }}
