@@ -1002,10 +1002,11 @@ async function placeInSubmission(app, version) {
   } catch (error) {
     explain(error);
   }
-  // The three products do not travel as reviewSubmissionItems: Apple has no
-  // inAppPurchase relationship on that resource, and they were put in a draft through
-  // /v1/inAppPurchaseSubmissions when they were created. That endpoint is what joins
-  // them to the submission once the app version is reviewable.
+  // The version travels as a reviewSubmissionItem; a product joins through its
+  // inAppPurchaseVersion relationship instead. Without this the draft holds the app
+  // alone and the products are left READY_TO_SUBMIT — unreviewed, and unusable in
+  // the shipped app.
+  await addProducts(app, id);
   const items = await call('GET', `/v1/reviewSubmissions/${id}/items?limit=50`).catch(() => null);
   console.log(`  submission · ${(items?.data || []).length} items in draft ${id}`);
 }
@@ -1383,6 +1384,12 @@ async function publishForReview(app) {
   }
   const version = await iosVersion(app);
   console.log(`  publish · version ${version.attributes?.versionString} · ${version.attributes?.appStoreState}`);
+  const productCount = (await existingProducts(app)).size;
+  if (count < 1 + productCount) {
+    console.log(`  publish · refused: ${count} item(s) but expected ${1 + productCount} (the version plus every product)`);
+    console.log('  publish · the products would go to the store unreviewed');
+    return false;
+  }
   // Apple allows exactly one of (platform, canceled, submitted) per request:
   // sending platform alongside submitted answers 409
   // ENTITY_ERROR.ATTRIBUTE.INVALID, which is how the first attempt failed.
