@@ -1288,3 +1288,13 @@ dialog.sheet form {
 .cite-body { overflow: auto; padding: 4px 15px 15px; }
 .cite-seg pre { margin: 4px 0 14px; white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; color: var(--text-2); }
 .cite-loc { display: inline-block; margin-top: 12px; font-family: var(--mono); font-size: 11.5px; color: var(--brand); }
+
+/* exam rehearsal: the clock, the questions, and the marks afterwards */
+.paper-clock { margin: 10px 2px; font-family: var(--mono); }
+.paper-q { padding: 14px 16px; }
+.paper-q-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.paper-q-n { font-family: var(--mono); font-size: 12.5px; color: var(--brand); }
+.paper-q-text { margin: 6px 0 10px; font-size: 14.5px; }
+.paper-answer { width: 100%; }
+.paper-mark { border-top: 1px solid var(--line); padding: 10px 0; }
+.paper-mark-head { display: flex; justify-content: space-between; gap: 10px; }

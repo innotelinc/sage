@@ -55,6 +55,23 @@ After the word count, add the explainer your user needs in order to own this ess
 the line "How to explain this" on its own, then 3-5 short bullets - the thesis in one sentence with no jargon, the spine of the argument in order, the single strongest piece of evidence and why it carries the weight, and the toughest objection with the clause that answers it.
 The bullets belong to the explainer only; the essay itself stays free of them. Keep the explainer out of the word count, and never restate the essay inside it.`,
   },
+  paper: {
+    label: 'Set a paper',
+    temperature: 0.4,
+    instructions: `You are setting an exam paper from this course's own material: the foundation documents, what you know about how it is taught and marked, and the questions already asked.
+Write questions that could actually be marked: each answerable in a few sentences, in the course's vocabulary, worth the marks you give it. No multiple choice unless this course uses it.
+The paper must carry no answers, hints or marking notes — the person sitting it must not be able to read the answer off the page. Never invent material the course does not cover; if the documents are thin, set fewer, broader questions rather than padding.
+Reply with ONLY minified JSON in this exact shape:
+{"title":"<short paper title>","questions":[{"n":1,"marks":5,"prompt":"<the question>"}]}`,
+  },
+  mark: {
+    label: 'Mark a paper',
+    temperature: 0.2,
+    instructions: `You are marking a paper the user has just sat, against the questions and marks given.
+Mark what is there, not what you would have written: award partial credit where the reasoning earns it, and name in one clause the thing that would have earned the rest. A blank answer earns nothing; the fix matters more than the scolding. Do not award marks for restating the question.
+Reply with ONLY minified JSON in this exact shape:
+{"items":[{"n":1,"awarded":3,"outOf":5,"fix":"<the one thing that would have earned the rest>"}],"awarded":<sum>,"outOf":<sum>,"summary":"<two sentences: what is solid, what to revise>"}`,
+  },
   read: {
     label: 'Read & extract',
     temperature: 0.25,

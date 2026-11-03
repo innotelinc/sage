@@ -1,4 +1,4 @@
-# SAGE v4.0 roadmap
+# SAGE roadmap — 4.0 through 5.1
 
 3.1 closes the last of the "it does the thing, on a good connection, in the foreground" releases. 4.0 is the
 release where the app stops behaving like a web page that happens to run on a phone.
@@ -12,8 +12,8 @@ Three promises define it, and each one is a milestone rather than a slogan:
 
 Everything else in 4.x is downstream of those three. If a feature does not make one of them true, it waits.
 
-**Where this stands:** 4.0 is shipped in 4.0.0 — the ReplayKit broadcast extension, the Android
-foreground service and the server session that joins them. 4.1 shipped in 4.1.0 and 4.2 in 4.2.0; 4.3 follows.
+**Where this stands:** 4.0 (background capture), 4.1 (offline photos), 4.2 (citable pages) and
+4.3 (exam rehearsal) are shipped. 4.4 is the next build; 4.4 through 5.1 are designed below, in that order.
 
 ## 4.0 — capture that survives the background *(shipped in 4.0.0)*
 
@@ -61,7 +61,7 @@ names. The next step is to keep the anchors.
 **Done means:** an essay says it leaned on `handout.pdf p.3`, and tapping that opens page 3 of the document
 that was actually read — not a re-upload, not a guess.
 
-## 4.3 — exam rehearsal
+## 4.3 — exam rehearsal *(shipped in 4.3.0)*
 
 The quiet gap between "it answers my questions" and "I can sit the paper".
 
@@ -73,7 +73,106 @@ The quiet gap between "it answers my questions" and "I can sit the paper".
 **Done means:** a 40-minute paper can be sat start to finish without the app leaking an answer, and the
 marked result names the specific points that were missed.
 
-## Not in 4.x
+## 4.4 — audio-only lectures
+
+Not every lecture has a screen. A recording is transcribed for Read, but only when the
+file is uploaded afterwards.
+
+- A capture mode that keeps the microphone, feeds the same note pipeline the screen feed
+  uses, and stamps each note with a timestamp instead of a frame.
+- Notes from audio cite the recording and the offset, reusing the 4.2 locator idea
+  (`lecture-4.m4a 12:40`), so a claim can be checked against the room.
+
+**Done means:** a 50-minute lecture captured with the screen off arrives as timestamped
+notes, and a note opens the recording at its offset.
+
+## 4.5 — one search across every course
+
+Notes, answers, essays and foundation text are all local, and none can be searched
+together. Finding "where did we do osmosis" is currently scrolling.
+
+- An index over every course's memory, answers, quiz items, essays and document text,
+  built on the device, so it works with no network and no server change.
+- Hits grouped by course with the tab and date they came from; a hit opens the turn or
+  the document at its passage, reusing the citation viewer.
+
+**Done means:** a phrase finds every occurrence across courses in under a second on a
+phone, and each hit opens where it came from.
+
+## 4.6 — spaced revision
+
+The reason to keep a record is to be asked again. Nothing comes back today.
+
+- A review queue built from what was marked wrong, what a paper lost marks on and what
+  memory flagged as shaky, on expanding intervals (1, 3, 7, 21 days).
+- A five-minute daily session of due items only: answer, re-schedule. Backlog and streak
+  shown plainly, nothing beyond that.
+
+**Done means:** a wrong answer returns the next day, then on the interval, and the daily
+session can be finished in the time it claims.
+
+## 4.7 — handoff between devices
+
+Course memory syncs; a session in progress does not. Start on the phone in a lecture and
+the laptop does not have the notes.
+
+- A live session record on the server (device, course, notes so far, capture state),
+  written as it runs rather than on save, newer-wins like memory.
+- Opening the app elsewhere offers to continue that session; capture ownership is
+  explicit so two devices never both claim the microphone.
+
+**Done means:** notes from the phone appear on the laptop within seconds, and starting
+capture on one device stops it on the other.
+
+## 4.8 — documents that work offline
+
+Foundation documents live in the workspace, so a basement tutorial has no grounding at
+all — the gap 4.1 opened for photos, one layer up.
+
+- Cache each course's foundation text and segments on the device, with a size budget and
+  a visible cached marker per document.
+- Reconcile by hash when the server is reachable; when it is not, ground Answer and Essay
+  on the cached copy and say which documents came from cache.
+
+**Done means:** with the network off, a question about the handout is answered from the
+cached copy and the reply still names the page.
+
+## 4.9 — accessible and multilingual
+
+The rail and palette are keyboard-complete; most of the panels are not.
+
+- Every control reachable and labelled for a screen reader, focus visible, dialogs
+  trapping and returning focus, capture states announced rather than only drawn.
+- Right-to-left layout for Arabic, with prompts answering in the course's language.
+
+**Done means:** a lesson can be captured, answered and exported with a keyboard and a
+screen reader alone, and Arabic renders right-to-left without mirrored punctuation.
+
+## 5.0 — share a course
+
+Everything here is single-user; study groups are not.
+
+- Read-only share links for a course or a single document, with the sharer's name on the
+  material they contributed.
+- Shared foundation documents deduplicate by hash: the same handout shared twice is
+  stored once and attributed to both.
+
+**Done means:** a classmate opens a link, reads the notes and documents, and can neither
+edit anything nor see personal memory.
+
+## 5.1 — measured grounding
+
+Every release claims grounding. Nothing measures it.
+
+- A golden set per course: questions with the document and page that answer them, in the
+  repo, run in CI against the stub model and against the gateway on a budget.
+- Scores for grounding (did it cite a real page), refusal (did it admit a gap) and
+  citation accuracy, tracked across releases so a regression blocks the tag.
+
+**Done means:** a release that degrades grounding fails CI with the question that broke,
+instead of being noticed in an exam.
+
+## Not planned
 
 Multi-user collaboration, LMS gradebook integration, local model hosting. Each is a plausible product; none
 of them makes the three promises above true, and the release series is more useful as a straight line than a

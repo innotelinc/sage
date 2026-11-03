@@ -286,7 +286,7 @@ async function handleChat(body, cfg) {
   if (!content.trim()) return json({ error: 'empty_reply', message: 'The model returned nothing.' }, 502);
 
   const { text: visible, notes } = parseMemory(content);
-  const structured = ['answer', 'quiz', 'evolve'].includes(mode) ? parseStructured(visible) : null;
+  const structured = ['answer', 'quiz', 'evolve', 'paper', 'mark'].includes(mode) ? parseStructured(visible) : null;
 
   return json({
     reply: visible,

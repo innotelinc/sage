@@ -74,6 +74,7 @@
           <button class="tab" data-tab="quiz" role="tab" id="nav-quiz" aria-controls="tab-quiz" aria-selected="false">
             <span class="tab-ico" aria-hidden="true">☑</span><span class="tab-label">Quiz</span><kbd>3</kbd>
           </button>
+          <button class="tab" data-tab="exam" role="tab" id="nav-exam" aria-controls="tab-exam" aria-selected="false">Exam</button>
           <button class="tab" data-tab="essay" role="tab" id="nav-essay" aria-controls="tab-essay" aria-selected="false">
             <span class="tab-ico" aria-hidden="true">✎</span><span class="tab-label">Essay</span><kbd>4</kbd>
           </button>
@@ -260,6 +261,25 @@
           </section>
 
           <!-- ── ESSAY ────────────────────────────────────────────── -->
+          <!-- exam rehearsal: a timed paper, marked only after submission -->
+          <section class="panel" id="tab-exam" role="tabpanel" aria-labelledby="nav-exam" tabindex="-1">
+            <div class="page-head">
+              <h1>Exam rehearsal</h1>
+              <p class="page-sub">A timed paper set from this course. No answer is shown, and nothing is marked, until you submit it.</p>
+            </div>
+            <div class="field-row">
+              <label class="inline-field">questions <input id="paperCount" type="number" min="3" max="20" step="1" value="8" /></label>
+              <label class="inline-field">minutes <input id="paperMinutes" type="number" min="5" max="180" step="5" value="40" /></label>
+            </div>
+            <button class="btn primary block" id="btnPaperStart">Start the paper</button>
+            <div class="paper-clock mini muted" id="paperClock"></div>
+            <div id="paperQuestions" class="stack"></div>
+            <div class="actions">
+              <button class="btn primary" id="btnPaperSubmit" disabled>Submit the paper</button>
+            </div>
+            <div class="result" id="paperResult" hidden><div class="prose" id="paperMarked"></div></div>
+          </section>
+
           <section class="panel" id="tab-essay" role="tabpanel" aria-labelledby="nav-essay" tabindex="-1">
             <div class="page-head">
               <h1>Essay</h1>

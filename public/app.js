@@ -2368,6 +2368,145 @@ async function solveQuiz() {
   busy($('btnQuizSolve'), false);
 }
 
+/* exam tab: a timed paper that is marked only once it has been submitted */
+let paper = null;
+let paperTimer = null;
+let paperDeadline = 0;
+
+function paperLeft() {
+  return Math.max(0, paperDeadline - Date.now());
+}
+
+function renderPaperClock() {
+  const clock = $('paperClock');
+  if (!clock) return;
+  if (!paper) {
+    clock.textContent = '';
+    return;
+  }
+  const left = paperLeft();
+  const mins = Math.floor(left / 60000);
+  const secs = Math.floor((left % 60000) / 1000);
+  clock.textContent = `Time left ${mins}:${String(secs).padStart(2, '0')} - ${paper.questions.length} questions - ${paper.total} marks`;
+}
+
+function stopPaperTimer() {
+  if (paperTimer) clearInterval(paperTimer);
+  paperTimer = null;
+}
+
+function renderPaper() {
+  const list = $('paperQuestions');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!paper) return;
+  for (const question of paper.questions) {
+    const card = document.createElement('div');
+    card.className = 'card paper-q';
+    card.innerHTML = `<div class="paper-q-head"><span class="paper-q-n">Q${question.n}</span><span class="mini muted">${question.marks} mark${question.marks === 1 ? '' : 's'}</span></div>
+      <p class="paper-q-text">${escapeHtml(question.prompt)}</p>
+      <textarea class="paper-answer" data-n="${question.n}" rows="4" placeholder="Your answer"></textarea>`;
+    list.appendChild(card);
+  }
+}
+
+async function startPaper() {
+  const count = Math.max(3, Math.min(20, Number($('paperCount').value) || 8));
+  const minutes = Math.max(5, Math.min(180, Number($('paperMinutes').value) || 40));
+  const button = $('btnPaperStart');
+  busy(button, true);
+  try {
+    const course = (state.persona && state.persona.course) || '';
+    const brief = [
+      `Set a ${count}-question paper for this course, worth about ${count * 5} marks in total.`,
+      course ? `Course: ${course}.` : '',
+      'No answers, hints or marking notes anywhere in the paper.',
+    ].filter(Boolean).join('\n');
+    const res = await agent('paper', { text: brief, maxTokens: 2400 });
+    const questions = ((res.structured && res.structured.questions) || [])
+      .filter((question) => question && String(question.prompt || '').trim())
+      .slice(0, count)
+      .map((question, index) => ({
+        n: index + 1,
+        marks: Math.max(1, Number(question.marks) || 5),
+        prompt: String(question.prompt),
+      }));
+    if (!questions.length) throw new Error('the model returned no questions');
+    paper = {
+      title: String((res.structured && res.structured.title) || 'Paper'),
+      questions,
+      total: questions.reduce((sum, question) => sum + question.marks, 0),
+    };
+    paperDeadline = Date.now() + minutes * 60000;
+    $('paperResult').hidden = true;
+    $('btnPaperSubmit').disabled = false;
+    renderPaper();
+    stopPaperTimer();
+    // The clock runs on the deadline, not on the last tick, so a sleeping tab
+    // cannot buy extra time.
+    paperTimer = setInterval(() => {
+      renderPaperClock();
+      if (paperLeft() <= 0) {
+        stopPaperTimer();
+        submitPaper(true);
+      }
+    }, 1000);
+    renderPaperClock();
+    toast(`${questions.length} questions, ${minutes} minutes. Nothing is marked until you submit.`);
+  } catch (error) {
+    toast(`Could not set the paper: ${error.message}`, 'error');
+  } finally {
+    busy(button, false);
+  }
+}
+
+async function submitPaper(auto = false) {
+  if (!paper) return;
+  const sitting = paper;
+  const button = $('btnPaperSubmit');
+  const answers = sitting.questions.map((question) => {
+    const field = document.querySelector(`.paper-answer[data-n="${question.n}"]`);
+    return {
+      n: question.n,
+      marks: question.marks,
+      prompt: question.prompt,
+      answer: String((field && field.value) || '').trim(),
+    };
+  });
+  busy(button, true);
+  stopPaperTimer();
+  try {
+    const brief = [
+      sitting.title,
+      ...answers.map(
+        (item) =>
+          `Question ${item.n} (${item.marks} marks): ${item.prompt}\nAnswer: ${item.answer || '(left blank)'}`
+      ),
+    ].join('\n\n');
+    const res = await agent('mark', { text: brief, maxTokens: 2600 });
+    const marked = Array.isArray(res.structured && res.structured.items) ? res.structured.items : [];
+    const markOf = (item) => marked.find((entry) => Number(entry.n) === item.n) || {};
+    const score = (item) => Math.max(0, Math.min(item.marks, Number(markOf(item).awarded) || 0));
+    const rows = answers.map((item) => `<div class="paper-mark">
+        <div class="paper-mark-head"><strong>Q${item.n}</strong><span class="mini muted">${score(item)}/${item.marks}</span></div>
+        <p class="mini">${escapeHtml(markOf(item).fix || '')}</p>
+        ${item.answer ? `<p class="mini muted">${escapeHtml(item.answer)}</p>` : '<p class="mini muted">left blank</p>'}
+      </div>`);
+    const outOf = answers.reduce((sum, item) => sum + item.marks, 0);
+    const awarded = answers.reduce((sum, item) => sum + score(item), 0);
+    $('paperMarked').innerHTML = `<h3>${escapeHtml(sitting.title)} - ${awarded}/${outOf}</h3>
+      <p>${escapeHtml((res.structured && res.structured.summary) || '')}</p>${rows.join('')}`;
+    $('paperResult').hidden = false;
+    $('paperResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('btnPaperSubmit').disabled = true;
+    if (auto) toast('Time is up: the paper was submitted as it stood.');
+  } catch (error) {
+    toast(`Could not mark the paper: ${error.message}`, 'error');
+  } finally {
+    busy(button, false);
+  }
+}
+
 /* ── essay tab ─────────────────────────────────────────────── */
 const essayFiles = [];
 function clearEssayFiles() {
@@ -3116,7 +3255,7 @@ function normalizeFoundation(raw) {
 /* Only the turns that are grounded: a live note is about the room, not the
    handout, and an essay carries its own material in the brief. */
 function foundationFor(mode) {
-  if (!['answer', 'quiz', 'read', 'essay'].includes(mode)) return [];
+  if (!['answer', 'quiz', 'read', 'essay', 'paper', 'mark'].includes(mode)) return [];
   return (state.foundation || [])
     .filter((doc) => doc.on !== false && doc.text)
     .slice(0, 8)
@@ -3375,6 +3514,9 @@ function bind() {
     state.ui = { ...(state.ui || {}), tab: tab.dataset.tab };
     persist();
   });
+
+  $('btnPaperStart').onclick = startPaper;
+  $('btnPaperSubmit').onclick = () => submitPaper(false);
 
   $('btnSettings').onclick = openSettings;
   $('btnRetryHealth').onclick = checkHealth;
