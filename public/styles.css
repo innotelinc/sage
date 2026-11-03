@@ -1311,3 +1311,29 @@ dialog.sheet form {
 .hit-where { font-size: 12.5px; color: var(--text-2); }
 .hit-text { margin: 3px 0 0; font-size: 13.5px; }
 .search-hit mark { background: color-mix(in srgb, var(--brand) 24%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+/* ── 4.9: heard as well as seen, and right to left ─────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+[dir='rtl'] body { text-align: right; }
+[dir='rtl'] .tabs,
+[dir='rtl'] .doc-row,
+[dir='rtl'] .result-head,
+[dir='rtl'] .statusline { text-align: right; }
+[dir='rtl'] .skip-link:focus { left: auto; right: var(--s4); }
+/* A page label, a code sample and a citation chip are not Arabic: they keep their
+   own direction inside the sentence, so brackets and punctuation are not mirrored. */
+[dir='rtl'] kbd,
+[dir='rtl'] code,
+[dir='rtl'] .cite-loc,
+[dir='rtl'] .cite-chip { direction: ltr; unicode-bidi: isolate; }

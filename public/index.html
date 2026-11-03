@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" dir="ltr" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -34,10 +34,13 @@
     <title>Sage · course agent</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=4.2.0" />
+    <link rel="stylesheet" href="/styles.css?v=4.9.0" />
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
+
+    <!-- What a screen reader hears: capture state, and each finished reply. -->
+    <p class="sr-only" id="liveAnnounce" role="status" aria-live="polite" aria-atomic="true"></p>
 
     <!-- Connection state is announced, not just coloured. -->
     <div class="net-banner" id="netBanner" role="status" aria-live="polite" hidden>
@@ -177,7 +180,7 @@
             </div>
 
             <div class="statusline">
-              <span id="captureStatus">Idle. Nothing is being recorded.</span>
+              <span id="captureStatus" role="status" aria-live="polite">Idle. Nothing is being recorded.</span>
               <span class="counters" id="counters"></span>
             </div>
 
@@ -234,7 +237,7 @@
               <button class="btn" id="btnLiveAsk">Ask</button>
             </div>
 
-            <div class="result" id="liveAnswer" hidden></div>
+            <div class="result" id="liveAnswer" aria-live="polite" dir="auto" hidden></div>
           </section>
 
           <!-- ── ANSWER ───────────────────────────────────────────── -->
@@ -243,7 +246,7 @@
               <h1>Answer a question</h1>
               <p class="page-sub">A question from a quiz slide, a worksheet, or your own curiosity. Attach a photo if showing is easier than typing.</p>
             </div>
-            <textarea id="answerText" rows="4" placeholder="Paste the question…"></textarea>
+            <textarea id="answerText" rows="4" dir="auto" aria-label="The question to answer" placeholder="Paste the question…"></textarea>
             <div class="field-row">
               <label class="file-btn">
                 <input type="file" id="answerFiles" accept="image/*" multiple hidden />
@@ -255,7 +258,7 @@
             <div class="thumbs" id="answerThumbs"></div>
             <p class="mini muted foundation-hint" id="answerFoundationHint"></p>
             <button class="btn primary block" id="btnAnswer">Answer it</button>
-            <div class="result" id="answerResult" hidden></div>
+            <div class="result" id="answerResult" aria-live="polite" dir="auto" hidden></div>
           </section>
 
           <!-- ── QUIZ ─────────────────────────────────────────────── -->
@@ -264,7 +267,7 @@
               <h1>Quiz</h1>
               <p class="page-sub">Paste the whole quiz — separate questions with a blank line. It answers in order, one decision at a time.</p>
             </div>
-            <textarea id="quizText" rows="7" placeholder="1. Which organelle…&#10;&#10;2. A 3 kg block…"></textarea>
+            <textarea id="quizText" rows="7" dir="auto" aria-label="Questions to answer as a quiz" placeholder="1. Which organelle…&#10;&#10;2. A 3 kg block…"></textarea>
             <div class="field-row">
               <label class="file-btn">
                 <input type="file" id="quizFiles" accept="image/*" multiple hidden />
@@ -279,7 +282,7 @@
               <button class="btn ghost" id="btnQuizStop" disabled>Stop</button>
             </div>
             <div class="quiz-progress mini muted" id="quizProgress"></div>
-            <div id="quizResults" class="stack"></div>
+            <div id="quizResults" aria-live="polite" dir="auto" class="stack"></div>
           </section>
 
           <!-- ── ESSAY ────────────────────────────────────────────── -->
@@ -307,8 +310,8 @@
               <h1>Essay</h1>
               <p class="page-sub">Hand it the brief: photograph the prompt or drop in your notes, and the question and rubric fill themselves in from the page. The draft is then written from what you understand \— the notes, answers, quiz items and papers this course has already gathered, in your own words.</p>
             </div>
-            <input id="essayTopic" type="text" placeholder="Essay question or title" aria-label="Essay question or title" />
-            <textarea id="essayRubric" rows="3" placeholder="Rubric / what earns marks \— filled in from the upload, editable"></textarea>
+            <input id="essayTopic" type="text" dir="auto" placeholder="Essay question or title" aria-label="Essay question or title" />
+            <textarea id="essayRubric" rows="3" dir="auto" aria-label="Rubric or marking notes" placeholder="Rubric / what earns marks \— filled in from the upload, editable"></textarea>
             <div class="field-row">
               <label class="file-btn">
                 <input type="file" id="essayFiles" accept="image/*,.txt,.md" multiple hidden />
@@ -320,7 +323,7 @@
             <p class="mini muted" id="briefStatus"></p>
             <div class="thumbs" id="essayThumbs"></div>
             <p class="mini"><strong>What you understand</strong> \— how this subject hangs together in your own words, and what you would argue. What this course has already gathered from the lectures, your answers, the quiz items and the practice exams is put here to start you off; edit it into your own voice, because this is what the draft is built on.</p>
-            <textarea id="essayUnderstand" rows="7" placeholder="In your own words: what this subject is really about, how the parts connect, the argument you would make\…"></textarea>
+            <textarea id="essayUnderstand" rows="7" dir="auto" aria-label="What you understand about the subject" placeholder="In your own words: what this subject is really about, how the parts connect, the argument you would make\…"></textarea>
             <div class="field-row">
               <button type="button" class="mini" id="btnGatherUnderstand">gather from this course</button>
               <span class="mini muted" id="understandCount"></span>
@@ -328,7 +331,7 @@
             <div class="field-row">
               <label class="inline-field">words <input id="essayWords" type="number" min="150" max="4000" step="50" value="800" /></label>
               <label class="inline-field">tone
-                <select id="essayTone">
+                <select id="essayTone" aria-label="Essay register">
                   <option value="">as me</option>
                   <option value="academic">academic</option>
                   <option value="punchy">punchy</option>
@@ -338,7 +341,7 @@
               </label>
             </div>
             <button class="btn primary block" id="btnEssay">Write it</button>
-            <div class="result" id="essayResult" hidden>
+            <div class="result" id="essayResult" aria-live="polite" dir="auto" hidden>
               <div class="result-head">
                 <span class="result-tag">Draft</span>
                 <span class="result-tools">
@@ -362,9 +365,9 @@
             </label>
             <div class="thumbs" id="readThumbs"></div>
             <p class="mini muted foundation-hint" id="readFoundationHint"></p>
-            <textarea id="readPaste" rows="4" placeholder="…or paste text / notes here"></textarea>
+            <textarea id="readPaste" rows="4" dir="auto" aria-label="Text to read" placeholder="…or paste text / notes here"></textarea>
             <button class="btn primary block" id="btnRead">Read &amp; extract</button>
-            <div class="result" id="readResult" hidden><div class="prose" id="readOutput"></div></div>
+            <div class="result" id="readResult" aria-live="polite" dir="auto" hidden><div class="prose" id="readOutput"></div></div>
           </section>
 
           <!-- ── MEMORY ───────────────────────────────────────────── -->
@@ -397,7 +400,7 @@
               <h1>Search</h1>
               <p class="page-sub">Every course at once: notes, answers, quiz items, essays and the documents behind them. Searched here, on this device.</p>
             </div>
-            <input id="searchBox" class="search-box" type="search" autocomplete="off" spellcheck="false"
+            <input id="searchBox" class="search-box" type="search" dir="auto" autocomplete="off" spellcheck="false"
                    placeholder="osmosis, entropy, the week 4 handout…" aria-label="Search every course" />
             <p class="mini muted" id="searchMeta">Type at least two letters.</p>
             <div id="searchResults" class="stack"></div>
@@ -555,7 +558,7 @@
             <label>Risk
               <span class="range-row"><input id="setRisk" type="range" min="0" max="5" step="1" /><output id="riskOut" for="setRisk">2</output></span>
             </label>
-            <label>Language <input id="setLanguage" type="text" placeholder="auto — match the material" maxlength="40" /></label>
+            <label>Language <input id="setLanguage" type="text" dir="auto" placeholder="auto — match the material" maxlength="40" /></label>
             <label>Note cadence (s) <input id="setInterval" type="number" min="8" max="120" step="2" /></label>
           </div>
           <p class="voice-preview" id="voicePreview"></p>
@@ -743,8 +746,8 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=4.8.0"></script>
-    <script type="module" src="/shell.js?v=4.8.0"></script>
+    <script type="module" src="/app.js?v=4.9.0"></script>
+    <script type="module" src="/shell.js?v=4.9.0"></script>
     <script type="module" src="/profile.js?v=3.3.0"></script>
   </body>
 </html>

@@ -14,8 +14,8 @@ Everything else in 4.x is downstream of those three. If a feature does not make 
 
 **Where this stands:** 4.0 (background capture), 4.1 (offline photos), 4.2 (citable pages), 4.3 (exam
 rehearsal), 4.4 (audio-only lectures), 4.5 (cross-course search), 4.6 (spaced revision), 4.7 (handoff between
-devices) and 4.8 (documents that work offline) are shipped. 4.9 is the next build; 4.9 through 5.1 are designed
-below, in that order.
+devices), 4.8 (documents that work offline) and 4.9 (accessible and multilingual) are shipped. 5.0 is the next
+build; 5.0 and 5.1 are designed below, in that order.
 
 ## 4.0 — capture that survives the background *(shipped in 4.0.0)*
 
@@ -146,7 +146,7 @@ sources came from the device. What offline buys here is that no re-upload and no
 lost in between; generating an answer with no server at all is a local model, which is not
 planned.
 
-## 4.9 — accessible and multilingual
+## 4.9 — accessible and multilingual *(shipped in 4.9.0)*
 
 The rail and palette are keyboard-complete; most of the panels are not.
 
@@ -156,6 +156,15 @@ The rail and palette are keyboard-complete; most of the panels are not.
 
 **Done means:** a lesson can be captured, answered and exported with a keyboard and a
 screen reader alone, and Arabic renders right-to-left without mirrored punctuation.
+
+*As built:* the rail was already keyboard-complete, so this filled in what a screen reader
+hears — capture start and stop, and each reply with the page it was grounded on — and what a
+keyboard needs from the citation viewer, which is a div rather than a `<dialog>`: it now takes
+focus, keeps Tab inside itself, closes on Escape and returns focus. Choosing a tab lands focus
+in the panel. The course language sets `<html lang>` and `dir`, with page labels, code and
+citation chips isolated left-to-right inside a right-to-left sentence. What is not done: a
+full audit of every control against a real screen reader, and Arabic prompts checked by a
+speaker rather than by the direction rules alone.
 
 ## 5.0 — share a course
 
@@ -198,6 +207,7 @@ wish list.
 | 4.6 | a missed question returns on the interval, and a five-minute session clears what is due |
 | 4.7 | notes written on the phone appear on the laptop, and capture on one stops the other |
 | 4.8 | a question asked with no connection is answered from the cached copy, page intact |
+| 4.9 | capture, an answer and a citation are announced, and Arabic runs right to left |
 
 Every milestone also keeps the existing suite green (`test-saas`, `test-iap`, `test-sources`,
 `test-grounding`, `test-pending`) and ships through the same path as 3.x: commit, tag, deploy to the incus

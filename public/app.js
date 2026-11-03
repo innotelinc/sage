@@ -4,6 +4,7 @@
 import { enqueue, forget, queued, pendingLabel } from './pending.js';
 import { putPhotos, getPhotos, dropPhotos } from './pending-images.js';
 import { cacheNote, cacheOnly, describeCache, hashDoc, planCache, reconcileDocs, stampDoc } from './library.js';
+import { describeCapture, describeReply, directionOf, languageTag, trapFocusIndex } from './a11y.js';
 
 const $ = (id) => document.getElementById(id);
 import { searchCourses } from './search.js';
@@ -446,6 +447,36 @@ function queueWorkspacePush() {
   }, SYNC_DEBOUNCE_MS);
 }
 
+/* ── speaking to a screen reader, and the page's direction ───── */
+const citeFocus = { on: false, was: null };
+
+/* Re-announce the same words: a live region that already holds them is silent. */
+function announce(text) {
+  const el = $('liveAnnounce');
+  if (!el || !text) return;
+  el.textContent = '';
+  setTimeout(() => {
+    el.textContent = text;
+  }, 30);
+}
+
+/* The course's language sets the document's direction, so punctuation, page
+   labels and the reading order follow it rather than being right-aligned English. */
+function applyDirection() {
+  document.documentElement.lang = languageTag(state.language);
+  document.documentElement.dir = directionOf(state.language);
+}
+
+function closeCiteViewer() {
+  const viewer = $('citeViewer');
+  if (!viewer || viewer.hidden) return;
+  viewer.hidden = true;
+  citeFocus.on = false;
+  const back = citeFocus.was;
+  citeFocus.was = null;
+  if (back && typeof back.focus === 'function') back.focus({ preventScroll: true });
+}
+
 /* ── helpers ───────────────────────────────────────────────── */
 function escapeHtml(str = '') {
   return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -629,6 +660,7 @@ async function agent(mode, { text = '', images = [], maxTokens } = {}) {
     throw error;
   }
   res.fromCache = sent.filter((doc) => doc.fromCache).map((doc) => doc.name);
+  announce(describeReply(res, mode));
   if (res.notes?.length) addMemory(res.notes, 'learned');
   return res;
 }
@@ -654,6 +686,7 @@ async function checkHealth() {
 
 /* ── capture ───────────────────────────────────────────────── */
 const cap = {
+  announced: '',
   micStream: null,
   recog: null,
   recorder: null,
@@ -789,6 +822,22 @@ function updateStatus() {
   $('counters').textContent = `${cap.words} words · ${cap.frames} frames · ${state.memory.length} notes held${
     waiting ? ` · ${waiting}` : ''
   }`;
+  // A coloured pill is invisible to a screen reader, so the capture state is
+  // spoken when it changes and not on every repaint.
+  const captureKey = `${cap.listenOn}|${cap.watchOn}|${cap.cameraOn}`;
+  if (captureKey !== cap.announced) {
+    const first = !cap.announced;
+    cap.announced = captureKey;
+    announce(
+      describeCapture({
+        listening: cap.listenOn,
+        watching: cap.watchOn,
+        aiming: cap.cameraOn,
+        intervalSec: state.settings.noteIntervalSec,
+        stopped: !first,
+      })
+    );
+  }
   $('btnListen').classList.toggle('on', cap.listenOn);
   $('btnScreen').classList.toggle('on', cap.watchOn);
   $('btnCamera').classList.toggle('on', cap.cameraOn);
@@ -1632,6 +1681,11 @@ function openSearchHit(hit) {
   $('citeBody').innerHTML = `<div class="cite-seg"><pre>${highlightTerms(hit.text.slice(0, 4000), $('searchBox').value)}</pre></div>
     <button type="button" class="link-btn" data-goto="${escapeHtml(hit.tab)}">open the ${escapeHtml(hit.tabLabel)} tab</button>`;
   viewer.hidden = false;
+  // A div modal does not get <dialog>'s focus behaviour, so it takes and gives
+  // back focus itself; the keydown listener below keeps Tab inside it.
+  citeFocus.was = document.activeElement;
+  citeFocus.on = true;
+  setTimeout(() => document.getElementById('citeClose')?.focus({ preventScroll: true }), 20);
 }
 
 function addMemory(notes, source = 'manual') {
@@ -3611,6 +3665,7 @@ function saveSettings() {
   cap.noteTimer = cap.listenOn ? setInterval(flushTranscript, state.settings.noteIntervalSec * 1000) : null;
   $('agentName').textContent = state.persona.name;
   renderCourseUi();
+  applyDirection();
   persist();
   updateStatus();
   renderMemory();
@@ -3715,6 +3770,11 @@ function openCitation(name, locator) {
     .map((segment) => `<div class="cite-seg"><span class="cite-loc">${escapeHtml(segment.locator)}</span><pre>${escapeHtml(String(segment.text || '').slice(0, 8000))}</pre></div>`)
     .join('');
   viewer.hidden = false;
+  // A div modal does not get <dialog>'s focus behaviour, so it takes and gives
+  // back focus itself; the keydown listener below keeps Tab inside it.
+  citeFocus.was = document.activeElement;
+  citeFocus.on = true;
+  setTimeout(() => document.getElementById('citeClose')?.focus({ preventScroll: true }), 20);
 }
 
 document.addEventListener('click', (event) => {
@@ -3735,10 +3795,28 @@ document.addEventListener('click', (event) => {
     openTab(go.dataset.goto);
     return;
   }
-  if (event.target.closest?.('#citeClose') || event.target.id === 'citeViewer') {
-    const viewer = $('citeViewer');
-    if (viewer) viewer.hidden = true;
+  if (event.target.closest?.('#citeClose') || event.target.id === 'citeViewer') closeCiteViewer();
+});
+
+/* A div modal does not get <dialog>'s focus behaviour, so it is done here: Tab
+   cycles inside, Escape closes, and focus returns to what opened it. */
+document.addEventListener('keydown', (event) => {
+  if (!citeFocus.on) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeCiteViewer();
+    return;
   }
+  if (event.key !== 'Tab') return;
+  const viewer = $('citeViewer');
+  const items = [
+    ...(viewer?.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])') || []),
+  ].filter((el) => !el.disabled && el.getClientRects().length);
+  const index = items.indexOf(document.activeElement);
+  const target = trapFocusIndex(items.length, index < 0 ? items.length - 1 : index, event.shiftKey);
+  if (target === null) return;
+  event.preventDefault();
+  items[target]?.focus({ preventScroll: true });
 });
 
 function renderFoundation() {
@@ -4080,6 +4158,11 @@ function openTab(name) {
   persist();
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${name}`));
+  // A tab is a button that opens a panel: pressing it should land in the panel,
+  // not leave focus on the rail for the next Tab to walk from.
+  if (document.activeElement?.classList?.contains('tab')) {
+    document.getElementById(`tab-${name}`)?.focus({ preventScroll: true });
+  }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -4375,6 +4458,7 @@ function takeHandoff() {
 
 /* ── wiring ────────────────────────────────────────────────── */
 function bind() {
+  applyDirection();
   $('tabs').addEventListener('click', (event) => {
     const tab = event.target.closest('.tab');
     if (!tab) return;
