@@ -1276,3 +1276,5 @@ dialog.sheet form {
 .doc-row .doc-body strong { font-weight: 600; font-size: 0.92rem; overflow-wrap: anywhere; }
 .doc-row .check { flex: 0 0 auto; }
 .foundation-hint:empty { display: none; }
+
+.grounded { margin-top: 8px; }

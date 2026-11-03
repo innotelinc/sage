@@ -291,6 +291,7 @@ async function handleChat(body, cfg) {
     notes,
     mode,
     model,
+    grounded: sources.map((doc) => doc.name),
     usedVision: images.length > 0,
     usage: data?.usage || null,
   });

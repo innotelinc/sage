@@ -1936,7 +1936,7 @@ function renderAnswer(res, container, question = '') {
     </div>
     <div class="answer-main">${choice ? `<span class="choice">${escapeHtml(choice)}</span>` : ''}${md(answer)}</div>
     ${working ? `<div class="answer-work">${md(working)}</div>` : ''}
-    ${why ? `<div class="answer-why">${escapeHtml(why)}</div>` : ''}
+    ${why ? `<div class="answer-why">${escapeHtml(why)}</div>` : ''}${groundedNote(res)}
     ${say ? `<div class="say-row"><span class="say-text"><span class="say-label">say this</span>${escapeHtml(say)}</span><button class="mini" data-saytext="${escapeHtml(say)}">▶</button></div>` : ''}
     ${confidence !== null ? `<div class="conf"><span>confidence</span><div class="conf-bar"><div class="conf-fill" style="width:${Math.round(confidence * 100)}%"></div></div><span>${Math.round(confidence * 100)}%</span></div>` : ''}
   `;
@@ -2306,7 +2306,7 @@ function quizCard(question, res, index) {
     <div class="mini muted" style="margin-bottom:8px">${escapeHtml(question.slice(0, 180))}${question.length > 180 ? '…' : ''}</div>
     <div class="answer-main">${choice ? `<span class="choice">${escapeHtml(choice)}</span>` : ''}${md(answer)}</div>
     ${points.length ? `<div class="answer-work">${md(points.map((p) => `- ${p}`).join('\n'))}</div>` : ''}
-    ${structured.why ? `<div class="answer-why">${escapeHtml(structured.why)}</div>` : ''}
+    ${structured.why ? `<div class="answer-why">${escapeHtml(structured.why)}</div>` : ''}${groundedNote(res)}
   `;
   recordHistory('quizzes', { question, choice, answer, points, why: structured.why || '', confidence });
   return card;
@@ -2428,7 +2428,7 @@ async function runRead() {
       images,
       maxTokens: 2000,
     });
-    $('readOutput').innerHTML = md(res.reply);
+    $('readOutput').innerHTML = md(res.reply) + groundedNote(res);
     recordHistory('sources', {
       question: readFiles.map((f) => f.name).filter(Boolean).join(', ') || pasted.slice(0, 120) || 'Material read',
       answer: res.reply,
@@ -3054,7 +3054,7 @@ function normalizeFoundation(raw) {
 /* Only the turns that are grounded: a live note is about the room, not the
    handout, and an essay carries its own material in the brief. */
 function foundationFor(mode) {
-  if (!['answer', 'quiz', 'read'].includes(mode)) return [];
+  if (!['answer', 'quiz', 'read', 'essay'].includes(mode)) return [];
   return (state.foundation || [])
     .filter((doc) => doc.on !== false && doc.text)
     .slice(0, 8)
@@ -3065,6 +3065,12 @@ function foundationSummary() {
   const live = (state.foundation || []).filter((doc) => doc.on !== false);
   if (!live.length) return '';
   return `Answering from ${live.length} foundation document${live.length === 1 ? '' : 's'} · manage in Foundation`;
+}
+
+function groundedNote(res) {
+  const names = Array.isArray(res?.grounded) ? res.grounded.filter(Boolean) : [];
+  if (!names.length) return '';
+  return `<div class="mini muted grounded">grounded in ${escapeHtml(names.join(', '))}</div>`;
 }
 
 function renderFoundation() {

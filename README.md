@@ -314,6 +314,7 @@ at all on an instance with no code and no sign-in.
 - **v2.6** — shipped: buying a session inside the app — Settings → Session lists the plans with their prices, takes the email the receipt goes to, starts the Stripe checkout through the server, and the key installs itself when the receipt reopens the app.
 - **v2.7** — shipped: in-app purchase on iOS — the session is a StoreKit consumable, its transaction is verified against Apple before a key is minted, and the web keeps the Stripe storefront.
 - **v2.8** — shipped: foundation documents — a course carries its own PDFs, Word files, screenshots and recordings, each read once on the server and then used by Answer, Quiz and Read, with a scan that has no text layer saying so instead of pretending it was read.
+- **v2.9** — shipped: grounded essays — the foundation documents now reach Essay as well, and a reply that leaned on them names the files it used, so a mark can be traced back to the page it came from.
 - **v3.0** — started: native capture — the iOS broadcast extension now records while another app is in front (notes are waiting when you come back; an extension cannot raise a notification), the Android build captures through its own foreground service, and an on-device fallback that keeps working when the network drops is still to come.
 - Native iOS capture, which no web page can do.
 
