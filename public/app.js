@@ -8,6 +8,14 @@ const $ = (id) => document.getElementById(id);
 import { searchCourses } from './search.js';
 import { gatherUnderstanding } from './understand.js';
 import {
+  captureConflict,
+  describe,
+  isLive as isLiveSession,
+  mergeNotes,
+  notesToAdopt,
+  shouldOffer,
+} from './handoff.js';
+import {
   buildCandidates as reviewCandidates,
   dueItems as reviewDue,
   enqueue as reviewEnqueue,
@@ -254,6 +262,7 @@ function persist() {
       state.savedAt = new Date().toISOString();
       localStorage.setItem(LS_KEY, JSON.stringify(state));
       queueWorkspacePush();
+      queueLivePush();
     } catch {
       /* storage full — keep running */
     }
@@ -4017,6 +4026,163 @@ function gradeReview(correct) {
   renderReview();
 }
 
+/* handoff: a session in progress, on the server */
+const DEVICE_KEY = 'sage.device.v1';
+const handoff = { state: 'idle', record: null, lastPush: 0, pushTimer: null, dismissed: '' };
+
+function deviceId() {
+  try {
+    let id = localStorage.getItem(DEVICE_KEY);
+    if (!id) {
+      id = 'd' + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem(DEVICE_KEY, id);
+    }
+    return id;
+  } catch {
+    return 'device';
+  }
+}
+
+function deviceLabel() {
+  const ua = navigator.userAgent || '';
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/Android/.test(ua)) return 'Android';
+  return 'this browser';
+}
+
+function capturingNow() {
+  return ['btnListen', 'btnScreen', 'btnCamera'].some((id) => $(id) && $(id).classList.contains('on'));
+}
+
+function liveHeaders() {
+  const headers = { 'content-type': 'application/json' };
+  if (state.settings.accessCode) headers['x-access-code'] = state.settings.accessCode;
+  return headers;
+}
+
+function liveSnapshot() {
+  return {
+    device: deviceId(),
+    label: deviceLabel(),
+    courseId: state.activeId || '',
+    courseName: (state.persona && state.persona.course) || '',
+    capturing: capturingNow(),
+    notes: (state.session.notes || []).slice(-30).map((note) => ({
+      text: String(note.text || '').slice(0, 1200),
+      at: String(note.at || ''),
+      kind: String(note.kind || 'note'),
+    })),
+    at: new Date().toISOString(),
+  };
+}
+
+async function pushLiveSession() {
+  if (handoff.state === 'local') return;
+  handoff.lastPush = Date.now();
+  try {
+    const res = await fetch(apiUrl('/api/live'), {
+      method: 'PUT',
+      headers: liveHeaders(),
+      body: JSON.stringify({ session: liveSnapshot() }),
+    });
+    if (res.status === 401 || res.status === 501) {
+      // No identity, or no filesystem: the session stays on this device and the
+      // banner simply never appears. That is the local-only case, not an error.
+      handoff.state = 'local';
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 409 && data.session) {
+      handoff.record = data.session;
+      handoff.state = 'live';
+      renderHandoff();
+      return;
+    }
+    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+    handoff.state = 'live';
+    handoff.record = data.session || liveSnapshot();
+  } catch {
+    handoff.state = 'error';
+  }
+}
+
+function queueLivePush() {
+  clearTimeout(handoff.pushTimer);
+  handoff.pushTimer = setTimeout(pushLiveSession, 1500);
+}
+
+async function pollLiveSession() {
+  if (handoff.state === 'local') return;
+  try {
+    const res = await fetch(apiUrl('/api/live'), { headers: liveHeaders() });
+    if (res.status === 401 || res.status === 501) {
+      handoff.state = 'local';
+      renderHandoff();
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    const record = data.session || null;
+    handoff.record = record;
+    handoff.state = 'live';
+    // One microphone: if another device holds it, this one lets go rather than
+    // recording the same lecture twice into two places.
+    if (captureConflict(record, deviceId()) && capturingNow()) {
+      $('btnStopAll')?.click();
+      toast(`Capture moved to ${record.label || 'another device'} - it stopped here.`);
+      renderHandoff();
+      return;
+    }
+    renderHandoff();
+  } catch {
+    handoff.state = 'error';
+  }
+}
+
+function renderHandoff() {
+  const bar = $('handoffBar');
+  const text = $('handoffText');
+  const take = $('btnHandoffTake');
+  if (!bar || !text || !take) return;
+  const record = handoff.record;
+  const me = deviceId();
+  if (record && shouldOffer(record, me) && record.device !== handoff.dismissed) {
+    const line = describe(record, state.session.notes || []);
+    text.textContent = line.text;
+    take.textContent = line.adopt
+      ? `Continue here (${line.adopt} note${line.adopt === 1 ? '' : 's'})`
+      : 'Continue here';
+    bar.hidden = false;
+    return;
+  }
+  if (record && record.device !== me && isLiveSession(record) && record.capturing) {
+    text.textContent = `${record.label || 'Another device'} is capturing this lecture now. Sage will not open the microphone here until it stops.`;
+    take.textContent = 'Not now';
+    bar.hidden = false;
+    return;
+  }
+  bar.hidden = true;
+}
+
+function takeHandoff() {
+  const record = handoff.record;
+  if (!record || record.device === deviceId()) {
+    handoff.dismissed = record ? record.device : '';
+    $('handoffBar').hidden = true;
+    return;
+  }
+  const incoming = notesToAdopt(state.session.notes || [], record);
+  handoff.dismissed = record.device;
+  $('handoffBar').hidden = true;
+  if (!incoming.length) return;
+  // Nothing is thrown away: both sets of notes are kept, deduplicated by what
+  // they say, oldest first.
+  state.session.notes = mergeNotes(state.session.notes || [], record.notes);
+  persist();
+  if (typeof hydrateFeeds === 'function') hydrateFeeds();
+  toast(`${incoming.length} note${incoming.length === 1 ? '' : 's'} carried over from ${record.label || 'the other device'}.`);
+}
+
 /* ── wiring ────────────────────────────────────────────────── */
 function bind() {
   $('tabs').addEventListener('click', (event) => {
@@ -4071,6 +4237,22 @@ function bind() {
     }
     gradeReview(action === 'yes');
   });
+  $('btnHandoffTake')?.addEventListener('click', takeHandoff);
+  $('btnHandoffDismiss')?.addEventListener('click', () => {
+    handoff.dismissed = handoff.record ? handoff.record.device : '';
+    $('handoffBar').hidden = true;
+  });
+  // A heartbeat while a microphone is open, and a poll for what the other device
+  // is doing. Neither runs in a hidden tab: a background page cannot record, so
+  // it has nothing to say about the session.
+  setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (capturingNow() && Date.now() - handoff.lastPush > 6000) pushLiveSession();
+  }, 8000);
+  setInterval(() => {
+    if (document.visibilityState === 'visible') pollLiveSession();
+  }, 12000);
+  setTimeout(() => pollLiveSession(), 2500);
   $('searchBox')?.addEventListener('input', renderSearch);
   $('searchResults')?.addEventListener('click', (event) => {
     const row = event.target.closest?.('[data-index]');

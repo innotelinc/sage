@@ -5,6 +5,7 @@
 import { buildSystemPrompt, parseMemory, parseStructured, MODES } from './persona.mjs';
 import { handleRelay } from './relay.mjs';
 import { handleWorkspace } from './workspace.mjs';
+import { handleLiveSession } from './livesession.mjs';
 import { openSession, closeSession, accepts, recordFrame, readNotes } from './broadcast.mjs';
 import { handleStore } from './store.mjs';
 import { handleIap } from './iap.mjs';
@@ -630,6 +631,13 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
   // answered before the access-code gate: handleWorkspace does its own check.
   if (url.pathname === '/api/workspace') {
     return handleWorkspace(request, url, env);
+  }
+
+  // A session in progress is a different record from the workspace: it is written
+  // while a lecture runs rather than when something is saved, so another device
+  // can pick it up mid-class. handleLiveSession does its own identity check.
+  if (url.pathname === '/api/live') {
+    return handleLiveSession(request, url, env);
   }
 
   // The catalog is a price list, not a secret: it is answered before the

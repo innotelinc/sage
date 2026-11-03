@@ -181,6 +181,17 @@
               <span class="counters" id="counters"></span>
             </div>
 
+            <!-- A session started elsewhere: continue it here, or see that the
+                 other device is the one holding the microphone. -->
+            <div class="card" id="handoffBar" hidden>
+              <div class="card-head"><h2 class="card-title">Session in progress</h2></div>
+              <p class="mini" id="handoffText"></p>
+              <div class="actions">
+                <button class="btn primary" id="btnHandoffTake">Continue here</button>
+                <button class="btn ghost" id="btnHandoffDismiss">Not now</button>
+              </div>
+            </div>
+
             <!-- Aim: the live camera and the result it produced. The popup window
                  reuses this markup; this copy is what shows when a popup is blocked
                  or the app runs inside the iOS shell, which has only one window. -->
@@ -731,8 +742,8 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=4.6.1"></script>
-    <script type="module" src="/shell.js?v=4.6.1"></script>
+    <script type="module" src="/app.js?v=4.7.0"></script>
+    <script type="module" src="/shell.js?v=4.7.0"></script>
     <script type="module" src="/profile.js?v=3.3.0"></script>
   </body>
 </html>
