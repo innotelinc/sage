@@ -3778,6 +3778,24 @@ function openCitation(name, locator) {
 }
 
 document.addEventListener('click', (event) => {
+  const shareBtn = event.target.closest?.('[data-share-doc]');
+  if (shareBtn) {
+    const doc = (state.foundation || []).find((entry) => entry.id === shareBtn.dataset.shareDoc);
+    if (doc) shareCourse('document', doc.name);
+    return;
+  }
+  if (event.target.closest?.('#btnShareCourse')) {
+    shareCourse('course');
+    return;
+  }
+  const copyLink = event.target.closest?.('[data-copy-link]');
+  if (copyLink) {
+    navigator.clipboard?.writeText(copyLink.dataset.copyLink || '').then(
+      () => toast('Link copied.'),
+      () => toast('Copy it from the line above.')
+    );
+    return;
+  }
   const chip = event.target.closest?.('[data-cite]');
   if (chip) {
     openCitation(chip.dataset.cite, chip.dataset.locator || '');
@@ -3842,6 +3860,7 @@ function renderFoundation() {
         <span class="mini muted">${escapeHtml(doc.kind)} · ${Number(doc.chars || 0).toLocaleString()} characters${doc.note ? ` · ${escapeHtml(doc.note)}` : ''}</span>
         ${docFlag(doc)}
       </div>
+      <button type="button" class="mini" data-share-doc="${doc.id}">share</button>
       <button type="button" class="mini" data-drop="${doc.id}">remove</button>
     `;
     list.appendChild(row);
@@ -3892,6 +3911,45 @@ async function onFoundationFiles(event) {
   }
   label.textContent = '＋ PDF, text, doc, screenshot or audio';
   renderFoundation();
+}
+
+/* ── sharing a course ──────────────────────────────────────── */
+/* A link a classmate can open: the notes and the documents, read-only, with no
+   memory, no answers and no settings. The server keeps one copy of each document
+   by content hash, so the same handout shared twice is stored once. */
+async function shareCourse(scope = 'course', docName = '') {
+  const docs = (scope === 'document'
+    ? (state.foundation || []).filter((doc) => doc.name === docName)
+    : (state.foundation || []).filter((doc) => doc.on !== false)
+  ).filter((doc) => doc.text);
+  const notes = scope === 'document' ? [] : (state.session.notes || []).slice(-60).map((note) => note.text);
+  if (!docs.length && !notes.length) {
+    toast('Nothing to share yet — add a document or write a note first.');
+    return;
+  }
+  const out = $('shareOut');
+  if (out) out.textContent = 'Making a link…';
+  try {
+    const res = await api('/api/share', {
+      body: {
+        name: state.persona.name === 'Sage' ? '' : state.persona.name,
+        courseName: state.persona.course || 'A course',
+        kind: scope === 'document' ? 'document' : 'course',
+        notes,
+        docs: docs.map((doc) => ({ name: doc.name, kind: doc.kind, text: doc.text, segments: doc.segments || [] })),
+      },
+    });
+    const link = res.url || `${location.origin}${res.path}`;
+    if (out) {
+      out.innerHTML = `Read-only link, expires ${escapeHtml(String(res.expiresAt || '').slice(0, 10))}:
+        <a href="${escapeHtml(link)}" target="_blank" rel="noreferrer">${escapeHtml(link)}</a>
+        <button type="button" class="mini" data-copy-link="${escapeHtml(link)}">copy</button>`;
+    }
+    toast(`Link ready — ${res.docs} document${res.docs === 1 ? '' : 's'}, ${res.notes} note${res.notes === 1 ? '' : 's'}.`);
+  } catch (error) {
+    if (out) out.textContent = '';
+    toast(`Could not share: ${error.message}`, 'error');
+  }
 }
 
 function clearFoundation() {

@@ -376,6 +376,7 @@
             <div class="page-head">
               <h1>Foundation documents</h1>
               <p class="page-sub">The PDF, handout, notes, screenshots or recording this course answers from. Each one is read once, then used by Answer, Quiz and Read.</p>
+              <div class="actions"><button class="btn ghost small" id="btnShareCourse">Share this course</button></div>
             </div>
             <label class="file-btn block">
               <input type="file" id="foundationFiles" accept=".pdf,.txt,.md,.csv,.vtt,.srt,.doc,.docx,image/*,audio/*" multiple hidden />
@@ -387,6 +388,7 @@
             </div>
             <div id="foundationList" class="stack"></div>
             <p class="mini muted" id="foundationCache"></p>
+            <p class="mini muted" id="shareOut"></p>
             <p class="mini muted">
               A PDF or Word file is read for its text here; a screenshot is read by the vision model; a recording is
               transcribed. A scanned PDF with no text layer needs its pages added as images instead. Documents belong
@@ -746,8 +748,8 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=4.9.0"></script>
-    <script type="module" src="/shell.js?v=4.9.0"></script>
+    <script type="module" src="/app.js?v=5.0.0"></script>
+    <script type="module" src="/shell.js?v=5.0.0"></script>
     <script type="module" src="/profile.js?v=3.3.0"></script>
   </body>
 </html>

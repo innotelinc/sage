@@ -14,8 +14,8 @@ Everything else in 4.x is downstream of those three. If a feature does not make 
 
 **Where this stands:** 4.0 (background capture), 4.1 (offline photos), 4.2 (citable pages), 4.3 (exam
 rehearsal), 4.4 (audio-only lectures), 4.5 (cross-course search), 4.6 (spaced revision), 4.7 (handoff between
-devices), 4.8 (documents that work offline) and 4.9 (accessible and multilingual) are shipped. 5.0 is the next
-build; 5.0 and 5.1 are designed below, in that order.
+devices), 4.8 (documents that work offline), 4.9 (accessible and multilingual) and 5.0 (share a course) are
+shipped. 5.1 is the next build, designed below.
 
 ## 4.0 — capture that survives the background *(shipped in 4.0.0)*
 
@@ -166,7 +166,7 @@ citation chips isolated left-to-right inside a right-to-left sentence. What is n
 full audit of every control against a real screen reader, and Arabic prompts checked by a
 speaker rather than by the direction rules alone.
 
-## 5.0 — share a course
+## 5.0 — share a course *(shipped in 5.0.0)*
 
 Everything here is single-user; study groups are not.
 
@@ -177,6 +177,14 @@ Everything here is single-user; study groups are not.
 
 **Done means:** a classmate opens a link, reads the notes and documents, and can neither
 edit anything nor see personal memory.
+
+*As built:* `POST /api/share` takes a course or a document and returns `/share/<token>`; the
+page is rendered server-side with no script, so there is nothing on it to click into an edit.
+The snapshot carries the course name, the notes and the documents — not memory, answers,
+persona or settings — and the reading endpoint needs no identity, because the link is the
+credential. Documents are stored once under their content hash and every share points at that
+copy, with each sharer added to its attribution. Links are revoked by their owner, refused if
+they outlive thirty days, and writes to them answer 405.
 
 ## 5.1 — measured grounding
 
@@ -208,6 +216,7 @@ wish list.
 | 4.7 | notes written on the phone appear on the laptop, and capture on one stops the other |
 | 4.8 | a question asked with no connection is answered from the cached copy, page intact |
 | 4.9 | capture, an answer and a citation are announced, and Arabic runs right to left |
+| 5.0 | a classmate opens a link, reads notes and documents, and can change neither |
 
 Every milestone also keeps the existing suite green (`test-saas`, `test-iap`, `test-sources`,
 `test-grounding`, `test-pending`) and ships through the same path as 3.x: commit, tag, deploy to the incus

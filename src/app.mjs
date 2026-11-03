@@ -6,6 +6,7 @@ import { buildSystemPrompt, parseMemory, parseStructured, MODES } from './person
 import { handleRelay } from './relay.mjs';
 import { handleWorkspace } from './workspace.mjs';
 import { handleLiveSession } from './livesession.mjs';
+import { handleShare } from './share.mjs';
 import { openSession, closeSession, accepts, recordFrame, readNotes } from './broadcast.mjs';
 import { handleStore } from './store.mjs';
 import { handleIap } from './iap.mjs';
@@ -588,6 +589,9 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
   const url = new URL(request.url);
   let cfg = resolveConfig(env);
 
+  // A shared course is a page, not an asset: rendered here, read-only, no script.
+  if (url.pathname.startsWith('/share/')) return handleShare(request, url, env);
+
   if (!url.pathname.startsWith('/api/')) {
     return env.ASSETS ? env.ASSETS.fetch(request) : json({ error: 'not_found', message: 'Static assets are not bound.' }, 404);
   }
@@ -638,6 +642,11 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
   // can pick it up mid-class. handleLiveSession does its own identity check.
   if (url.pathname === '/api/live') {
     return handleLiveSession(request, url, env);
+  }
+
+  // A shared course: created by an owner, read by anyone holding the link.
+  if (url.pathname === '/api/share' || url.pathname.startsWith('/api/share/')) {
+    return handleShare(request, url, env);
   }
 
   // The catalog is a price list, not a secret: it is answered before the
