@@ -57,6 +57,29 @@ const NATIVE_STORE = (() => {
     return null;
   }
 })();
+// iOS keeps one audio session for the whole app, and a WebView's microphone
+// borrows it. Unless that session is mixable, opening the microphone interrupts
+// whatever was playing, and leaving the app hands the session away: both end the
+// lecture capture. The native side sets it once and takes it back.
+const NATIVE_AUDIO = (() => {
+  const bridge = window.Capacitor;
+  if (!bridge?.isNativePlatform?.() || bridge.getPlatform?.() !== 'ios') return null;
+  try {
+    return (bridge.registerPlugin ? bridge.registerPlugin('SageAudio') : bridge.Plugins?.SageAudio) || null;
+  } catch {
+    return null;
+  }
+})();
+
+async function holdAudioSession() {
+  if (!NATIVE_AUDIO?.begin) return;
+  try {
+    await NATIVE_AUDIO.begin({});
+  } catch {
+    /* the browser's own session still works; this is only the native repair */
+  }
+}
+
 const GATEWAY_DEFAULT = 'https://gateway.innotel.us/v1';
 
 /* ── state ─────────────────────────────────────────────────── */
@@ -900,6 +923,9 @@ function startRecorder() {
 }
 
 async function startListening() {
+  // Before the microphone opens, so the session is mixable rather than taking
+  // the audiobook the person is listening to with it.
+  await holdAudioSession();
   if (cap.listenOn) return stopListening();
   if (!navigator.mediaDevices?.getUserMedia) {
     toast('This browser has no microphone access. Use HTTPS or localhost.', 'error');

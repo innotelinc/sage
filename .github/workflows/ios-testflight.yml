@@ -127,6 +127,9 @@ jobs:
           cp deploy/ios/broadcast/SageBroadcast/Info.plist ios/App/SageBroadcast/
           cp deploy/ios/broadcast/SageBroadcastPlugin.swift ios/App/App/
           cp deploy/ios/plugins/SageStorePlugin.swift ios/App/App/
+          # The audio session keeps Listen alive with the app in the background,
+          # and stops the microphone from interrupting an audiobook.
+          cp deploy/ios/plugins/SageAudioSessionPlugin.swift ios/App/App/
           ls -1 ios/App/SageBroadcast
           gem install xcodeproj --no-document > /dev/null
           ruby deploy/ios/add-broadcast-target.rb

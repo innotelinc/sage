@@ -115,6 +115,24 @@ no `Podfile`; `xcodebuild` resolves packages itself and the generated container
 is `ios/App/App.xcodeproj`. The workflow still runs `pod install` when a Podfile
 does exist, so a Capacitor 7 checkout keeps working.
 
+## Listening in the background
+
+`SageAudioSessionPlugin.swift` exists because iOS gives an app one audio session
+and a WebView's microphone borrows it. Left at its default that session is
+play-and-record without `.mixWithOthers`: opening the microphone interrupts
+whatever the person was playing, and leaving the app without an active session
+ends the capture - an audiobook in another app is enough to stop a lecture being
+recorded.
+
+The plugin sets `.playAndRecord` with `[.mixWithOthers, .defaultToSpeaker,
+.allowBluetooth, .allowBluetoothA2DP]`, activates it, and takes it back when an
+interruption ends with `.shouldResume`. `public/app.js` calls `SageAudio.begin()`
+before it opens the microphone; nothing calls `end`, because deactivating would
+stop playback the plugin never started.
+
+The `UIBackgroundModes: audio` key added to `Info.plist` in the workflow is the
+other half: without it iOS suspends the capture when the screen is locked.
+
 ## Assets are bundled, not loaded remotely
 
 `capacitor.config.json` has no `server.url`, so `public/` is copied into the app.
