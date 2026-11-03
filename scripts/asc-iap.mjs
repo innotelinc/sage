@@ -28,6 +28,8 @@ const ATTACH = /^(1|true|yes)$/i.test(String(process.env.ATTACH || ''));
 
 /** The listing pass: copy, category, privacy URL, review contact, screenshots. */
 const LISTING = /^(1|true|yes)$/i.test(String(process.env.LISTING || ''));
+/** The last step, and the only one that puts the app in front of App Review. */
+const PUBLISH = /^(1|true|yes)$/i.test(String(process.env.PUBLISH || ''));
 const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+$/, '');
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
 const PROBE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_PROBE || ''));
@@ -1311,11 +1313,47 @@ async function ensureListing(app) {
   await placeInSubmission(app, version);
 }
 
+/**
+ * Submit the draft itself.
+ *
+ * Everything else in this script edits a draft: products, listing, screenshots, the
+ * build. None of it reaches App Review until the review submission is submitted, and
+ * an empty one is refused by Apple anyway. This checks there is something to send
+ * before sending it, then says what state came back.
+ */
+async function publishForReview(app) {
+  const drafts = await draftsFor(app);
+  const open = (drafts || []).find((item) => item.attributes?.state === 'READY_FOR_REVIEW');
+  if (!open) {
+    console.log('  publish · no draft in READY_FOR_REVIEW — nothing was submitted');
+    return false;
+  }
+  const items = await call('GET', `/v1/reviewSubmissions/${open.id}/items?limit=50`).catch(() => null);
+  const count = (items?.data || []).length;
+  console.log(`  publish · draft ${open.id} · ${count} item(s)`);
+  if (!count) {
+    console.log('  publish · refused: a submission with nothing in it');
+    return false;
+  }
+  const version = await iosVersion(app);
+  console.log(`  publish · version ${version.attributes?.versionString} · ${version.attributes?.appStoreState}`);
+  const result = await call('PATCH', `/v1/reviewSubmissions/${open.id}`, {
+    data: {
+      type: 'reviewSubmissions',
+      id: open.id,
+      attributes: { submitted: true, platform: 'IOS' },
+    },
+  });
+  console.log(`  publish · submitted · state ${result?.data?.attributes?.state || 'unknown'}`);
+  return true;
+}
+
 const app = await resolveAppId();
 console.log(`App ${BUNDLE} (${app}) · base territory ${TERRITORY}`);
 await report(app);
 if (ATTACH) await attachVersion(app);
 if (LISTING) await ensureListing(app);
+if (PUBLISH) await publishForReview(app);
 await readiness(app);
 const iap = await existingProducts(app);
 
