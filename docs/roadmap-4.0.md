@@ -13,8 +13,8 @@ Three promises define it, and each one is a milestone rather than a slogan:
 Everything else in 4.x is downstream of those three. If a feature does not make one of them true, it waits.
 
 **Where this stands:** 4.0 (background capture), 4.1 (offline photos), 4.2 (citable pages), 4.3 (exam
-rehearsal), 4.4 (audio-only lectures) and 4.5 (cross-course search) are shipped. 4.6 is the next build; 4.6
-through 5.1 are designed below, in that order.
+rehearsal), 4.4 (audio-only lectures), 4.5 (cross-course search) and 4.6 (spaced revision) are shipped. 4.7 is
+the next build; 4.7 through 5.1 are designed below, in that order.
 
 ## 4.0 — capture that survives the background *(shipped in 4.0.0)*
 
@@ -100,7 +100,7 @@ together. Finding "where did we do osmosis" is currently scrolling.
 **Done means:** a phrase finds every occurrence across courses in under a second on a
 phone, and each hit opens where it came from.
 
-## 4.6 — spaced revision
+## 4.6 — spaced revision *(shipped in 4.6.0)*
 
 The reason to keep a record is to be asked again. Nothing comes back today.
 
@@ -187,6 +187,7 @@ wish list.
 | 4.1 | airplane-mode replay of a photographed turn across a tab kill, one delivery |
 | 4.2 | a citation whose location opens the page it names |
 | 4.3 | a timed paper sat end to end, marked against the rubric |
+| 4.6 | a missed question returns on the interval, and a five-minute session clears what is due |
 
 Every milestone also keeps the existing suite green (`test-saas`, `test-iap`, `test-sources`,
 `test-grounding`, `test-pending`) and ships through the same path as 3.x: commit, tag, deploy to the incus

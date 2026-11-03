@@ -92,6 +92,9 @@
           <button class="tab" data-tab="search" role="tab" id="nav-search" aria-controls="tab-search" aria-selected="false">
             <span class="tab-ico" aria-hidden="true">⌕</span><span class="tab-label">Search</span><kbd>9</kbd>
           </button>
+          <button class="tab" data-tab="review" role="tab" id="nav-review" aria-controls="tab-review" aria-selected="false">
+            <span class="tab-ico" aria-hidden="true">↻</span><span class="tab-label">Review</span><kbd>0</kbd>
+          </button>
         </nav>
 
         <div class="sidebar-foot">
@@ -386,6 +389,32 @@
                    placeholder="osmosis, entropy, the week 4 handout…" aria-label="Search every course" />
             <p class="mini muted" id="searchMeta">Type at least two letters.</p>
             <div id="searchResults" class="stack"></div>
+          </section>
+
+          <section class="panel" id="tab-review" role="tabpanel" aria-labelledby="nav-review" tabindex="-1">
+            <div class="page-head">
+              <h1>Review</h1>
+              <p class="page-sub">Only what is due: the marks a paper left on the table, and the quiz items and answers it was unsure of. Right, and a question waits longer; wrong, and it comes back tomorrow.</p>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h2 class="card-title">Today</h2>
+                <span class="mini muted" id="reviewMeta">nothing due</span>
+              </div>
+              <div id="reviewStage" class="stack"></div>
+              <div class="actions">
+                <button class="btn primary" id="btnReviewStart">Start</button>
+                <button class="btn ghost" id="btnReviewBuild">Rebuild queue</button>
+              </div>
+              <p class="mini muted" id="reviewStatus"></p>
+              <p class="mini muted">A question is asked again after 1, 3, 7 and 21 days, each time it comes back right. A miss starts it over, so the next day catches it. The queue is kept on this device, per course.</p>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2 class="card-title">Queue</h2></div>
+              <div id="reviewQueue" class="stack"></div>
+            </div>
           </section>
 
           <section class="panel" id="tab-memory" role="tabpanel" aria-labelledby="nav-memory" tabindex="-1">
@@ -702,8 +731,8 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=4.5.1"></script>
-    <script type="module" src="/shell.js?v=4.5.0"></script>
+    <script type="module" src="/app.js?v=4.6.0"></script>
+    <script type="module" src="/shell.js?v=4.6.0"></script>
     <script type="module" src="/profile.js?v=3.3.0"></script>
   </body>
 </html>

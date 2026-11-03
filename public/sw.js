@@ -1,6 +1,6 @@
 /* Shell cache only. API traffic is never cached. */
-const CACHE = 'sage-shell-v15';
-const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/shell.js', '/profile.js', '/icon.svg', '/manifest.webmanifest'];
+const CACHE = 'sage-shell-v16';
+const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/shell.js', '/profile.js', '/icon.svg', '/manifest.webmanifest', '/search.js', '/understand.js', '/review.js'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));

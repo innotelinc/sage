@@ -7,6 +7,16 @@ import { putPhotos, getPhotos, dropPhotos } from './pending-images.js';
 const $ = (id) => document.getElementById(id);
 import { searchCourses } from './search.js';
 import { gatherUnderstanding } from './understand.js';
+import {
+  buildCandidates as reviewCandidates,
+  dueItems as reviewDue,
+  enqueue as reviewEnqueue,
+  grade as reviewGrade,
+  loadReview,
+  saveReview,
+  session as reviewSession,
+  stats as reviewStats,
+} from './review.js';
 
 const LS_KEY = 'sage.course-agent.v1';
 const IS_NATIVE = /^(capacitor|ionic):$/.test(location.protocol) || Boolean(window.__SAGE_NATIVE__);
@@ -3857,6 +3867,130 @@ function offerScreenFallback() {
   if (!dialog.open) dialog.showModal();
 }
 
+/* review tab: spaced revision */
+let reviewRun = null;
+
+function reviewCourseId() {
+  return state.activeId || 'general';
+}
+
+function refreshReview() {
+  const { review } = reviewEnqueue(loadReview(reviewCourseId()), reviewCandidates(state.history || {}), Date.now());
+  saveReview(reviewCourseId(), review);
+  return review;
+}
+
+function reviewWhen(due, now) {
+  const days = Math.ceil((due - now) / 86400000);
+  if (days <= 0) return 'due now';
+  return days === 1 ? 'tomorrow' : `in ${days} days`;
+}
+
+function renderReview() {
+  const meta = $('reviewMeta');
+  const status = $('reviewStatus');
+  const list = $('reviewQueue');
+  if (!meta || !status || !list) return;
+  const now = Date.now();
+  const review = loadReview(reviewCourseId());
+  const counts = reviewStats(review, now);
+  meta.textContent = counts.due
+    ? `${counts.due} due - about ${counts.minutes} minute${counts.minutes === 1 ? '' : 's'}`
+    : 'nothing due today';
+  status.textContent = [
+    `${counts.due} due now, ${counts.waiting} waiting, ${counts.retired} learnt`,
+    `streak ${counts.streak} day${counts.streak === 1 ? '' : 's'}`,
+    counts.doneToday ? `${counts.doneToday} answered today` : '',
+    counts.nextDue ? `next ${reviewWhen(counts.nextDue, now)}` : '',
+  ]
+    .filter(Boolean)
+    .join(' - ') + '.';
+
+  const items = reviewDue(review, now).concat(
+    Object.values(review.items).filter((item) => !item.retired && Number(item.due) > now)
+  );
+  list.innerHTML = '';
+  if (!items.length) {
+    list.innerHTML =
+      '<p class="mini muted">Nothing has been missed yet. Sit a practice exam, or answer something the model is unsure of, and it appears here the next day.</p>';
+    return;
+  }
+  for (const item of items.slice(0, 12)) {
+    const row = document.createElement('div');
+    row.className = 'mini';
+    row.innerHTML = `<strong>${escapeHtml(String(item.prompt).slice(0, 140))}</strong><br><span class="muted">${escapeHtml(item.note || item.source)} - ${reviewWhen(Number(item.due), now)}</span>`;
+    list.appendChild(row);
+  }
+}
+
+function renderReviewCard() {
+  const stage = $('reviewStage');
+  if (!stage || !reviewRun) return;
+  if (reviewRun.index >= reviewRun.queue.length) {
+    const counts = reviewStats(loadReview(reviewCourseId()), Date.now());
+    stage.innerHTML = `<div class="card">
+        <h3>Done for today</h3>
+        <p class="mini">${reviewRun.right} of ${reviewRun.queue.length} came back to you without the answer. ${
+          counts.due ? `${counts.due} still due.` : 'Nothing else is due.'
+        } Streak ${counts.streak} day${counts.streak === 1 ? '' : 's'}.</p>
+      </div>`;
+    reviewRun = null;
+    $('btnReviewStart').textContent = 'Start';
+    renderReview();
+    return;
+  }
+  const item = loadReview(reviewCourseId()).items[reviewRun.queue[reviewRun.index]];
+  if (!item) {
+    reviewRun.index += 1;
+    renderReviewCard();
+    return;
+  }
+  stage.innerHTML = `<div class="card">
+      <div class="card-head">
+        <h2 class="card-title">${escapeHtml(String(item.prompt).slice(0, 200))}</h2>
+        <span class="mini muted">${reviewRun.index + 1} of ${reviewRun.queue.length}</span>
+      </div>
+      <p class="mini muted">${escapeHtml(item.note || 'from your own record')}</p>
+      ${
+        reviewRun.revealed
+          ? `<p class="mini">${escapeHtml(item.answer)}</p>
+      <div class="actions">
+        <button class="btn primary" data-review="yes">I had it</button>
+        <button class="btn ghost" data-review="no">Not yet</button>
+      </div>`
+          : '<div class="actions"><button class="btn" data-review="reveal">Show what was missed</button></div>'
+      }
+    </div>`;
+}
+
+function startReview() {
+  const review = refreshReview();
+  const queue = reviewSession(review, Date.now(), 12).map((item) => item.key);
+  if (!queue.length) {
+    const counts = reviewStats(review, Date.now());
+    $('reviewStage').innerHTML = `<p class="mini muted">Nothing is due.${
+      counts.nextDue ? ` The next question comes back ${reviewWhen(counts.nextDue, Date.now())}.` : ''
+    }</p>`;
+    renderReview();
+    return;
+  }
+  reviewRun = { queue, index: 0, revealed: false, right: 0 };
+  $('btnReviewStart').textContent = 'Stop';
+  renderReview();
+  renderReviewCard();
+}
+
+function gradeReview(correct) {
+  if (!reviewRun) return;
+  const key = reviewRun.queue[reviewRun.index];
+  saveReview(reviewCourseId(), reviewGrade(loadReview(reviewCourseId()), key, correct, Date.now()));
+  if (correct) reviewRun.right += 1;
+  reviewRun.index += 1;
+  reviewRun.revealed = false;
+  renderReviewCard();
+  renderReview();
+}
+
 /* ── wiring ────────────────────────────────────────────────── */
 function bind() {
   $('tabs').addEventListener('click', (event) => {
@@ -3883,6 +4017,34 @@ function bind() {
     syncKeyReset();
   };
   $('btnResetKey').onclick = resetSavedKey;
+  $('nav-review')?.addEventListener('click', renderReview);
+  $('btnReviewStart').onclick = () => {
+    if (reviewRun) {
+      reviewRun = null;
+      $('btnReviewStart').textContent = 'Start';
+      $('reviewStage').innerHTML = '<p class="mini muted">Stopped. What you answered is already rescheduled.</p>';
+      renderReview();
+      return;
+    }
+    startReview();
+  };
+  $('btnReviewBuild').onclick = () => {
+    const before = Object.keys(loadReview(reviewCourseId()).items).length;
+    const review = refreshReview();
+    renderReview();
+    const added = Object.keys(review.items).length - before;
+    toast(added ? `${added} question${added === 1 ? '' : 's'} added to the queue.` : 'The queue already holds everything marked so far.');
+  };
+  $('reviewStage')?.addEventListener('click', (event) => {
+    const action = event.target.closest?.('[data-review]')?.dataset.review;
+    if (!action || !reviewRun) return;
+    if (action === 'reveal') {
+      reviewRun.revealed = true;
+      renderReviewCard();
+      return;
+    }
+    gradeReview(action === 'yes');
+  });
   $('searchBox')?.addEventListener('input', renderSearch);
   $('searchResults')?.addEventListener('click', (event) => {
     const row = event.target.closest?.('[data-index]');

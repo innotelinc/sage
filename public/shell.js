@@ -15,6 +15,7 @@ const TABS = [
   { id: 'foundation', label: 'Foundation' },
   { id: 'memory', label: 'Memory' },
   { id: 'search', label: 'Search' },
+  { id: 'review', label: 'Review' },
 ];
 const THEME_ICON = { auto: '◐', dark: '☾', light: '☀' };
 
@@ -238,6 +239,11 @@ document.addEventListener('keydown', (event) => {
   if (index >= 1 && index <= TABS.length) {
     event.preventDefault();
     return openTab(TABS[index - 1].id);
+  }
+  // A tenth tab has no digit left, so it takes the one under the nine.
+  if (key === '0' && TABS.length >= 10) {
+    event.preventDefault();
+    return openTab(TABS[9].id);
   }
   if (key === '/') {
     event.preventDefault();
