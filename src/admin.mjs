@@ -259,6 +259,28 @@ export async function handleAdmin(request, env = {}) {
         'set-cookie': dropCookie(SSO_COOKIE, { secure }),
       });
     }
+    // Cerulean can come back with an error instead of a code — an unregistered
+    // scope, a declined consent, a request the provider would not honour.
+    // Exchanging the empty string only earns a generic invalid_grant that hides
+    // the reason, so say what actually happened instead.
+    const refused = url.searchParams.get('error') || '';
+    if (refused) {
+      const detail = url.searchParams.get('error_description') || '';
+      console.error(`[admin] Cerulean refused before the exchange: ${refused} ${detail}`.trim());
+      return htmlResponse(
+        page('Sign-in refused', `<h1>Cerulean refused before the exchange</h1><p class="sub">${escapeHtml(refused)}${detail ? ` — ${escapeHtml(detail)}` : ''}</p><p class="mini"><a href="/admin">Try again</a></p>`),
+        400,
+        { 'set-cookie': dropCookie(SSO_COOKIE, { secure }) },
+      );
+    }
+    if (!code) {
+      console.error('[admin] Cerulean returned no authorization code');
+      return htmlResponse(
+        page('Sign-in incomplete', '<h1>Cerulean came back without a code</h1><p class="sub">Nothing was exchanged, so nothing was refused. Start again from <a href="/admin">/admin</a>.</p>'),
+        400,
+        { 'set-cookie': dropCookie(SSO_COOKIE, { secure }) },
+      );
+    }
     try {
       const doc = await discovery(cfg);
       const tokens = await exchangeCode(cfg, doc, { code, verifier: attempt.verifier });

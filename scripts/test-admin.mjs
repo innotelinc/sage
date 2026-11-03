@@ -192,6 +192,28 @@ try {
     `status=${againStale.status}`,
   );
 
+  // A refusal before any code exists must name itself, not fake a spent code.
+  const refuseFirst = await fetch(`${ORIGIN}/admin`, { redirect: 'manual' });
+  const refuseJar = cookiesFrom(refuseFirst).jar;
+  const refuseState = new URL(refuseFirst.headers.get('location') || '').searchParams.get('state');
+  const beforeRefusal = tokenCalls;
+  const refused = await fetch(
+    `${ORIGIN}/admin/callback?error=invalid_scope&error_description=Bad%20scope&state=${encodeURIComponent(refuseState)}`,
+    { redirect: 'manual', headers: { cookie: cookieHeader(refuseJar) } },
+  );
+  const refusedHtml = await refused.text();
+  check('a refusal before the exchange names the reason', refused.status === 400 && refusedHtml.includes('invalid_scope'), `status=${refused.status}`);
+  check('a refused authorize is never exchanged', tokenCalls === beforeRefusal, `calls=${tokenCalls - beforeRefusal}`);
+
+  const noCodeFirst = await fetch(`${ORIGIN}/admin`, { redirect: 'manual' });
+  const noCodeJar = cookiesFrom(noCodeFirst).jar;
+  const noCodeState = new URL(noCodeFirst.headers.get('location') || '').searchParams.get('state');
+  const noCode = await fetch(`${ORIGIN}/admin/callback?state=${encodeURIComponent(noCodeState)}`, {
+    redirect: 'manual',
+    headers: { cookie: cookieHeader(noCodeJar) },
+  });
+  check('a callback without a code is not exchanged either', noCode.status === 400 && tokenCalls === beforeRefusal, `status=${noCode.status}`);
+
   // 3. Tampering with the session is refused.
   const tampered = await fetch(`${ORIGIN}/admin`, {
     redirect: 'manual',
