@@ -13,8 +13,9 @@ Three promises define it, and each one is a milestone rather than a slogan:
 Everything else in 4.x is downstream of those three. If a feature does not make one of them true, it waits.
 
 **Where this stands:** 4.0 (background capture), 4.1 (offline photos), 4.2 (citable pages), 4.3 (exam
-rehearsal), 4.4 (audio-only lectures), 4.5 (cross-course search), 4.6 (spaced revision) and 4.7 (handoff between
-devices) are shipped. 4.8 is the next build; 4.8 through 5.1 are designed below, in that order.
+rehearsal), 4.4 (audio-only lectures), 4.5 (cross-course search), 4.6 (spaced revision), 4.7 (handoff between
+devices) and 4.8 (documents that work offline) are shipped. 4.9 is the next build; 4.9 through 5.1 are designed
+below, in that order.
 
 ## 4.0 — capture that survives the background *(shipped in 4.0.0)*
 
@@ -125,7 +126,7 @@ the laptop does not have the notes.
 **Done means:** notes from the phone appear on the laptop within seconds, and starting
 capture on one device stops it on the other.
 
-## 4.8 — documents that work offline
+## 4.8 — documents that work offline *(shipped in 4.8.0)*
 
 Foundation documents live in the workspace, so a basement tutorial has no grounding at
 all — the gap 4.1 opened for photos, one layer up.
@@ -137,6 +138,13 @@ all — the gap 4.1 opened for photos, one layer up.
 
 **Done means:** with the network off, a question about the handout is answered from the
 cached copy and the reply still names the page.
+
+*As built:* the model itself is remote, so "answered with the network off" means the turn is
+kept with the documents it was asked against, grounded on the cached copy, and answered the
+moment the connection returns — with the same page labels, and a reply that says which of its
+sources came from the device. What offline buys here is that no re-upload and no page name is
+lost in between; generating an answer with no server at all is a local model, which is not
+planned.
 
 ## 4.9 — accessible and multilingual
 
@@ -189,6 +197,7 @@ wish list.
 | 4.3 | a timed paper sat end to end, marked against the rubric |
 | 4.6 | a missed question returns on the interval, and a five-minute session clears what is due |
 | 4.7 | notes written on the phone appear on the laptop, and capture on one stops the other |
+| 4.8 | a question asked with no connection is answered from the cached copy, page intact |
 
 Every milestone also keeps the existing suite green (`test-saas`, `test-iap`, `test-sources`,
 `test-grounding`, `test-pending`) and ships through the same path as 3.x: commit, tag, deploy to the incus

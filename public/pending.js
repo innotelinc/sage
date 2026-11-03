@@ -28,6 +28,12 @@ export function enqueue(queue, turn, limit = MAX_PENDING) {
     images: Math.max(0, Math.min(4, Number(turn.images) || 0)),
     maxTokens: Number(turn.maxTokens) || 0,
     tab: String(turn.tab || ''),
+    // The documents this turn was asked against while the connection was down:
+    // they came from the copy on this device, and the reply should say so.
+    fromCache: (Array.isArray(turn.fromCache) ? turn.fromCache : [])
+      .filter((name) => typeof name === 'string' && name.trim())
+      .map((name) => name.slice(0, 120))
+      .slice(0, 8),
     at: new Date().toISOString(),
   };
   if (!entry.text.trim() && !entry.images) return queued(queue);

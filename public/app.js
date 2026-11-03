@@ -3,6 +3,7 @@
 
 import { enqueue, forget, queued, pendingLabel } from './pending.js';
 import { putPhotos, getPhotos, dropPhotos } from './pending-images.js';
+import { cacheNote, cacheOnly, describeCache, hashDoc, planCache, reconcileDocs, stampDoc } from './library.js';
 
 const $ = (id) => document.getElementById(id);
 import { searchCourses } from './search.js';
@@ -331,6 +332,7 @@ function adoptWorkspace(workspace, savedAt) {
   updateStatus();
   renderPackStatus();
   renderFoundation();
+  reconcileLibrary();
   return true;
 }
 
@@ -588,6 +590,7 @@ async function agent(mode, { text = '', images = [], maxTokens } = {}) {
   }
   const turn = courseForTurn();
   if (turn && turn.id !== state.activeId) switchCourse(turn.id, { auto: true });
+  const sent = foundationFor(mode);
   let res;
   try {
     res = await api('/api/chat', {
@@ -600,7 +603,7 @@ async function agent(mode, { text = '', images = [], maxTokens } = {}) {
         memory: state.memory,
         language: state.language,
         persona: state.persona,
-        sources: foundationFor(mode),
+        sources: sent,
       },
     });
   } catch (error) {
@@ -608,7 +611,14 @@ async function agent(mode, { text = '', images = [], maxTokens } = {}) {
     // A photographed question is still a question, so its photos go with it.
     const photos = (images || []).filter((entry) => typeof entry === 'string' && entry.startsWith('data:image/')).slice(0, 4);
     if (/Cannot reach the agent server/i.test(error.message) && (String(text || '').trim() || photos.length)) {
-      const next = enqueue(state.pending, { mode, text, images: photos.length, maxTokens, tab: (state.ui || {}).tab });
+      const next = enqueue(state.pending, {
+        mode,
+        text,
+        images: photos.length,
+        maxTokens,
+        tab: (state.ui || {}).tab,
+        fromCache: sent.filter((doc) => doc.fromCache).map((doc) => doc.name),
+      });
       const entry = next[next.length - 1];
       if (photos.length && entry) await putPhotos(entry.id, photos).catch(() => {});
       state.pending = next;
@@ -618,6 +628,7 @@ async function agent(mode, { text = '', images = [], maxTokens } = {}) {
     }
     throw error;
   }
+  res.fromCache = sent.filter((doc) => doc.fromCache).map((doc) => doc.name);
   if (res.notes?.length) addMemory(res.notes, 'learned');
   return res;
 }
@@ -3645,10 +3656,17 @@ function normalizeFoundation(raw) {
    handout, and an essay carries its own material in the brief. */
 function foundationFor(mode) {
   if (!['answer', 'quiz', 'read', 'essay', 'paper', 'mark'].includes(mode)) return [];
-  return (state.foundation || [])
-    .filter((doc) => doc.on !== false && doc.text)
-    .slice(0, 8)
-    .map((doc) => ({ name: doc.name, kind: doc.kind, text: doc.text, segments: doc.segments || [] }));
+  const docs = (state.foundation || []).filter((doc) => doc.on !== false && doc.text);
+  // The course's own documents first, then anything this device still holds that
+  // the course has since let go — read before the workspace moved, still citable.
+  const extra = cacheOnly(library.rows || [], docs);
+  return [...docs, ...extra].slice(0, 8).map((doc) => ({
+    name: doc.name,
+    kind: doc.kind,
+    text: doc.text,
+    segments: doc.segments || [],
+    ...(extra.includes(doc) ? { fromCache: true } : {}),
+  }));
 }
 
 function foundationSummary() {
@@ -3660,8 +3678,14 @@ function foundationSummary() {
 function groundedNote(res) {
   const names = Array.isArray(res?.grounded) ? res.grounded.filter(Boolean) : [];
   const cites = Array.isArray(res?.citations) ? res.citations.filter((cite) => cite && cite.name) : [];
+  // Which of those came from this device rather than the server. A turn asked
+  // with no connection is answered from the cached copy, and the reply says so.
+  const cachedNames = Array.isArray(res?.fromCache)
+    ? res.fromCache.filter(Boolean)
+    : names.filter((name) => cacheOnly(library.rows || []).some((row) => row.name === name));
+  const cachedSuffix = cachedNames.length ? ` · ${cacheNote(cachedNames)}` : '';
   if (!names.length && !cites.length) return '';
-  if (!cites.length) return `<div class="mini muted grounded">grounded in ${escapeHtml(names.join(', '))}</div>`;
+  if (!cites.length) return `<div class="mini muted grounded">grounded in ${escapeHtml(names.join(', '))}${cachedSuffix}</div>`;
   // A page is only worth a chip if the app can open it, which is why the server
   // drops any citation that does not match a document it was given.
   const chips = cites
@@ -3670,14 +3694,16 @@ function groundedNote(res) {
       return `<button type="button" class="cite-chip" data-cite="${escapeHtml(cite.name)}" data-locator="${escapeHtml(cite.locator || '')}">${escapeHtml(cite.name)}${escapeHtml(where)}</button>`;
     })
     .join(' ');
-  return `<div class="mini muted grounded">grounded in ${chips}</div>`;
+  return `<div class="mini muted grounded">grounded in ${chips}${cachedSuffix}</div>`;
 }
 
 /* Turning to the page: the cited passage, from the copy this course already holds. */
 function openCitation(name, locator) {
   const viewer = $('citeViewer');
   if (!viewer) return;
-  const doc = (state.foundation || []).find((entry) => entry.name === name);
+  const doc =
+    (state.foundation || []).find((entry) => entry.name === name) ||
+    (library.rows || []).find((entry) => entry.name === name);
   $('citeTitle').textContent = locator && locator !== 'whole document' ? `${name} · ${locator}` : name;
   const segments = Array.isArray(doc?.segments) && doc.segments.length
     ? doc.segments
@@ -3718,6 +3744,7 @@ document.addEventListener('click', (event) => {
 function renderFoundation() {
   const list = $('foundationList');
   if (!list) return;
+  ensureLibrary();
   const docs = normalizeFoundation(state.foundation);
   state.foundation = docs;
   list.innerHTML = '';
@@ -3735,6 +3762,7 @@ function renderFoundation() {
       <div class="doc-body">
         <strong>${escapeHtml(doc.name)}</strong>
         <span class="mini muted">${escapeHtml(doc.kind)} · ${Number(doc.chars || 0).toLocaleString()} characters${doc.note ? ` · ${escapeHtml(doc.note)}` : ''}</span>
+        ${docFlag(doc)}
       </div>
       <button type="button" class="mini" data-drop="${doc.id}">remove</button>
     `;
@@ -3778,6 +3806,7 @@ async function onFoundationFiles(event) {
       }
       persist();
       renderFoundation();
+      cacheFoundation(state.activeId, state.foundation);
       toast(`${doc.name || file.name} added — ${Number(doc.chars || 0).toLocaleString()} characters${doc.note ? `. ${doc.note}` : ''}`);
     } catch (error) {
       toast(`${file.name}: ${error.message}`, 'error');
@@ -3793,7 +3822,166 @@ function clearFoundation() {
   state.foundation = [];
   persist();
   renderFoundation();
+  forgetLibrary();
   toast('Foundation documents cleared.');
+}
+
+/* ── the copy on this device ───────────────────────────────── */
+/* Every foundation document is kept in IndexedDB as well as the workspace, under
+   its own budget rather than localStorage's. The workspace is what the server
+   knows; this is what survives a basement tutorial, and what a reply is grounded
+   on when the connection is gone. */
+const LIBRARY_DB = 'sage-library';
+const LIBRARY_STORE = 'docs';
+const library = { rows: [], loadedFor: '', loadingFor: '', restoring: false };
+
+function libraryId(courseId, name) {
+  return `${courseId || 'general'}::${name}`;
+}
+
+function libraryDb() {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let request;
+    try {
+      request = indexedDB.open(LIBRARY_DB, 1);
+    } catch {
+      resolve(null);
+      return;
+    }
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(LIBRARY_STORE)) {
+        const store = db.createObjectStore(LIBRARY_STORE, { keyPath: 'id' });
+        store.createIndex('course', 'course', { unique: false });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve(null);
+    request.onblocked = () => resolve(null);
+  });
+}
+
+function libraryOnce(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function libraryRun(mode, run) {
+  const db = await libraryDb();
+  if (!db) return null;
+  try {
+    const tx = db.transaction(LIBRARY_STORE, mode);
+    const result = await run(tx.objectStore(LIBRARY_STORE));
+    await new Promise((resolve) => {
+      tx.oncomplete = resolve;
+      tx.onerror = resolve;
+      tx.onabort = resolve;
+    });
+    return result;
+  } catch {
+    return null;
+  } finally {
+    db.close?.();
+  }
+}
+
+async function libraryEntries(courseId) {
+  const rows = await libraryRun('readonly', (store) => libraryOnce(store.index('course').getAll(String(courseId || 'general'))));
+  return (rows || []).filter((row) => row && row.text);
+}
+
+function renderCacheLine(rows = library.rows) {
+  const el = $('foundationCache');
+  if (el) el.textContent = describeCache(rows || []);
+}
+
+/* Keep the course's documents on the device, least recently used leaving first. */
+async function cacheFoundation(courseId = state.activeId || 'general', docs = state.foundation) {
+  const list = normalizeFoundation(docs).filter((doc) => String(doc.text || '').trim());
+  if (!list.length) return null;
+  const now = Date.now();
+  const rows = list.map((doc) => ({ ...stampDoc(doc, now), id: libraryId(courseId, doc.name), course: String(courseId || 'general') }));
+  const plan = await libraryRun('readwrite', async (store) => {
+    for (const row of rows) {
+      const was = await libraryOnce(store.get(row.id));
+      await libraryOnce(store.put({ ...row, cachedAt: Number(was?.cachedAt) || now }));
+    }
+    const all = (await libraryOnce(store.getAll())) || [];
+    const planned = planCache(
+      all.map((row) => ({ id: row.id, chars: Number(row.chars) || String(row.text || '').length, at: Number(row.usedAt) || Number(row.cachedAt) || 0 }))
+    );
+    for (const id of planned.dropped) await libraryOnce(store.delete(id));
+    return planned;
+  });
+  library.rows = await libraryEntries(courseId);
+  library.loadedFor = courseId;
+  renderCacheLine(library.rows);
+  return plan;
+}
+
+async function forgetLibrary(courseId = state.activeId || 'general') {
+  await libraryRun('readwrite', async (store) => {
+    const keys = await libraryOnce(store.index('course').getAllKeys(String(courseId || 'general')));
+    for (const key of keys || []) await libraryOnce(store.delete(key));
+  });
+  library.rows = [];
+  renderCacheLine([]);
+}
+
+/* Loaded lazily, from renderFoundation, so every path that shows the panel — boot,
+   a course switch, a workspace pull — has the copy this course can ground on. */
+function ensureLibrary() {
+  const courseId = state.activeId || 'general';
+  if (library.loadingFor === courseId) return;
+  if (library.loadedFor === courseId && library.rows.length) return;
+  library.loadingFor = courseId;
+  libraryEntries(courseId)
+    .then((rows) => {
+      if (library.loadingFor === courseId) library.loadingFor = '';
+      if (state.activeId && state.activeId !== courseId) return;
+      library.rows = rows;
+      library.loadedFor = courseId;
+      if (!rows.length) {
+        cacheFoundation(courseId, state.foundation);
+        return;
+      }
+      renderFoundation();
+      renderCacheLine(rows);
+    })
+    .catch(() => {
+      if (library.loadingFor === courseId) library.loadingFor = '';
+    });
+}
+
+/* The server answered, so its copy is the one that counts: take the words it has,
+   refresh what changed, and let go of what the course no longer holds. Never
+   called after a failed pull, which is what keeps the cache alive offline. */
+async function reconcileLibrary() {
+  const courseId = state.activeId || 'general';
+  const rows = await libraryEntries(courseId);
+  const live = normalizeFoundation(state.foundation);
+  const plan = reconcileDocs(rows, live);
+  if (plan.drop.length) {
+    await libraryRun('readwrite', async (store) => {
+      for (const row of rows) if (plan.drop.includes(row.name)) await libraryOnce(store.delete(row.id));
+    });
+  }
+  await cacheFoundation(courseId, live);
+  if (plan.refresh.length) {
+    toast(`${plan.refresh.length} document${plan.refresh.length === 1 ? '' : 's'} refreshed from the server.`);
+  }
+}
+
+/* What the panel says per document: whether this device can ground on it, and
+   whether the copy here is the one the course has. */
+function docFlag(doc) {
+  const held = (library.rows || []).find((row) => row && row.name === doc.name);
+  if (!held) return '<span class="mini muted">not on this device</span>';
+  if (held.hash !== hashDoc(doc)) return '<span class="mini muted">cached copy is older — re-add to refresh</span>';
+  return '<span class="mini muted">cached on this device</span>';
 }
 
 let flushingQueue = false;
@@ -3806,6 +3994,7 @@ async function flushPending() {
   flushingQueue = true;
   const before = queued(state.pending).length;
   for (const turn of queued(state.pending)) {
+    const sent = foundationFor(turn.mode);
     let res;
     // The photos kept beside this turn, if the store still has them. An evicted or
     // refused store turns the replay back into the words alone.
@@ -3828,13 +4017,14 @@ async function flushPending() {
           memory: state.memory,
           language: state.language,
           persona: state.persona,
-          sources: foundationFor(turn.mode),
+          sources: sent,
         },
       });
     } catch {
       break;
     }
     state.pending = forget(state.pending, turn.id);
+    res.fromCache = (turn.fromCache || []).length ? turn.fromCache : sent.filter((doc) => doc.fromCache).map((doc) => doc.name);
     if (photos.length) await dropPhotos(turn.id).catch(() => {});
     persist();
     deliverQueued(turn, res);
