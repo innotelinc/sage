@@ -322,6 +322,7 @@ at all on an instance with no code and no sign-in.
 - **v4.2** — shipped: a citation you can turn to — a PDF whose text streams line up with its pages is offered page by page, a grounded reply cites the page it used as [file p.N], and the page opens from the copy the course already holds; a citation to something never supplied is dropped rather than shown.
 - **v4.3** — shipped: exam rehearsal — a timed paper set from the course's own material, sat in the app with a clock that runs on the deadline rather than on the last tick, and marked question by question against the marks it set: no answer, hint or marking note appears before it is submitted, and each question comes back with the one thing that would have earned the rest.
 - **v4.4** — shipped: audio-only lectures — a lecture with no screen is taken by the microphone alone, each fragment reaches the notes with the offset range it covers, every note carries the moment it came from as [lecture M:SS], and the recording stays on the device so tapping that moment replays it from there; an offset that was never given is never cited.
+- **v4.5** — shipped: one search across every course — a query runs on the device over every course's notes, answers, quiz items, essays and foundation pages, needs all of its words, ranks what mentions them most (and in the title) first, and opens each hit where it came from; a PDF with real page boundaries is searched page by page, and anything else opens as one document rather than pretending to a page.
 
 ---
 

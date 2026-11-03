@@ -9,9 +9,12 @@ const TABS = [
   { id: 'live', label: 'Live' },
   { id: 'answer', label: 'Answer' },
   { id: 'quiz', label: 'Quiz' },
+  { id: 'exam', label: 'Practice Exam' },
   { id: 'essay', label: 'Essay' },
   { id: 'read', label: 'Read' },
+  { id: 'foundation', label: 'Foundation' },
   { id: 'memory', label: 'Memory' },
+  { id: 'search', label: 'Search' },
 ];
 const THEME_ICON = { auto: '◐', dark: '☾', light: '☀' };
 

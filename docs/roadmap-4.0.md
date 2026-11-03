@@ -13,8 +13,8 @@ Three promises define it, and each one is a milestone rather than a slogan:
 Everything else in 4.x is downstream of those three. If a feature does not make one of them true, it waits.
 
 **Where this stands:** 4.0 (background capture), 4.1 (offline photos), 4.2 (citable pages), 4.3 (exam
-rehearsal) and 4.4 (audio-only lectures) are shipped. 4.5 is the next build; 4.5 through 5.1 are designed
-below, in that order.
+rehearsal), 4.4 (audio-only lectures) and 4.5 (cross-course search) are shipped. 4.6 is the next build; 4.6
+through 5.1 are designed below, in that order.
 
 ## 4.0 — capture that survives the background *(shipped in 4.0.0)*
 
@@ -87,7 +87,7 @@ file is uploaded afterwards.
 **Done means:** a 50-minute lecture captured with the screen off arrives as timestamped
 notes, and a note opens the recording at its offset.
 
-## 4.5 — one search across every course
+## 4.5 — one search across every course *(shipped in 4.5.0)*
 
 Notes, answers, essays and foundation text are all local, and none can be searched
 together. Finding "where did we do osmosis" is currently scrolling.

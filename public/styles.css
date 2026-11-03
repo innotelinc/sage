@@ -1302,3 +1302,12 @@ dialog.sheet form {
 /* audio-only lectures: the recording this device kept, replayed from a note's offset */
 .audio-player { width: 100%; margin: 10px 0 2px; height: 34px; }
 .note-offset { margin-left: 2px; }
+
+/* one search across every course */
+.search-box { width: 100%; margin: 4px 0 8px; }
+.search-hit { display: grid; gap: 2px; width: 100%; text-align: left; cursor: pointer; padding: 10px 13px; border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface); }
+.search-hit:hover { border-color: var(--brand); }
+.hit-kind { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand); }
+.hit-where { font-size: 12.5px; color: var(--text-2); }
+.hit-text { margin: 3px 0 0; font-size: 13.5px; }
+.search-hit mark { background: color-mix(in srgb, var(--brand) 24%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }

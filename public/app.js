@@ -5,6 +5,8 @@ import { enqueue, forget, queued, pendingLabel } from './pending.js';
 import { putPhotos, getPhotos, dropPhotos } from './pending-images.js';
 
 const $ = (id) => document.getElementById(id);
+import { searchCourses } from './search.js';
+
 const LS_KEY = 'sage.course-agent.v1';
 const IS_NATIVE = /^(capacitor|ionic):$/.test(location.protocol) || Boolean(window.__SAGE_NATIVE__);
 // The Android shell carries its own capture (a foreground service holding a
@@ -1469,6 +1471,112 @@ function hydrateFeeds() {
 }
 
 /* ── memory ────────────────────────────────────────────────── */
+/* the saved key: loaded and tested on open, and forgotten from here */
+function syncKeyReset() {
+  const button = $('btnResetKey');
+  const source = $('keySource');
+  const saved = Boolean(String(state.settings.gatewayKey || '').trim());
+  if (button) button.hidden = !saved;
+  if (source) {
+    source.textContent = saved ? 'Loaded from this device and tested on open. Reset forgets it here.' : '';
+  }
+}
+
+function resetSavedKey() {
+  if (!String(state.settings.gatewayKey || '').trim()) return;
+  if (!confirm('Forget the gateway key saved on this device? A bought session cannot be restored after this.')) return;
+  state.settings.gatewayKey = '';
+  state.settings.keyExpiresAt = '';
+  persist();
+  if ($('setGatewayKey')) $('setGatewayKey').value = '';
+  renderGatewayChips([]);
+  if ($('gatewayStatus')) $('gatewayStatus').textContent = 'Saved key cleared. The server key is used if it has one.';
+  syncKeyReset();
+  checkHealth();
+  toast('Saved key cleared.');
+}
+
+/* one search across every course */
+let searchHits = [];
+
+function searchableCourses() {
+  const active = state.courses.find((course) => course.id === state.activeId);
+  const courses = state.courses.map((course) =>
+    course === active
+      ? {
+          ...course,
+          persona: { ...course.persona, ...state.persona },
+          memory: state.memory,
+          history: state.history,
+          foundation: state.foundation,
+        }
+      : course
+  );
+  if (!courses.length) {
+    courses.push({
+      id: state.activeId || 'active',
+      persona: state.persona,
+      memory: state.memory,
+      history: state.history,
+      foundation: state.foundation,
+    });
+  }
+  return courses;
+}
+
+function highlightTerms(text, query) {
+  const safe = escapeHtml(text);
+  const terms = String(query || '')
+    .split(/\s+/)
+    .filter((term) => term.length > 1)
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!terms.length) return safe;
+  try {
+    return safe.replace(new RegExp('(' + terms.join('|') + ')', 'gi'), '<mark>$1</mark>');
+  } catch {
+    return safe;
+  }
+}
+
+function renderSearch() {
+  const box = $('searchBox');
+  const list = $('searchResults');
+  const meta = $('searchMeta');
+  if (!box || !list || !meta) return;
+  const query = box.value.trim();
+  list.innerHTML = '';
+  searchHits = [];
+  if (query.length < 2) {
+    meta.textContent = 'Type at least two letters.';
+    return;
+  }
+  searchHits = searchCourses(searchableCourses(), query, 60);
+  const courses = new Set(searchHits.map((hit) => hit.courseId));
+  meta.textContent = searchHits.length
+    ? `${searchHits.length} hit${searchHits.length === 1 ? '' : 's'} in ${courses.size} course${courses.size === 1 ? '' : 's'}.`
+    : 'Nothing in this workspace matches every word.';
+  searchHits.forEach((hit, position) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'search-hit';
+    row.dataset.index = String(position);
+    row.innerHTML = `<span class="hit-kind">${escapeHtml(hit.kindLabel)}</span>
+      <span class="hit-where">${escapeHtml(hit.course)}${hit.locator ? ' \u00b7 ' + escapeHtml(hit.locator) : ''}${hit.when ? ' \u00b7 ' + escapeHtml(hit.when) : ''}</span>
+      <p class="hit-text">${highlightTerms(hit.snippet, query)}</p>`;
+    list.appendChild(row);
+  });
+}
+
+function openSearchHit(hit) {
+  const viewer = $('citeViewer');
+  if (!viewer || !hit) return;
+  if (hit.courseId && hit.courseId !== state.activeId) switchCourse(hit.courseId, { silent: true });
+  $('citeTitle').textContent = [hit.course, hit.kindLabel, hit.locator, hit.when].filter(Boolean).join(' \u00b7 ');
+  $('citeBody').innerHTML = `<div class="cite-seg"><pre>${highlightTerms(hit.text.slice(0, 4000), $('searchBox').value)}</pre></div>
+    <button type="button" class="link-btn" data-goto="${escapeHtml(hit.tab)}">open the ${escapeHtml(hit.tabLabel)} tab</button>`;
+  viewer.hidden = false;
+}
+
 function addMemory(notes, source = 'manual') {
   const fresh = notes
     .map((n) => String(n).replace(/\s+/g, ' ').trim())
@@ -3283,6 +3391,7 @@ function openSettings() {
   if ($('setSessions')) $('setSessions').value = '1';
   if ($('buyStatus')) $('buyStatus').textContent = '';
   loadStore();
+  syncKeyReset();
   $('settingsDialog').showModal();
 }
 
@@ -3404,6 +3513,13 @@ document.addEventListener('click', (event) => {
   const stamp = event.target.closest?.('[data-audio]');
   if (stamp) {
     playNoteOffset(stamp.dataset.audio, stamp.dataset.audioLabel || 'lecture');
+    return;
+  }
+  const go = event.target.closest?.('[data-goto]');
+  if (go) {
+    const viewer = $('citeViewer');
+    if (viewer) viewer.hidden = true;
+    openTab(go.dataset.goto);
     return;
   }
   if (event.target.closest?.('#citeClose') || event.target.id === 'citeViewer') {
@@ -3620,7 +3736,16 @@ function bind() {
   $('btnRetryHealth').onclick = checkHealth;
   $('btnSaveSettings').onclick = () => setTimeout(saveSettings, 0);
   $('btnTestConn').onclick = testConnection;
-  $('btnVerifyKey').onclick = saveGatewayKey;
+  $('btnVerifyKey').onclick = async () => {
+    await saveGatewayKey();
+    syncKeyReset();
+  };
+  $('btnResetKey').onclick = resetSavedKey;
+  $('searchBox')?.addEventListener('input', renderSearch);
+  $('searchResults')?.addEventListener('click', (event) => {
+    const row = event.target.closest?.('[data-index]');
+    if (row) openSearchHit(searchHits[Number(row.dataset.index)]);
+  });
   $('btnMicCheck').onclick = micCheck;
   $('btnBuy').onclick = () => (store.iap && NATIVE_STORE ? buyWithApple(chosenPlan()) : startPurchase());
   $('btnStorePage').onclick = openStorePage;

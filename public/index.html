@@ -74,18 +74,23 @@
           <button class="tab" data-tab="quiz" role="tab" id="nav-quiz" aria-controls="tab-quiz" aria-selected="false">
             <span class="tab-ico" aria-hidden="true">☑</span><span class="tab-label">Quiz</span><kbd>3</kbd>
           </button>
-          <button class="tab" data-tab="exam" role="tab" id="nav-exam" aria-controls="tab-exam" aria-selected="false">Exam</button>
+          <button class="tab" data-tab="exam" role="tab" id="nav-exam" aria-controls="tab-exam" aria-selected="false">
+            <span class="tab-ico" aria-hidden="true">◈</span><span class="tab-label">Practice Exam</span><kbd>4</kbd>
+          </button>
           <button class="tab" data-tab="essay" role="tab" id="nav-essay" aria-controls="tab-essay" aria-selected="false">
-            <span class="tab-ico" aria-hidden="true">✎</span><span class="tab-label">Essay</span><kbd>4</kbd>
+            <span class="tab-ico" aria-hidden="true">✎</span><span class="tab-label">Essay</span><kbd>5</kbd>
           </button>
           <button class="tab" data-tab="read" role="tab" id="nav-read" aria-controls="tab-read" aria-selected="false">
-            <span class="tab-ico" aria-hidden="true">▤</span><span class="tab-label">Read</span><kbd>5</kbd>
+            <span class="tab-ico" aria-hidden="true">▤</span><span class="tab-label">Read</span><kbd>6</kbd>
           </button>
           <button class="tab" data-tab="foundation" role="tab" id="nav-foundation" aria-controls="tab-foundation" aria-selected="false">
-            <span class="tab-ico" aria-hidden="true">▣</span><span class="tab-label">Foundation</span><kbd>6</kbd>
+            <span class="tab-ico" aria-hidden="true">▣</span><span class="tab-label">Foundation</span><kbd>7</kbd>
           </button>
           <button class="tab" data-tab="memory" role="tab" id="nav-memory" aria-controls="tab-memory" aria-selected="false">
-            <span class="tab-ico" aria-hidden="true">✦</span><span class="tab-label">Memory</span><kbd>7</kbd>
+            <span class="tab-ico" aria-hidden="true">✦</span><span class="tab-label">Memory</span><kbd>8</kbd>
+          </button>
+          <button class="tab" data-tab="search" role="tab" id="nav-search" aria-controls="tab-search" aria-selected="false">
+            <span class="tab-ico" aria-hidden="true">⌕</span><span class="tab-label">Search</span><kbd>9</kbd>
           </button>
         </nav>
 
@@ -267,7 +272,7 @@
           <!-- exam rehearsal: a timed paper, marked only after submission -->
           <section class="panel" id="tab-exam" role="tabpanel" aria-labelledby="nav-exam" tabindex="-1">
             <div class="page-head">
-              <h1>Exam rehearsal</h1>
+              <h1>Practice exam</h1>
               <p class="page-sub">A timed paper set from this course. No answer is shown, and nothing is marked, until you submit it.</p>
             </div>
             <div class="field-row">
@@ -363,6 +368,18 @@
               transcribed. A scanned PDF with no text layer needs its pages added as images instead. Documents belong
               to the course you are in, so switching course switches the material.
             </p>
+          </section>
+
+          <!-- Search: one query over every course, answered on this device. -->
+          <section class="panel" id="tab-search" role="tabpanel" aria-labelledby="nav-search" tabindex="-1">
+            <div class="page-head">
+              <h1>Search</h1>
+              <p class="page-sub">Every course at once: notes, answers, quiz items, essays and the documents behind them. Searched here, on this device.</p>
+            </div>
+            <input id="searchBox" class="search-box" type="search" autocomplete="off" spellcheck="false"
+                   placeholder="osmosis, entropy, the week 4 handout…" aria-label="Search every course" />
+            <p class="mini muted" id="searchMeta">Type at least two letters.</p>
+            <div id="searchResults" class="stack"></div>
           </section>
 
           <section class="panel" id="tab-memory" role="tabpanel" aria-labelledby="nav-memory" tabindex="-1">
@@ -547,7 +564,9 @@
           <div class="dialog-actions">
             <button type="button" class="btn ghost" id="btnVerifyKey">Verify &amp; save</button>
             <button type="button" class="btn ghost" id="btnMicCheck">Check microphone</button>
+            <button type="button" class="btn ghost" id="btnResetKey" hidden>Reset saved key</button>
           </div>
+          <p class="mini muted" id="keySource"></p>
           <p class="mini muted" id="gatewayStatus"></p>
           <p class="mini muted" id="sessionClock"></p>
           <div class="chips" id="gatewayModels"></div>
@@ -654,7 +673,7 @@
       <h3 id="shortcutsTitle">Keyboard</h3>
       <dl class="shortcut-list">
         <dt><kbd>⌘</kbd><kbd>K</kbd></dt><dd>Command palette</dd>
-        <dt><kbd>1</kbd>…<kbd>7</kbd></dt><dd>Jump to Live, Answer, Quiz, Essay, Read, Foundation, Memory</dd>
+        <dt><kbd>1</kbd>…<kbd>9</kbd></dt><dd>Jump to Live, Answer, Quiz, Practice Exam, Essay, Read, Foundation, Memory, Search</dd>
         <dt><kbd>/</kbd></dt><dd>Focus the question box on the current tab</dd>
         <dt><kbd>s</kbd></dt><dd>Start or stop study mode</dd>
         <dt><kbd>.</kbd></dt><dd>Stop all capture</dd>
@@ -677,8 +696,8 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <video id="srcVideo" playsinline muted hidden></video>
-    <script type="module" src="/app.js?v=4.2.2"></script>
-    <script type="module" src="/shell.js?v=3.3.0"></script>
+    <script type="module" src="/app.js?v=4.5.0"></script>
+    <script type="module" src="/shell.js?v=4.5.0"></script>
     <script type="module" src="/profile.js?v=3.3.0"></script>
   </body>
 </html>
