@@ -123,7 +123,18 @@ export async function exchangeCode(cfg, doc, { code, verifier }) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(`Cerulean refused the sign-in (${response.status})${data.error ? `: ${data.error}` : ''}`);
+    // The provider's own words are the only way to tell an expired code from a
+    // replayed one or a PKCE mismatch. The code and the tokens are never logged.
+    console.error(
+      `[admin] token exchange refused (${response.status}) ${data.error || 'no error'} ${
+        data.error_description || 'no description'
+      }`.trim()
+    );
+    throw new Error(
+      `Cerulean refused the sign-in (${response.status})${data.error ? `: ${data.error}` : ''}${
+        data.error_description ? ` — ${data.error_description}` : ''
+      }`
+    );
   }
   if (!data.id_token) throw new Error('Cerulean answered without an id_token.');
   return data;

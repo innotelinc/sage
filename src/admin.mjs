@@ -244,6 +244,12 @@ export async function handleAdmin(request, env = {}) {
 
   // ── sign-in ────────────────────────────────────────────────────────────────
   if (url.pathname === '/admin/callback') {
+    // A second visit to this URL — a reload, a restored tab, a back button —
+    // carries a code that has already been exchanged, and the provider answers
+    // invalid_grant. If this browser already holds a session, honour the sign-in
+    // it just completed instead of failing it a second time.
+    const signedIn = readSession(jar[SESSION_COOKIE], secret);
+    if (signedIn) return redirect('/admin', cookies);
     const attempt = readPayload(jar[SSO_COOKIE], secret);
     const state = url.searchParams.get('state') || '';
     const code = url.searchParams.get('code') || '';
