@@ -1330,11 +1330,12 @@ async function ensureListing(app) {
  * before sending it, then says what state came back.
  */
 /**
- * Taking a version out of review is a DELETE on its submission. Apple cancels the
- * submission and hands the version back editable — build, listing and review
- * contact intact — so a newer build can be swapped in and resubmitted. PATCHing
- * submitted:false is refused; only one of (platform, canceled, submitted) is
- * allowed per request, and canceled is for never-submitted drafts.
+ * Taking a version out of review is PATCH { canceled: true } on its submission.
+ * DELETE is not offered on reviewSubmissions at all (403: allowed operations are
+ * CREATE, GET_COLLECTION, GET_INSTANCE, UPDATE), and submitted:false is refused
+ * because only one of (platform, canceled, submitted) may appear per request.
+ * Canceling hands the version back editable — build, listing and review contact
+ * intact — so a newer build can be swapped in and resubmitted.
  */
 async function withdrawReview(app) {
   const drafts = await draftsFor(app);
@@ -1348,9 +1349,12 @@ async function withdrawReview(app) {
     `  withdraw · submission ${live.id} · ${live.attributes?.state} · version ` +
       `${version?.attributes?.versionString} ${version?.attributes?.appStoreState}`
   );
-  await call('DELETE', `/v1/reviewSubmissions/${live.id}`);
+  const result = await call('PATCH', `/v1/reviewSubmissions/${live.id}`, {
+    data: { type: 'reviewSubmissions', id: live.id, attributes: { canceled: true } },
+  });
+  console.log(`  withdraw · submission now ${result?.data?.attributes?.state || 'unknown'}`);
   const after = await iosVersion(app).catch(() => null);
-  console.log(`  withdraw · cancelled · version now ${after?.attributes?.appStoreState || 'unknown'}`);
+  console.log(`  withdraw · version now ${after?.attributes?.appStoreState || 'unknown'}`);
   return true;
 }
 
