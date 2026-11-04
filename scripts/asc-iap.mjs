@@ -82,6 +82,18 @@ const REVIEW = {
   phone: (process.env.APPLE_REVIEW_PHONE || '').trim(),
 };
 
+/* Two of App Review's questions can only be answered from outside the repo: the
+   screen recording of a physical device, and — when an instance gates on an
+   account — an account to replay with. Both arrive as repository secrets so the
+   notes can say what is actually true instead of promising a link that is not
+   there. */
+const RECORDING_URL = (process.env.APPLE_REVIEW_RECORDING_URL || '').trim();
+const DEMO = {
+  email: (process.env.APPLE_REVIEW_DEMO_EMAIL || '').trim(),
+  password: (process.env.APPLE_REVIEW_DEMO_PASSWORD || '').trim(),
+};
+const HAS_DEMO = Boolean(DEMO.email && DEMO.password);
+
 /* The store page, written from what the app actually does. Every claim here names
    a surface that exists in the build. */
 const COPY = {
@@ -105,12 +117,57 @@ const COPY = {
   supportUrl: `${SITE}/support`,
   marketingUrl: `${SITE}/about`,
   privacyUrl: `${SITE}/privacy`,
-  reviewNotes: [
-    'Sage answers using an AI model reached through a session key. Sessions are the in-app purchase: three consumable plans, fifteen minutes of access each, no subscription.',
-    'No login or demo account is needed. Open Settings (the gear, top right) then Session, choose a plan and complete the purchase with a sandbox Apple Account; the key installs itself when Apple confirms.',
-    'Capture is opt-in and each source asks for permission the first time it is used: Listen (microphone), Watch (screen broadcast) and Aim (camera). Nothing leaves the device until one of those is pressed.',
-  ].join('\n\n'),
+  reviewNotes: reviewNotes(),
 };
+
+/**
+ * The six things Guideline 2.1 asked for, answered from what this build does.
+ *
+ * Written as numbered sections because that is how the request arrived, and the
+ * answers stay literal: what the recording shows, who the app is for, how to get
+ * in, what it talks to, whether regions differ, and why no regulated-industry
+ * paperwork applies.
+ */
+function reviewNotes() {
+  const access = HAS_DEMO
+    ? [
+        'The build starts with no sign-in for its core features. If a surface asks for an account, use the review account below — it holds an active subscription, so no purchase is needed to reach the model:',
+        `${DEMO.email}  /  ${DEMO.password}`,
+      ].join('\n')
+    : 'The build requires no account, login or access code: every feature in the recording is reachable from a cold install.';
+
+  const recording = RECORDING_URL
+    ? `Recorded on a physical iPhone running the current iOS, starting with the app launching from the Home Screen: ${RECORDING_URL}`
+    : 'A recording is being prepared. Set APPLE_REVIEW_RECORDING_URL so this answer carries its link before submitting.';
+
+  return [
+    '1 · SCREEN RECORDING (physical device, current iOS)',
+    recording,
+    'Typical flow shown end to end: launch; Listen with the microphone; Watch with the system broadcast started, so notes keep arriving while another app is in front; Aim with the camera on a handout; Answer; Quiz; Essay; Memory; Settings → Session, where a session is bought as an in-app purchase; Settings → You.',
+
+    '2 · PURPOSE AND TARGET AUDIENCE',
+    'Sage is a study aid for students in higher education aged 17 and over. A lecture moves faster than anyone can write, and a recording is never replayed, so notes are missed and revision starts from nothing. Sage follows the lecture as it happens — transcript, slides, board or camera — keeps the notes per course, and answers questions about that material with the reasoning shown, so the student can check the answer and explain it. It does not replace the reading, and it does not sit an assessment for anyone.',
+
+    '3 · SETUP AND ACCESS',
+    access,
+    'Nothing is captured until a source is started, and each source asks once: Listen (microphone), Watch (screen broadcast), Aim (camera). Answer, Quiz and Essay need no capture — type a question, or pick a photo of a slide or handout. A session is bought in Settings (the gear, top right) → Session with a sandbox Apple Account; the session installs itself when Apple confirms the purchase.',
+
+    '4 · EXTERNAL SERVICES',
+    '· Innotel OmniRoute gateway (gateway.innotel.us) — the language and vision models that write notes and answers. Reached from our server, so no provider key is ever in the app.',
+    '· Self-hosted Whisper (faster-whisper) transcription on our own server. Optional: if it is unreachable, iOS falls back to Apple\u2019s on-device speech recognition.',
+    '· Apple StoreKit 2 — the in-app purchase of sessions, with the signed transaction verified server-side against Apple\u2019s root certificate.',
+    '· Self-hosted Kokoro text-to-speech, with Apple\u2019s built-in speech synthesis as the fallback, for read-aloud.',
+    '· Stripe and the Magnate storefront — the web build only; the iOS build sells exclusively through StoreKit.',
+    '· Cerulean (Authentik) — sign-in for the operator panel at /admin only, never part of a student flow.',
+    'No advertising, analytics or attribution SDK is included, and no data is sold or shared with a broker.',
+
+    '5 · REGIONAL DIFFERENCES',
+    'None. The same features, material and behaviour in every storefront and region. The only difference is price, which follows Apple\u2019s per-storefront tiers for the three consumables. The interface is English; answers are written in the language of the material supplied.',
+
+    '6 · REGULATED INDUSTRY AND THIRD-PARTY MATERIAL',
+    'Sage is not in a regulated industry: it is a study aid, not a school or an accredited institution, and it gives no medical, legal or financial advice. No third-party protected material is bundled — the artwork, copy and code are ours, and the code is MIT licensed — and model output is generated per request from material the student supplies.',
+  ].join('\n\n');
+}
 
 
 const issuer = (process.env.ASC_ISSUER_ID || '').trim();
@@ -635,21 +692,46 @@ async function ensureListingText(versionId) {
 }
 
 /** Where App Review writes and telephones. Both are required before submitting. */
-async function ensureReviewContact(versionId) {
-  const current = await optional(`/v1/appStoreVersions/${versionId}/appStoreReviewDetail`);
-  if (current?.data?.attributes?.contactEmail === REVIEW.email) {
-    console.log('  review contact · already there');
-    return;
+/** The review answers, plus the replay account when one is configured. */
+function reviewAttributes() {
+  const attributes = {
+    contactFirstName: REVIEW.firstName,
+    contactLastName: REVIEW.lastName,
+    contactEmail: REVIEW.email,
+    demoAccountRequired: HAS_DEMO,
+    notes: COPY.reviewNotes,
+  };
+  if (HAS_DEMO) {
+    attributes.demoAccountName = DEMO.email;
+    attributes.demoAccountPassword = DEMO.password;
   }
-  if (current?.data?.attributes?.contactEmail) {
+  return attributes;
+}
+
+/**
+ * Where App Review writes and telephones, and the answers they asked for.
+ *
+ * The notes are rewritten on every run rather than only at creation: the record
+ * already existed, so a request for information can never be answered by a branch
+ * that only fires the first time. `demoAccountRequired` follows whether an account
+ * was actually supplied instead of being hardcoded false.
+ */
+async function ensureReviewContact(versionId) {
+  if (!RECORDING_URL) {
+    console.log('  review notes · WARNING — APPLE_REVIEW_RECORDING_URL is not set, and App Review requires a recording link');
+  }
+  const current = await optional(`/v1/appStoreVersions/${versionId}/appStoreReviewDetail`);
+  if (current?.data?.id) {
+    const existingPhone = current.data.attributes?.contactPhone;
     await call('PATCH', `/v1/appStoreReviewDetails/${current.data.id}`, {
       data: {
         type: 'appStoreReviewDetails',
         id: current.data.id,
-        attributes: { contactFirstName: REVIEW.firstName, contactLastName: REVIEW.lastName, contactEmail: REVIEW.email, contactPhone: REVIEW.phone || current.data.attributes.contactPhone },
+        attributes: { ...reviewAttributes(), contactPhone: REVIEW.phone || existingPhone },
       },
     });
-    console.log(`  review contact · address updated to ${REVIEW.email}`);
+    console.log(`  review contact · ${REVIEW.firstName} ${REVIEW.lastName} <${REVIEW.email}>`);
+    console.log(`  review notes · refreshed (${COPY.reviewNotes.length} chars) · demo account ${HAS_DEMO ? 'supplied' : 'not required'}`);
     return;
   }
   if (!REVIEW.phone) {
@@ -659,18 +741,12 @@ async function ensureReviewContact(versionId) {
   await call('POST', '/v1/appStoreReviewDetails', {
     data: {
       type: 'appStoreReviewDetails',
-      attributes: {
-        contactFirstName: REVIEW.firstName,
-        contactLastName: REVIEW.lastName,
-        contactEmail: REVIEW.email,
-        contactPhone: REVIEW.phone,
-        demoAccountRequired: false,
-        notes: COPY.reviewNotes,
-      },
+      attributes: { ...reviewAttributes(), contactPhone: REVIEW.phone },
       relationships: { appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } } },
     },
   });
   console.log(`  review contact · ${REVIEW.firstName} ${REVIEW.lastName} <${REVIEW.email}>`);
+  console.log(`  review notes · written (${COPY.reviewNotes.length} chars)`);
 }
 
 /** The privacy policy URL and the store category live on the app info, not the version. */

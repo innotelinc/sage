@@ -72,4 +72,10 @@ jobs:
           APP_STORE_SHOTS_IPAD: deploy/ios/store-ipad
           APP_STORE_SHOTS_DUO: deploy/ios/store-duo
           APPLE_REVIEW_PHONE: ${{ secrets.APPLE_REVIEW_PHONE }}
+          # Guideline 2.1 asked for these in the review notes. The recording has to
+          # be made on a physical device, so it arrives as a link rather than a file
+          # in the repo; the account pair stays empty while the build needs no sign-in.
+          APPLE_REVIEW_RECORDING_URL: ${{ secrets.APPLE_REVIEW_RECORDING_URL }}
+          APPLE_REVIEW_DEMO_EMAIL: ${{ secrets.APPLE_REVIEW_DEMO_EMAIL }}
+          APPLE_REVIEW_DEMO_PASSWORD: ${{ secrets.APPLE_REVIEW_DEMO_PASSWORD }}
         run: node scripts/asc-iap.mjs
