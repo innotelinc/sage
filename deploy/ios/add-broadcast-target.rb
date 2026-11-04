@@ -42,6 +42,12 @@ app.source_build_phase.add_file_reference(plugin)
 store = app_group.new_file('SageStorePlugin.swift')
 app.source_build_phase.add_file_reference(store)
 
+# The audio session plugin is copied beside the others, and a file that is only
+# on disk is never compiled. Without it Listen dies when the app goes to the
+# background, which is the one thing the broadcast extension cannot fix.
+audio = app_group.new_file('SageAudioSessionPlugin.swift')
+app.source_build_phase.add_file_reference(audio)
+
 extension.build_configurations.each do |config|
   config.build_settings.merge!(
     'PRODUCT_BUNDLE_IDENTIFIER' => 'us.innotel.sage.broadcast',

@@ -30,56 +30,52 @@ import {
 
 const LS_KEY = 'sage.course-agent.v1';
 const IS_NATIVE = /^(capacitor|ionic):$/.test(location.protocol) || Boolean(window.__SAGE_NATIVE__);
+// Capacitor's injected bridge has no registerPlugin(): that function belongs to the
+// @capacitor/core module, which this page does not import. What the bridge does
+// publish is window.Capacitor.Plugins[jsName], built from the plugin classes named
+// in the app's capacitor.config.json. Asking for registerPlugin alone is how the
+// App Store purchase went missing on iPhone while the web copy took its place, so
+// the plugin is looked up the way the bridge actually provides it.
+function pluginOn(name, platform) {
+  const bridge = window.Capacitor;
+  try {
+    if (bridge?.getPlatform?.() !== platform) return null;
+    if (typeof bridge.registerPlugin === 'function') {
+      const registered = bridge.registerPlugin(name);
+      if (registered) return registered;
+    }
+  } catch {
+    /* fall through to the list the bridge published itself */
+  }
+  return bridge?.Plugins?.[name] || null;
+}
+// The platform is a fact about the app, not about a plugin loading: the web
+// checkout has to stay hidden on iOS even when StoreKit cannot be reached.
+const IOS_APP = (() => {
+  try {
+    return window.Capacitor?.getPlatform?.() === 'ios';
+  } catch {
+    return false;
+  }
+})();
 // The Android shell carries its own capture (a foreground service holding a
 // MediaProjection). A page's own getDisplayMedia ends the moment the browser
 // loses the foreground, and the WebView does not offer it at all, which is why
 // this exists: the exam is in the other app.
-const NATIVE_SCREEN = (() => {
-  const bridge = window.Capacitor;
-  if (!bridge?.isNativePlatform?.() || bridge.getPlatform?.() !== 'android') return null;
-  try {
-    return (bridge.registerPlugin ? bridge.registerPlugin('SageScreen') : bridge.Plugins?.SageScreen) || null;
-  } catch {
-    return null;
-  }
-})();
+const NATIVE_SCREEN = pluginOn('SageScreen', 'android');
 // iOS has no in-app capture at all: an RPScreenRecorder is suspended with the
 // app. A ReplayKit broadcast extension runs in its own process instead, so Watch
 // hands the recording to one and collects what it read.
-const NATIVE_BROADCAST = (() => {
-  const bridge = window.Capacitor;
-  if (!bridge?.isNativePlatform?.() || bridge.getPlatform?.() !== 'ios') return null;
-  try {
-    return (bridge.registerPlugin ? bridge.registerPlugin('SageBroadcast') : bridge.Plugins?.SageBroadcast) || null;
-  } catch {
-    return null;
-  }
-})();
+const NATIVE_BROADCAST = pluginOn('SageBroadcast', 'ios');
 // Apple requires digital goods sold inside an iOS app to go through StoreKit, so
 // on this platform the purchase is an App Store transaction rather than a card
 // form in a tab.
-const NATIVE_STORE = (() => {
-  const bridge = window.Capacitor;
-  if (!bridge?.isNativePlatform?.() || bridge.getPlatform?.() !== 'ios') return null;
-  try {
-    return (bridge.registerPlugin ? bridge.registerPlugin('SageStore') : bridge.Plugins?.SageStore) || null;
-  } catch {
-    return null;
-  }
-})();
+const NATIVE_STORE = pluginOn('SageStore', 'ios');
 // iOS keeps one audio session for the whole app, and a WebView's microphone
 // borrows it. Unless that session is mixable, opening the microphone interrupts
 // whatever was playing, and leaving the app hands the session away: both end the
 // lecture capture. The native side sets it once and takes it back.
-const NATIVE_AUDIO = (() => {
-  const bridge = window.Capacitor;
-  if (!bridge?.isNativePlatform?.() || bridge.getPlatform?.() !== 'ios') return null;
-  try {
-    return (bridge.registerPlugin ? bridge.registerPlugin('SageAudio') : bridge.Plugins?.SageAudio) || null;
-  } catch {
-    return null;
-  }
-})();
+const NATIVE_AUDIO = pluginOn('SageAudio', 'ios');
 
 async function holdAudioSession() {
   if (!NATIVE_AUDIO?.begin) return;
@@ -3466,9 +3462,11 @@ function renderStore() {
   // button, not as a link, not as a line of copy pointing at one. When the server
   // cannot mint a key yet, the phone says so rather than selling something it
   // cannot deliver and calling it a fallback.
-  const ios = Boolean(NATIVE_STORE);
+  const ios = IOS_APP;
   if ($('stripeNote')) $('stripeNote').hidden = ios;
-  if (ios && !store.iap) {
+  // A plugin that did not load is as unsellable as a server that cannot mint: on
+  // iOS both cases say so, and neither falls back to the card form.
+  if (ios && !(store.iap && NATIVE_STORE)) {
     if (note) {
       note.textContent = 'Sessions cannot be bought on this device right now. Nothing has been charged — please try again later.';
     }
@@ -3514,6 +3512,14 @@ async function startPurchase() {
   // Guard as well as hide: a web checkout opened on iOS is the rejection, and the
   // button is not the only way in here.
   if (NATIVE_STORE) return buyWithApple(chosenPlan());
+  if (IOS_APP) {
+    const status = $('buyStatus');
+    if (status) {
+      status.textContent =
+        'Sessions on this device are bought through the App Store, which is not reachable right now. Nothing has been charged.';
+    }
+    return;
+  }
   const status = $('buyStatus');
   const button = $('btnBuy');
   const email = String($('setReceiptEmail')?.value || '').trim();
@@ -3580,7 +3586,7 @@ async function buyWithApple(plan) {
 }
 
 function openStorePage() {
-  if (NATIVE_STORE) {
+  if (IOS_APP) {
     const status = $('buyStatus');
     if (status) status.textContent = 'Sessions on this device are bought through the App Store.';
     return;

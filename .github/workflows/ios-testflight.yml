@@ -78,6 +78,23 @@ jobs:
           npm install --no-audit --no-fund --no-save @capacitor/core @capacitor/cli @capacitor/ios
           if [ ! -d ios ]; then npx cap add ios; fi
           npx cap sync ios
+          # Capacitor loads only the plugins named in the config it generates from
+          # npm packages, and its injected bridge has no registerPlugin() for the web
+          # side to fall back on: a local Swift plugin that is not listed here is
+          # compiled into the app and never reachable from JavaScript. Naming the
+          # classes is what makes window.Capacitor.Plugins.SageStore exist.
+          CONF=$(find ios -maxdepth 4 -name capacitor.config.json -path '*App/App/*' | head -1)
+          if [ -z "$CONF" ]; then echo "the Capacitor config was not generated"; exit 1; fi
+          node -e '
+            const fs = require("fs");
+            const file = process.argv[1];
+            const config = JSON.parse(fs.readFileSync(file, "utf8"));
+            const list = new Set(config.packageClassList || []);
+            for (const name of ["SageStorePlugin", "SageBroadcastPlugin", "SageAudioSessionPlugin"]) list.add(name);
+            config.packageClassList = [...list];
+            fs.writeFileSync(file, JSON.stringify(config, null, 2));
+          ' "$CONF"
+          node -e 'console.log("plugin classes: " + JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).packageClassList.join(","))' "$CONF"
           echo "generated layout:"; ls -1 ios/App
 
       - name: Install app icon
@@ -190,6 +207,14 @@ jobs:
           echo "embedded extensions: $EXTS"
           ls -1 "$APP/PlugIns" 2>/dev/null || true
           test -d "$APP/PlugIns/SageBroadcast.appex" || { echo "the broadcast extension was not embedded"; exit 1; }
+          # A plugin class missing from this list is a plugin the app cannot call:
+          # the iOS bridge publishes Plugins[jsName] from it and nothing else.
+          BUNDLED_CONFIG="$APP/capacitor.config.json"
+          test -f "$BUNDLED_CONFIG" || { echo "the Capacitor config did not reach the app bundle"; exit 1; }
+          for CLASS in SageStorePlugin SageBroadcastPlugin SageAudioSessionPlugin; do
+            grep -q "$CLASS" "$BUNDLED_CONFIG" || { echo "$CLASS is not registered: the plugin would never load"; exit 1; }
+          done
+          echo "registered plugin classes: $(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).packageClassList.join(","))' "$BUNDLED_CONFIG")"
           APP_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
           EXT_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/PlugIns/SageBroadcast.appex/Info.plist")
           APP_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
