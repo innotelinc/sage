@@ -42,15 +42,15 @@ Three consumables must exist in App Store Connect, with these product ids:
 
 | Product id | Plan |
 | --- | --- |
-| `us.inotnel.sage.session.trial` | trial |
-| `us.inotnel.sage.session.standard` | standard |
-| `us.inotnel.sage.session.intensive` | intensive |
+| `us.innotel.sage.session.trial` | trial |
+| `us.innotel.sage.session.standard` | standard |
+| `us.innotel.sage.session.intensive` | intensive |
 
 Set `IAP_PRODUCTS` (`productId:planSlug,productId:planSlug,…`) to use different ones.
 They cannot be created by the App Store Connect API, so this is a manual step in
-the web UI. The ids carry `inotnel` while the bundle id is `us.innotel.sage`: they are
-what the products were registered as, and renaming them would orphan what a buyer can
-already see.
+the web UI. The ids are the ones registered in App Store Connect (`scripts/asc-iap.mjs`
+creates them as `${APPLE_BUNDLE_ID}.session.*`), and StoreKit returns nothing for an
+id that differs from the registered one by even a character.
 
 Server configuration (without a mint endpoint the app keeps the store page and no
 purchase can happen):
@@ -68,7 +68,7 @@ purchase can happen):
 
 ```json
 {
-  "productId": "us.inotnel.sage.session.trial",
+  "productId": "us.innotel.sage.session.trial",
   "planSlug": "sage-session-trial",
   "transactionId": "2000000000000001",
   "email": "admin@innotel.us",

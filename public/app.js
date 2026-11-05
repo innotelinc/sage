@@ -400,7 +400,10 @@ async function syncWorkspace({ announce = false } = {}) {
   sync.state = 'syncing';
   renderSyncUi();
   try {
-    const remote = await api('/api/workspace', { method: 'GET' });
+    // Quiet: a device with no access code is the ordinary local-only case, and the
+    // 401 it earns is already drawn as one in the sync line. A toast on launch
+    // read as "your key is invalid" for a key that was never sent.
+    const remote = await api('/api/workspace', { method: 'GET', noKey: true, quiet: true });
     sync.rev = remote.rev || '';
     sync.storedBy = remote.storedBy || '';
     const serverNewer = remote.workspace && String(remote.savedAt || '') > String(state.savedAt || '');
@@ -553,8 +556,11 @@ function scrollFeed(el) {
 async function api(path, options = {}) {
   const headers = {};
   if (state.settings.accessCode) headers['x-access-code'] = state.settings.accessCode;
+  // A call that cannot use the key does not send it: the workspace and the health
+  // check answer on the server's own identity, so launching the app never asks
+  // the gateway about a key the person did not just enter.
   const gatewayKey = String(state.settings.gatewayKey || '').trim();
-  if (gatewayKey) headers['x-ai-key'] = gatewayKey;
+  if (gatewayKey && !options.noKey) headers['x-ai-key'] = gatewayKey;
   const gatewayUrl = String(state.settings.gatewayBase || '').trim();
   if (gatewayUrl && gatewayUrl !== GATEWAY_DEFAULT) headers['x-ai-base'] = gatewayUrl;
   let body;
@@ -571,7 +577,7 @@ async function api(path, options = {}) {
   }
   const data = await res.json().catch(() => ({ error: 'bad_response', message: `HTTP ${res.status}` }));
   if (!res.ok) {
-    if (res.status === 401) {
+    if (res.status === 401 && !options.quiet) {
       // A 401 can arrive from a background timer at the exact moment the app
       // comes back to the foreground. Opening Settings on the user's behalf made
       // every return look like the app had thrown them into a menu, so point at
@@ -664,7 +670,7 @@ async function agent(mode, { text = '', images = [], maxTokens } = {}) {
 /* ── health ────────────────────────────────────────────────── */
 async function checkHealth() {
   try {
-    health = await api('/api/health');
+    health = await api('/api/health', { noKey: true });
     const ok = health.configured;
     $('statusDot').className = `dot ${ok ? 'ok' : 'warn'}`;
     $('statusDot').title = ok ? `connected to ${health.provider}` : 'no model key configured';
@@ -1580,7 +1586,7 @@ function syncKeyReset() {
   const saved = Boolean(String(state.settings.gatewayKey || '').trim());
   if (button) button.hidden = !saved;
   if (source) {
-    source.textContent = saved ? 'Loaded from this device and tested on open. Reset forgets it here.' : '';
+    source.textContent = saved ? 'Stored on this device; Reset forgets it here.' : '';
   }
 }
 
@@ -1808,7 +1814,38 @@ function newCourse() {
   renderPackStatus();
   renderFoundation();
   openSettings();
+  const field = $('setCourse');
+  if (field) {
+    field.focus();
+    field.select();
+  }
   toast('New course — name it, then Save.');
+}
+
+/* Removing a course takes its notes, history and timetable slots with it, so it
+   asks first and never leaves the workspace with no course to be in. */
+function removeCourse() {
+  const course = activeCourse();
+  if (!course) return;
+  const label = course.persona.course || 'this course';
+  if (state.courses.length < 2) {
+    toast('One course has to stay — rename this one instead, or add another first.', 'error');
+    return;
+  }
+  if (!confirm(`Remove ${label}? Its notes, answers and timetable slots go with it.`)) return;
+  state.courses = state.courses.filter((entry) => entry.id !== course.id);
+  state.timetable = state.timetable.filter((slot) => slot.courseId !== course.id);
+  state.activeId = state.courses[0].id;
+  hydrateActive();
+  persist();
+  renderCourseUi();
+  renderMemory();
+  hydrateFeeds();
+  renderPackStatus();
+  renderFoundation();
+  const name = $('agentName');
+  if (name) name.textContent = state.persona.name || 'Sage';
+  toast(`Removed ${label}.`);
 }
 
 function renderCourseUi() {
@@ -3670,6 +3707,10 @@ function saveSettings() {
   clearInterval(cap.noteTimer);
   cap.noteTimer = cap.listenOn ? setInterval(flushTranscript, state.settings.noteIntervalSec * 1000) : null;
   $('agentName').textContent = state.persona.name;
+  // The list is drawn from the course record, so the active course has to hold
+  // this name before it is redrawn: otherwise a new or renamed course kept its
+  // old label in the picker until the next launch.
+  stashActive();
   renderCourseUi();
   applyDirection();
   persist();
@@ -4755,6 +4796,7 @@ function bind() {
   $('btnRevision').onclick = revisionSheet;
   $('courseSelect').onchange = (event) => switchCourse(event.target.value);
   $('btnNewCourse').onclick = newCourse;
+  $('btnDeleteCourse').onclick = removeCourse;
   $('btnSlotAdd').onclick = addSlot;
   $('btnSyncNow').onclick = () => syncWorkspace({ announce: true });
   $('timetableList').addEventListener('click', (event) => {

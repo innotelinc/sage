@@ -22,7 +22,7 @@ const dir = mkdtempSync(join(tmpdir(), 'sage-iap-'));
 const file = (name) => join(dir, name);
 const BUNDLE = 'us.innotel.sage';
 // The consumables are registered under this prefix, which is not the bundle id.
-const PRODUCT = 'us.inotnel.sage.session.trial';
+const PRODUCT = 'us.innotel.sage.session.trial';
 
 let passed = 0;
 const failures = [];
@@ -151,7 +151,7 @@ await check('a broken chain is refused', () => {
 });
 
 await check('another app bundle is refused', () => {
-  const result = verifySignedTransaction(jws(transaction({ bundleId: 'us.inotnel.other' })), options);
+  const result = verifySignedTransaction(jws(transaction({ bundleId: 'us.innotel.other' })), options);
   expect(result.error, 'a transaction for another app was accepted');
 });
 

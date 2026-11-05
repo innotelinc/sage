@@ -57,13 +57,13 @@ export function productList(env = {}) {
     })
     .filter(Boolean);
   if (configured.length) return configured;
-  // Not derived from the bundle id: the consumables were registered as
-  // us.inotnel.sage.session.*, and renaming them would orphan the products a buyer
-  // can already see in the store.
+  // These have to match App Store Connect character for character: StoreKit
+  // answers nothing for an id that is not registered, so a single transposed
+  // letter makes every session look unavailable in the app.
   return [
-    { productId: 'us.inotnel.sage.session.trial', planSlug: 'sage-session-trial' },
-    { productId: 'us.inotnel.sage.session.standard', planSlug: 'sage-session-standard' },
-    { productId: 'us.inotnel.sage.session.intensive', planSlug: 'sage-session-intensive' },
+    { productId: 'us.innotel.sage.session.trial', planSlug: 'sage-session-trial' },
+    { productId: 'us.innotel.sage.session.standard', planSlug: 'sage-session-standard' },
+    { productId: 'us.innotel.sage.session.intensive', planSlug: 'sage-session-intensive' },
   ];
 }
 
