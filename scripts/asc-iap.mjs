@@ -131,26 +131,28 @@ const COPY = {
 function reviewNotes() {
   const access = HAS_DEMO
     ? [
-        'The build starts with no sign-in for its core features. If a surface asks for an account, use the review account below — it holds an active subscription, so no purchase is needed to reach the model:',
+        'No account is needed to open the app. If you would rather not buy a session, use the review account below — it already holds an active session, so the model is reachable without a purchase:',
         `${DEMO.email}  /  ${DEMO.password}`,
       ].join('\n')
-    : 'The build requires no account, login or access code: every feature in the recording is reachable from a cold install.';
+    : 'The build requires no account, login, password or access code. It opens straight into the workspace; courses, saved notes and settings live on the device. A session is the only thing behind the model, and it is bought inside the app.';
 
   const recording = RECORDING_URL
     ? `Recorded on a physical iPhone running the current iOS, starting with the app launching from the Home Screen: ${RECORDING_URL}`
-    : 'A recording is being prepared. Set APPLE_REVIEW_RECORDING_URL so this answer carries its link before submitting.';
+    : 'A screen recording made on a physical iPhone running the current iOS accompanies this submission: it was attached to our reply in App Review \u2192 Messages. Tell us if it did not arrive and we will send it again.';
 
   return [
     '1 · SCREEN RECORDING (physical device, current iOS)',
     recording,
-    'Typical flow shown end to end: launch; Listen with the microphone; Watch with the system broadcast started, so notes keep arriving while another app is in front; Aim with the camera on a handout; Answer; Quiz; Essay; Memory; Settings → Session, where a session is bought as an in-app purchase; Settings → You.',
+    'Typical flow shown end to end: launching the app from the Home Screen; adding a course in the picker (＋), naming it, and removing it again (✕); Listen with the microphone; Watch with the system broadcast started, so notes keep arriving while another app is in front; Aim with the camera on a handout; Answer; Quiz; Essay; Memory; Settings → Session, where all three sessions load at App Store prices and a sandbox purchase completes through StoreKit; Settings → You.',
 
     '2 · PURPOSE AND TARGET AUDIENCE',
     'Sage is a study aid for students in higher education aged 17 and over. A lecture moves faster than anyone can write, and a recording is never replayed, so notes are missed and revision starts from nothing. Sage follows the lecture as it happens — transcript, slides, board or camera — keeps the notes per course, and answers questions about that material with the reasoning shown, so the student can check the answer and explain it. It does not replace the reading, and it does not sit an assessment for anyone.',
 
     '3 · SETUP AND ACCESS',
     access,
-    'Nothing is captured until a source is started, and each source asks once: Listen (microphone), Watch (screen broadcast), Aim (camera). Answer, Quiz and Essay need no capture — type a question, or pick a photo of a slide or handout. A session is bought in Settings (the gear, top right) → Session with a sandbox Apple Account; the session installs itself when Apple confirms the purchase.',
+    'Nothing is captured until a source is started, and each source asks once: Listen (microphone), Watch (screen broadcast), Aim (camera). Answer, Quiz and Essay need no capture — type a question, or pick a photo of a slide or handout.',
+    'A session is bought in Settings (the gear, top right) → Session → Buy with the App Store, with a sandbox Apple Account, so no card is charged and nothing renews. The purchase is a fifteen-minute consumable at USD 3.00 / 9.00 / 19.00 on the US storefront, priced in Apple\u2019s local tiers elsewhere; there is no subscription, no auto-renewal and no free trial that converts. StoreKit returns a signed transaction, our server verifies it against Apple\u2019s root certificate, and the session installs itself the moment Apple confirms. There is no Stripe or external checkout anywhere in the iOS build.',
+    'Until a session is bought the app still opens and keeps its courses, notes and settings on the device; the Live tab shows a card that points to Settings instead of starting a capture it could not answer.',
 
     '4 · EXTERNAL SERVICES',
     '· Innotel OmniRoute gateway (gateway.innotel.us) — the language and vision models that write notes and answers. Reached from our server, so no provider key is ever in the app.',
