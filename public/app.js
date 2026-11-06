@@ -676,6 +676,13 @@ async function checkHealth() {
     $('statusDot').title = ok ? `connected to ${health.provider}` : 'no model key configured';
     $('modelTag').textContent = ok ? String(health.chatModel || 'auto').split('/').pop() : 'no key';
     $('setupCard').classList.toggle('hidden', ok);
+    syncSetupBuy();
+    // The card is where someone without a key lands, so it has to know whether a
+    // session can be bought here. Asked once, and only while the card is showing.
+    if (!ok && !setupStoreAsked) {
+      setupStoreAsked = true;
+      loadStore();
+    }
     if (health.authRequired && !state.settings.accessCode) {
       toast('This server is protected. Enter the access code in Settings.', 'error');
     }
@@ -3491,6 +3498,7 @@ function renderStore() {
   const host = $('storePlans');
   if (!host) return;
   host.innerHTML = '';
+  syncSetupBuy();
   const note = $('storeNote');
   const buy = $('btnBuy');
   const page = $('btnStorePage');
@@ -3543,6 +3551,29 @@ function renderStore() {
       planLabel(plan) + ' — ' + store.minutes + ' minutes of the gateway, ' + planPrice(plan) +
       ' each. One key, usable as often as you like until the window closes.';
   }
+}
+
+/* Whether the card has already asked whether a session can be sold here. */
+let setupStoreAsked = false;
+
+function syncSetupBuy() {
+  const button = $('btnSetupBuy');
+  if (!button) return;
+  const sellable = Boolean(store.iap && (NATIVE_STORE || !IOS_APP));
+  button.hidden = !sellable;
+  button.textContent = NATIVE_STORE ? 'Buy with the App Store' : 'Buy a session';
+}
+
+/* Settings already holds the plans at the App Store's own prices, so the card opens
+   it there rather than duplicating a second, unpriced checkout on the live page.
+   Opening it charges nothing: Apple's own sheet is the confirmation. */
+function buyFromSetup() {
+  openSettings();
+  const block = $('storePlans')?.closest?.('.admin-block');
+  if (block?.scrollIntoView) block.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const buy = $('btnBuy');
+  if (buy && !buy.hidden) buy.focus();
+  else $('storePlans')?.focus?.();
 }
 
 async function startPurchase() {
@@ -4581,6 +4612,7 @@ function bind() {
 
   $('btnSettings').onclick = openSettings;
   $('btnRetryHealth').onclick = checkHealth;
+  $('btnSetupBuy').onclick = buyFromSetup;
   $('btnSaveSettings').onclick = () => setTimeout(saveSettings, 0);
   $('btnTestConn').onclick = testConnection;
   $('btnVerifyKey').onclick = async () => {
