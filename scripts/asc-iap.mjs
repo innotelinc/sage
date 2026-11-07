@@ -280,6 +280,19 @@ async function existingProducts(app) {
   return new Map((list?.data || []).map((item) => [item.attributes?.productId, item]));
 }
 
+/** How many prices a schedule holds, following Apple's pages. */
+async function countPrices(schedule, kind) {
+  let path = `/v1/inAppPurchasePriceSchedules/${schedule}/${kind}?limit=200`;
+  let total = 0;
+  for (let page = 0; page < 20 && path; page += 1) {
+    const data = await call('GET', path);
+    total += (data?.data || []).length;
+    const next = data?.links?.next;
+    path = next ? String(next).replace(API, '') : '';
+  }
+  return total;
+}
+
 /**
  * What the store sees, printed and nothing changed.
  *
@@ -306,11 +319,17 @@ async function reportProductStatus(app, iap) {
     const schedule = await optional(
       `/v2/inAppPurchases/${found.id}/iapPriceSchedule?include=manualPrices,automaticPrices`
     ).catch(() => null);
-    const manual = schedule?.data?.relationships?.manualPrices?.data?.length;
-    const automatic = schedule?.data?.relationships?.automaticPrices?.data?.length;
     const base = schedule?.data?.relationships?.baseTerritory?.data?.id;
+    // The include above is paged, so the counts come from the relationship endpoints:
+    // a schedule that prices a handful of storefronts answers the others with nothing.
+    const manual = schedule?.data?.id
+      ? await countPrices(schedule.data.id, 'manualPrices').catch(() => null)
+      : null;
+    const automatic = schedule?.data?.id
+      ? await countPrices(schedule.data.id, 'automaticPrices').catch(() => null)
+      : null;
     const priced = schedule?.data
-      ? `priced · ${manual ?? '?'} manual${base ? ` (base ${base})` : ''}, ${automatic ?? 0} automatic`
+      ? `priced · ${manual ?? '?'} manual${base ? ` (base ${base})` : ''}, ${automatic ?? '?'} automatic`
       : 'priced · NO PRICE SCHEDULE';
     console.log(
       `  ${plan.productId.padEnd(38)} ${String(found.attributes?.state || 'unknown')} · version ${latest} · ` +
