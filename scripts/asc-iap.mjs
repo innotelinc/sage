@@ -301,11 +301,23 @@ async function reportProductStatus(app, iap) {
     const availability = await optional(`/v2/inAppPurchases/${found.id}/inAppPurchaseAvailability`).catch(() => null);
     const territories = availability?.data?.relationships?.availableTerritories?.data?.length;
     const newTerritories = availability?.data?.attributes?.availableInNewTerritories;
+    // A schedule with a base price and no automatic prices is priced in one storefront
+    // only: a phone whose Apple Account is elsewhere is answered with no product at all.
+    const schedule = await optional(
+      `/v2/inAppPurchases/${found.id}/iapPriceSchedule?include=manualPrices,automaticPrices`
+    ).catch(() => null);
+    const manual = schedule?.data?.relationships?.manualPrices?.data?.length;
+    const automatic = schedule?.data?.relationships?.automaticPrices?.data?.length;
+    const base = schedule?.data?.relationships?.baseTerritory?.data?.id;
+    const priced = schedule?.data
+      ? `priced · ${manual ?? '?'} manual${base ? ` (base ${base})` : ''}, ${automatic ?? 0} automatic`
+      : 'priced · NO PRICE SCHEDULE';
     console.log(
       `  ${plan.productId.padEnd(38)} ${String(found.attributes?.state || 'unknown')} · version ${latest} · ` +
         (availability?.data
           ? `on sale in ${territories ?? 'an unknown number of'} territories${newTerritories ? ', new ones included' : ''}`
-          : 'NOT ON SALE in any territory')
+          : 'NOT ON SALE in any territory') +
+        ` · ${priced}`
     );
   }
   const drafts = (await draftsFor(app).catch(() => null)) || [];
