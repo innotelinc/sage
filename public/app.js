@@ -3680,13 +3680,16 @@ async function buyWithApple(plan) {
     if (status) status.textContent = 'That session is not set up in the App Store yet.';
     return;
   }
-  // StoreKit answers nothing for a product Apple has not released, and the plugin's
-  // own refusal reads like a fault in the app. Say what it is instead: the sessions
-  // are in review with the app, so the store does not sell them yet.
+  // StoreKit answers an empty list, not an error, for a product it will not sell from
+  // this build, so the plugin's refusal reads like a fault in the app. Approval is not
+  // the gate — a sandbox purchase works before review — so name the id that came back
+  // empty and the store-side reasons for an empty answer instead.
   if (NATIVE_STORE && store.iap && !Object.keys(store.applePrices || {}).length) {
     if (status) {
       status.textContent =
-        'The App Store has not released the sessions yet — Apple only returns a product once it is approved with the app. Nothing has been charged, and a gateway key works in the meantime.';
+        'The App Store returned no product for ' +
+        entry.productId +
+        ', so nothing can be bought yet — and nothing has been charged. Approval is not the gate: a sandbox purchase works before review. An empty answer means the product is not Ready to Submit, the Paid Applications agreement is not active in App Store Connect, or this build did not come from App Store Connect (TestFlight or App Review).';
     }
     return;
   }

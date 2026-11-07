@@ -13,6 +13,10 @@ on:
         description: Ask Apple what the Duo and Watch slots expect
         type: boolean
         default: false
+      iap_status:
+        description: Print each session product's state, version state and territory availability (read-only)
+        type: boolean
+        default: false
       creative:
         description: Upload the header and search result creative into the asset library
         type: boolean
@@ -71,6 +75,7 @@ jobs:
           REPLACE_SHOTS: ${{ inputs.reshoot }}
           APP_STORE_CREATIVE: ${{ inputs.creative }}
           APP_STORE_PROBE: ${{ inputs.probe }}
+          IAP_STATUS: ${{ inputs.iap_status }}
           SAGE_SITE: https://sage.innotel.tech
           APP_STORE_SHOTS_PHONE: deploy/ios/store-phone
           APP_STORE_SHOTS: deploy/ios/store

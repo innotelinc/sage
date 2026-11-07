@@ -174,6 +174,8 @@
     .road-row p { margin: 0; font-size: 14px; color: var(--text-2); }
     .road-row.shipped .v { color: var(--live-bright); }
     .road-next { margin: 18px 2px 9px; font-size: 13.5px; color: var(--text-2); }
+    .road-stamp { margin: 4px 2px 16px; font-family: var(--mono); font-size: 12.5px; color: var(--text-2); }
+    .road-stamp b { color: var(--text-1, var(--text-2)); font-weight: 600; }
 
     footer { margin-top: 76px; border-top: 1px solid var(--line); padding: 28px 0 56px; }
     .foot { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; justify-content: space-between; }
@@ -412,6 +414,7 @@
   <div class="wrap">
     <h2>Roadmap.</h2>
     <p class="section-lead">Shipped is shipped; the rest is named honestly.</p>
+    <p class="road-stamp">as of <b class="stamp-version">v5.1.0</b> — <span class="stamp-count">23 shipped, 19 planned</span></p>
     <div class="road">
       <div class="road-row shipped"><span class="v">v1.0</span><p>Listening, watching, reading, quiz and essay surfaces, self-evolution memory, gateway wiring, PWA install.</p></div>
       <div class="road-row shipped"><span class="v">v1.1</span><p>Study mode with automatic question detection, and the cross-device relay for mirrored phones, tablets and cast windows.</p></div>
@@ -449,7 +452,15 @@
       <div class="road-row"><span class="v">v5.8</span><p>A workspace you can carry: one archive, restorable on another instance, with documents stored once by hash.</p></div>
       <div class="road-row"><span class="v">v5.9</span><p>The shared page, for everyone: keyboard, screen reader, print and right-to-left all reach a share.</p></div>
       <div class="road-row"><span class="v">v6.0</span><p>The lecture, as a document: captures become a course reader whose every claim opens the page or moment it came from.</p></div>
+      <div class="road-row"><span class="v">v6.1</span><p>Questions about the reader: a question maps to the section that answers it and cites the section as well as the page, and a question that spans two lectures says so and cites both.</p></div>
+      <div class="road-row"><span class="v">v6.2</span><p>A question bank with shape: items built from the reader, past papers and what was marked wrong, deduplicated, each carrying the topic it tests and a difficulty learned from how it was answered.</p></div>
+      <div class="road-row"><span class="v">v6.3</span><p>Uncertainty that means something: stated confidence is calibrated against the golden set, a claim below the calibrated threshold is labelled rather than hidden behind a bar, and the score is recorded per release.</p></div>
+      <div class="road-row"><span class="v">v6.4</span><p>Papers with the shape of the real one: a practice paper matches the sections, the marks and the choice of a supplied past paper, and the clock, the marking and the revision sheet follow that shape.</p></div>
+      <div class="road-row"><span class="v">v6.5</span><p>Feedback that teaches: each lost mark points at the criterion, the page and the shortest path to it, and the revision sheet is built from those pointers in the order to revisit them.</p></div>
       <div class="road-row"><span class="v">v6.6</span><p>A plan for the weeks before: an exam date turns the revision queue into a plan that survives a missed day.</p></div>
+      <div class="road-row"><span class="v">v6.7</span><p>The reader, shared: a lecture reader shared read-only, with attribution and the revision it was cut from — never memory, answers or the plan.</p></div>
+      <div class="road-row"><span class="v">v6.8</span><p>The reader, offline: cached per course under a size budget with each cached section marked, and a question asked with no connection kept with its section and answered from the cache, page labels intact.</p></div>
+      <div class="road-row"><span class="v">v6.9</span><p>The reader in your language: the source text stays and an explanation in the course's chosen language sits beside it, direction per block, the citation preserved.</p></div>
       <div class="road-row"><span class="v">v7.0</span><p>The course, understood: a coverage map, the evidence behind each gap, and a measured answer to what to do this week.</p></div>
     </div>
   </div>

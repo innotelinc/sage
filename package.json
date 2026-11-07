@@ -8,6 +8,7 @@
   "author": "Innotel Labs (https://innotel.us)",
   "scripts": {
     "dev": "node server.mjs",
+    "build:landing": "node scripts/stamp-roadmap.mjs",
     "start": "node server.mjs",
     "desktop": "electron .",
     "dist:win": "electron-builder --win portable nsis --publish never"

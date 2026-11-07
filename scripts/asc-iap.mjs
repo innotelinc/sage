@@ -34,6 +34,8 @@ const WITHDRAW = /^(1|true|yes)$/i.test(String(process.env.WITHDRAW || ''));
 const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+$/, '');
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
 const PROBE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_PROBE || ''));
+/** Read-only: print what the store holds for each session, then stop. */
+const IAP_STATUS = /^(1|true|yes)$/i.test(String(process.env.IAP_STATUS || ''));
 const SHOT_DIR_DUO = (process.env.APP_STORE_SHOTS_DUO || '').trim();
 /** Certificates are team-wide and capped, so they are handled before any app lookup. */
 const CERTS = String(process.env.CERTS || '').trim().toLowerCase();
@@ -276,6 +278,45 @@ async function resolveAppId() {
 async function existingProducts(app) {
   const list = await call('GET', `/v1/apps/${app}/inAppPurchasesV2?limit=200`);
   return new Map((list?.data || []).map((item) => [item.attributes?.productId, item]));
+}
+
+/**
+ * What the store sees, printed and nothing changed.
+ *
+ * StoreKit answers an empty list rather than an error, so a phone that cannot buy a
+ * session cannot say why. These are the store-side facts that produce that answer:
+ * each product's state, the state of its version, and whether it is on sale anywhere.
+ */
+async function reportProductStatus(app, iap) {
+  console.log('\nSession products, as the store holds them:');
+  if (!iap.size) console.log('  none — no in-app purchase is attached to this app');
+  for (const plan of PLANS) {
+    const found = iap.get(plan.productId);
+    if (!found) {
+      console.log(`  ${plan.productId} · MISSING — the id the app asks for does not exist on this app`);
+      continue;
+    }
+    const versions = (await optional(`/v2/inAppPurchases/${found.id}/versions?limit=50`))?.data || [];
+    const latest = versions.map((item) => String(item.attributes?.state || 'unknown')).join(', ') || 'no version';
+    const availability = await optional(`/v2/inAppPurchases/${found.id}/inAppPurchaseAvailability`).catch(() => null);
+    const territories = availability?.data?.relationships?.availableTerritories?.data?.length;
+    const newTerritories = availability?.data?.attributes?.availableInNewTerritories;
+    console.log(
+      `  ${plan.productId.padEnd(38)} ${String(found.attributes?.state || 'unknown')} · version ${latest} · ` +
+        (availability?.data
+          ? `on sale in ${territories ?? 'an unknown number of'} territories${newTerritories ? ', new ones included' : ''}`
+          : 'NOT ON SALE in any territory')
+    );
+  }
+  const drafts = (await draftsFor(app).catch(() => null)) || [];
+  const open = drafts.find((item) =>
+    ['READY_FOR_REVIEW', 'WAITING_FOR_REVIEW', 'IN_REVIEW'].includes(String(item.attributes?.state || ''))
+  );
+  console.log(
+    open
+      ? `  submission · ${open.id} · ${open.attributes?.state}`
+      : '  submission · none open — the products are not attached to a version Apple will review'
+  );
 }
 
 async function ensureProduct(app, iap, plan) {
@@ -1556,6 +1597,11 @@ if (LISTING) await ensureListing(app);
 if (PUBLISH) await publishForReview(app);
 await readiness(app);
 const iap = await existingProducts(app);
+
+if (IAP_STATUS) {
+  await reportProductStatus(app, iap);
+  process.exit(0);
+}
 
 const failed = [];
 for (const plan of PLANS) {

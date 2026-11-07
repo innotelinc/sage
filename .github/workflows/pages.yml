@@ -11,6 +11,8 @@ on:
     branches: [main]
     paths:
       - "web/landing/**"
+      - "scripts/stamp-roadmap.mjs"
+      - "package.json"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -32,6 +34,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # The roadmap states the version this repository is at, taken from package.json.
+      # The step also fails the build when a row marked shipped is above that version,
+      # so the page cannot publish a claim the repository cannot back.
+      - name: Stamp the roadmap
+        run: node scripts/stamp-roadmap.mjs
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
