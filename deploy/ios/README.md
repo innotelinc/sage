@@ -46,6 +46,33 @@ Three consumables must exist in App Store Connect, with these product ids:
 | `us.innotel.sage.session.standard` | standard |
 | `us.innotel.sage.session.intensive` | intensive |
 
+### What the Business tab has to show
+
+A product can be `READY_TO_SUBMIT`, priced and available in every storefront and still be
+answered with an empty list, because the account itself is part of the setup. Before a
+sandbox purchase can work, the **Account Holder** — not an Admin — has to leave
+**Business → Agreements** in this state:
+
+| Row | What it must say |
+| --- | --- |
+| Paid Apps (Paid Applications Agreement) | **Active**, with an expiry in the future |
+| Free Apps | Active — needed to ship at all, and it authorises nothing to be sold |
+| Bank Accounts | the account the proceeds are paid into, in the legal entity's name |
+| Tax Forms | complete for the territories you sell in (the U.S. form for a U.S. entity) |
+
+Anything else on the Paid Apps row is a reason StoreKit answers nothing: **New** has not
+been signed, **Pending User Info** is signed with banking or tax fields still empty,
+**Processing** is with Apple, and **Expired** or **Invalid** means no paid submission is
+accepted until the Account Holder agrees again. A lapsed membership voids the agreement
+even while banking and tax are still on file, and completing the fields takes up to 24
+hours to propagate.
+
+The App Store Connect API cannot read that tab: the old `/v1/agreements` endpoint is gone,
+and a lapsed agreement shows up only as `403 REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED` on an
+otherwise valid request. `gh workflow run asc-iap.yml -f iap_status=true` prints each
+product's state, price coverage and submission, and names that refusal explicitly when
+Apple gives it — which is as close as a machine can get to reading the tab.
+
 Set `IAP_PRODUCTS` (`productId:planSlug,productId:planSlug,…`) to use different ones.
 They cannot be created by the App Store Connect API, so this is a manual step in
 the web UI. The ids are the ones registered in App Store Connect (`scripts/asc-iap.mjs`

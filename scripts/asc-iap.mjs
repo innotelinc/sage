@@ -280,6 +280,26 @@ async function existingProducts(app) {
   return new Map((list?.data || []).map((item) => [item.attributes?.productId, item]));
 }
 
+/**
+ * Apple's only machine-readable word about agreements.
+ *
+ * The API cannot read Business → Agreements: the old `/v1/agreements` endpoint is gone,
+ * and a lapsed Paid Apps agreement turns every otherwise valid request into
+ * 403 REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED. That refusal is the signal, so it is worth
+ * naming instead of printing as an anonymous HTTP error.
+ */
+function agreementRefusal(error) {
+  if (error?.status !== 403) return false;
+  const codes = (error?.data?.errors || []).map((item) => String(item.code || '')).join(' ');
+  return /AGREEMENT/i.test(codes) || /AGREEMENT/i.test(String(error?.message || ''));
+}
+
+function explainAgreementRefusal() {
+  console.error('  agreements · BLOCKED — Apple refused the call with 403 REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED.');
+  console.error('  agreements · the Account Holder must open Business → Agreements, accept the Paid Apps row,');
+  console.error('  agreements · and finish banking and tax. Nothing paid can be sold until it reads Active.');
+}
+
 /** How many prices a schedule holds, following Apple's pages. */
 async function countPrices(schedule, kind) {
   let path = `/v1/inAppPurchasePriceSchedules/${schedule}/${kind}?limit=200`;
@@ -1619,7 +1639,11 @@ if (CERTS) {
   process.exit(process.exitCode || 0);
 }
 
-const app = await resolveAppId();
+const app = await resolveAppId().catch((error) => {
+  if (!agreementRefusal(error)) throw error;
+  explainAgreementRefusal();
+  process.exit(1);
+});
 console.log(`App ${BUNDLE} (${app}) · base territory ${TERRITORY}`);
 await report(app);
 if (WITHDRAW) await withdrawReview(app);
@@ -1631,6 +1655,10 @@ const iap = await existingProducts(app);
 
 if (IAP_STATUS) {
   await reportProductStatus(app, iap);
+  console.log(
+    '  agreements · every call above was answered, so none is in the missing-or-expired state Apple reports as 403;' +
+      ' the Paid Apps row itself is only shown in Business → Agreements.'
+  );
   process.exit(0);
 }
 

@@ -14,6 +14,11 @@ Build numbers move; the plan does not. Install whichever build is attached to ve
   Sign out of the App Store in iOS Settings first, or the purchase is charged for real.
 - The app installed through **TestFlight**, not a sideloaded build: StoreKit answers
   sandbox products for TestFlight and App Review, and nothing for an ad-hoc install.
+- **Business → Agreements** showing the Paid Apps row as *Active*, with banking and tax
+  complete. The App Store Connect API cannot read that tab, so
+  `gh workflow run asc-iap.yml -f iap_status=true` is the fastest check that it is not the
+  cause: a lapsed agreement is refused as `403 REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED`.
+  What the tab has to show is listed in `deploy/ios/README.md`.
 - `https://sage.innotel.tech/api/iap/config` answering `enabled: true` with the three
   `us.innotel.sage.session.*` ids. That is what the button is built from.
 - A second device or a private window on `https://sage.innotel.tech`, for the trial rule.
@@ -44,9 +49,14 @@ Build numbers move; the plan does not. Install whichever build is attached to ve
 
 **If the sheet does not appear**, record what the app says and check in this order: the
 `/api/iap/config` response; the product ids in App Store Connect against that response
-(character for character); whether the three consumables are still `READY_TO_SUBMIT` and
-included in the submission. A product Apple has not released returns nothing to StoreKit,
-which is the "session is not available" case.
+(character for character); whether the three consumables are still `READY_TO_SUBMIT` with
+a localization, a price, availability and a review screenshot; whether the build came from
+App Store Connect at all; and whether Business → Agreements still reads *Active*.
+
+Approval is **not** the gate: a sandbox purchase works before the app is reviewed, which
+is what makes it possible to test billing at all. An empty answer means the store will not
+sell that product to that build, so the fault is in the account or the product record, not
+in the review queue.
 
 ## 3 · One trial per person, and per connection
 
