@@ -46,6 +46,12 @@ Three consumables must exist in App Store Connect, with these product ids:
 | `us.innotel.sage.session.standard` | standard |
 | `us.innotel.sage.session.intensive` | intensive |
 
+Set `IAP_PRODUCTS` (`productId:planSlug,productId:planSlug,…`) to use different ones.
+They cannot be created by the App Store Connect API, so this is a manual step in
+the web UI. The ids are the ones registered in App Store Connect (`scripts/asc-iap.mjs`
+creates them as `${APPLE_BUNDLE_ID}.session.*`), and StoreKit returns nothing for an
+id that differs from the registered one by even a character.
+
 ### What the Business tab has to show
 
 A product can be `READY_TO_SUBMIT`, priced and available in every storefront and still be
@@ -72,12 +78,6 @@ and a lapsed agreement shows up only as `403 REQUIRED_AGREEMENTS_MISSING_OR_EXPI
 otherwise valid request. `gh workflow run asc-iap.yml -f iap_status=true` prints each
 product's state, price coverage and submission, and names that refusal explicitly when
 Apple gives it — which is as close as a machine can get to reading the tab.
-
-Set `IAP_PRODUCTS` (`productId:planSlug,productId:planSlug,…`) to use different ones.
-They cannot be created by the App Store Connect API, so this is a manual step in
-the web UI. The ids are the ones registered in App Store Connect (`scripts/asc-iap.mjs`
-creates them as `${APPLE_BUNDLE_ID}.session.*`), and StoreKit returns nothing for an
-id that differs from the registered one by even a character.
 
 Server configuration (without a mint endpoint the app keeps the store page and no
 purchase can happen):
