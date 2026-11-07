@@ -3689,7 +3689,7 @@ async function buyWithApple(plan) {
       status.textContent =
         'The App Store returned no product for ' +
         entry.productId +
-        ', so nothing can be bought yet — and nothing has been charged. Approval is not the gate: a sandbox purchase works before review. An empty answer means the product is not Ready to Submit, the Paid Applications agreement is not active in App Store Connect, or this build did not come from App Store Connect (TestFlight or App Review).';
+        ', so nothing can be bought yet — and nothing has been charged. Approval is not the gate: a sandbox purchase works before review. The usual reason is that the sales agreement is unsigned — App Store Connect answers "To offer apps or other in-app purchases, you must sign the Paid Apps Agreement" until the Account Holder signs it under Business → Agreements. It can also mean the product is not Ready to Submit, or this build did not come from App Store Connect (TestFlight or App Review).';
     }
     return;
   }

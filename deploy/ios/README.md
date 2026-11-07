@@ -73,6 +73,17 @@ accepted until the Account Holder agrees again. A lapsed membership voids the ag
 even while banking and tax are still on file, and completing the fields takes up to 24
 hours to propagate.
 
+Apple's own wording for the unsigned row is worth recognising, because it appears in the
+web UI rather than in the app and it is what empties StoreKit:
+
+> To offer apps or other in-app purchases, you must sign the Paid Apps Agreement.
+
+That is a signature, not a setting: only the Account Holder can accept it, at
+**Business → Agreements → Paid Apps → View and Agree to Terms**, after which banking and
+tax still have to be complete for the row to read *Active*. Reading metadata over the API
+succeeds while the row is unsigned — the refusal happens at the point of sale — so a
+green App Store Connect run does not mean the agreement is signed.
+
 The App Store Connect API cannot read that tab: the old `/v1/agreements` endpoint is gone,
 and a lapsed agreement shows up only as `403 REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED` on an
 otherwise valid request. `gh workflow run asc-iap.yml -f iap_status=true` prints each

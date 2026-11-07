@@ -1656,8 +1656,12 @@ const iap = await existingProducts(app);
 if (IAP_STATUS) {
   await reportProductStatus(app, iap);
   console.log(
-    '  agreements · every call above was answered, so none is in the missing-or-expired state Apple reports as 403;' +
-      ' the Paid Apps row itself is only shown in Business → Agreements.'
+    '  agreements · Apple did not refuse these calls, but a 200 here is not proof the Paid Apps row is signed:' +
+      ' App Store Connect still reads metadata while it is unsigned and only refuses at the point of sale.'
+  );
+  console.log(
+    '  agreements · an unsigned row is the usual reason StoreKit answers with no products at all.' +
+      ' The Account Holder signs it at Business → Agreements → Paid Apps → View and Agree to Terms.'
   );
   process.exit(0);
 }
