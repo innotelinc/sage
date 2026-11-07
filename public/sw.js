@@ -1,5 +1,5 @@
 /* Shell cache only. API traffic is never cached. */
-const CACHE = 'sage-shell-v21';
+const CACHE = 'sage-shell-v22';
 const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/shell.js', '/profile.js', '/icon.svg', '/manifest.webmanifest', '/search.js', '/understand.js', '/review.js', '/handoff.js', '/library.js', '/a11y.js'];
 
 self.addEventListener('install', (event) => {
