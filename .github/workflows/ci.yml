@@ -43,3 +43,19 @@ jobs:
           echo "checked $n file(s)"
       - name: The entry point exists
         run: test -f server.mjs
+
+  golden:
+    name: Grounding is measured
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # The scorer is logic too: a wrong page must fail, an admitted gap must pass.
+      - name: The scorer is checked
+        run: node scripts/test-golden.mjs
+      # Stubbed, so this costs nothing and still catches a prompt or citation
+      # regression before a release tag.
+      - name: The golden set does not regress
+        run: node scripts/golden.mjs

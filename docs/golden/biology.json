@@ -1,0 +1,53 @@
+{
+  "course": "BIO 101 — Cells and membranes",
+  "documents": [
+    {
+      "name": "lecture-3.pdf",
+      "kind": "pdf",
+      "segments": [
+        {
+          "locator": "p.1",
+          "text": "A cell membrane is a phospholipid bilayer. The hydrophobic tails face inward and the hydrophilic heads face the aqueous solution on either side."
+        },
+        {
+          "locator": "p.2",
+          "text": "Osmosis is the net movement of water across a semipermeable membrane, from the region of higher water potential to the region of lower water potential. Solute does not cross by osmosis."
+        },
+        {
+          "locator": "p.3",
+          "text": "In a plant cell placed in pure water, the cell wall limits expansion: turgor pressure rises until it balances the water potential difference, so the cell does not burst."
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "osmosis-direction",
+      "mode": "answer",
+      "question": "Which way does water move in osmosis, and does the solute move too?",
+      "reply": "{\"answer\":\"Water moves from higher water potential to lower water potential across a semipermeable membrane, and the solute does not cross by osmosis.\",\"working\":\"The bilayer is permeable to water and not to the solute, so the net flux is water, down its potential gradient [lecture-3.pdf p.2].\",\"confidence\":0.94,\"why\":\"Stated directly on the osmosis page.\",\"sayThis\":\"Water goes down its water potential gradient, and the solute stays put.\"}",
+      "expect": { "citations": [{ "name": "lecture-3.pdf", "locator": "p.2" }] }
+    },
+    {
+      "id": "plant-cell-turgor",
+      "mode": "answer",
+      "question": "Why does a plant cell in pure water not burst?",
+      "reply": "{\"answer\":\"Turgor pressure rises until it balances the water potential difference, and the wall stops further expansion.\",\"working\":\"Water enters because the cell's water potential is lower, but the wall resists, so pressure potential climbs to match [lecture-3.pdf p.3].\",\"confidence\":0.9,\"why\":\"The wall's limit is the reason given in the handout.\",\"sayThis\":\"The wall pushes back, so the pressure balances before the membrane gives.\"}",
+      "expect": { "citations": [{ "name": "lecture-3.pdf", "locator": "p.3" }] }
+    },
+    {
+      "id": "membrane-structure",
+      "mode": "answer",
+      "question": "How is the membrane arranged?",
+      "reply": "{\"answer\":\"As a phospholipid bilayer, hydrophobic tails inward and hydrophilic heads facing the water on both sides.\",\"working\":\"That arrangement is what makes the membrane selectively permeable [lecture-3.pdf p.1].\",\"confidence\":0.92,\"why\":\"Described on the first page.\",\"sayThis\":\"Two layers of lipid, tails in, heads out.\"}",
+      "expect": { "citations": [{ "name": "lecture-3.pdf", "locator": "p.1" }] }
+    },
+    {
+      "id": "exam-weighting-gap",
+      "mode": "answer",
+      "question": "How many marks is the cristae diagram worth on the midterm?",
+      "reply": "The material supplied here does not give mark weightings for the midterm, so I cannot say how many marks that diagram carries. Ask for the marking scheme and I will read it against the handout.",
+      "expect": { "refuse": true }
+    }
+  ]
+}

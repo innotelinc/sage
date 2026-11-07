@@ -1,0 +1,42 @@
+{
+  "course": "PHYS 210 — Forces and motion",
+  "documents": [
+    {
+      "name": "lecture-4.pdf",
+      "kind": "pdf",
+      "segments": [
+        {
+          "locator": "p.1",
+          "text": "Newton's second law: the net force on a body equals its mass times its acceleration. Resolve forces along the direction of motion before applying it."
+        },
+        {
+          "locator": "p.3",
+          "text": "Kinetic friction is modelled as the coefficient of kinetic friction times the normal force, and it always opposes the relative motion."
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "net-force-acceleration",
+      "mode": "answer",
+      "question": "A 3 kg block is pushed with 12 N while friction acts. How do I get its acceleration?",
+      "reply": "{\"answer\":\"Subtract friction from the push to get the net force, then divide by the mass.\",\"working\":\"Newton's second law gives a = F_net / m; the forces must be resolved along the direction of motion first [lecture-4.pdf p.1].\",\"confidence\":0.91,\"why\":\"The method is the second law applied along the surface.\",\"sayThis\":\"Work out the net force along the surface, then divide by the mass.\"}",
+      "expect": { "citations": [{ "name": "lecture-4.pdf", "locator": "p.1" }] }
+    },
+    {
+      "id": "friction-model",
+      "mode": "answer",
+      "question": "How is kinetic friction written, and which way does it point?",
+      "reply": "{\"answer\":\"As the coefficient of kinetic friction times the normal force, pointing against the relative motion.\",\"working\":\"That is the model used throughout the problems, so the sign is always opposite the sliding direction [lecture-4.pdf p.3].\",\"confidence\":0.89,\"why\":\"Given as the friction model in the handout.\",\"sayThis\":\"Mu-k times the normal force, always opposing the sliding.\"}",
+      "expect": { "citations": [{ "name": "lecture-4.pdf", "locator": "p.3" }] }
+    },
+    {
+      "id": "lab-equipment-gap",
+      "mode": "answer",
+      "question": "Which lab bench should I book for the friction practical?",
+      "reply": "The supplied notes say nothing about lab bookings or benches, so there is no page here to cite for that.",
+      "expect": { "refuse": true }
+    }
+  ]
+}

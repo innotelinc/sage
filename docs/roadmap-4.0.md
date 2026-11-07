@@ -1,4 +1,4 @@
-# SAGE roadmap — 4.0 through 5.1
+# SAGE roadmap — 4.0 through 7.0
 
 3.1 closes the last of the "it does the thing, on a good connection, in the foreground" releases. 4.0 is the
 release where the app stops behaving like a web page that happens to run on a phone.
@@ -14,8 +14,13 @@ Everything else in 4.x is downstream of those three. If a feature does not make 
 
 **Where this stands:** 4.0 (background capture), 4.1 (offline photos), 4.2 (citable pages), 4.3 (exam
 rehearsal), 4.4 (audio-only lectures), 4.5 (cross-course search), 4.6 (spaced revision), 4.7 (handoff between
-devices), 4.8 (documents that work offline), 4.9 (accessible and multilingual) and 5.0 (share a course) are
-shipped. 5.1 is the next build, designed below.
+devices), 4.8 (documents that work offline), 4.9 (accessible and multilingual), 5.0 (share a course) and 5.1
+(measured grounding) are shipped. 5.2 is the next build, designed below.
+
+The series from 5.2 on is where the app stops being a set of surfaces and starts being a course that knows
+what it is: 5.x finishes what sharing and measuring opened, 6.x turns what was captured into a document you
+can study from, and 7.0 is the first release that can answer for the course as a whole rather than for the
+turn in front of it.
 
 ## 4.0 — capture that survives the background *(shipped in 4.0.0)*
 
@@ -186,17 +191,257 @@ credential. Documents are stored once under their content hash and every share p
 copy, with each sharer added to its attribution. Links are revoked by their owner, refused if
 they outlive thirty days, and writes to them answer 405.
 
-## 5.1 — measured grounding
+## 5.1 — measured grounding *(shipped in 5.1.0)*
 
-Every release claims grounding. Nothing measures it.
+Every release claimed grounding. Nothing measured it.
 
-- A golden set per course: questions with the document and page that answer them, in the
-  repo, run in CI against the stub model and against the gateway on a budget.
-- Scores for grounding (did it cite a real page), refusal (did it admit a gap) and
-  citation accuracy, tracked across releases so a regression blocks the tag.
+- A golden set per course under `docs/golden/`: documents with their pages, questions with the
+  page that answers them, and questions the material cannot answer at all.
+- Each case runs through the real `/api/chat` handler — the prompt, the citation parser and the
+  grounding report — and is scored for grounding, citation accuracy and refusal. A page the
+  material does not have counts against the score rather than passing as a citation.
+- Run in CI against the stub model and against the gateway on a budget (`--live`), with the
+  scores kept in `docs/golden/baseline.json`, so a release that drops any of the three fails.
 
 **Done means:** a release that degrades grounding fails CI with the question that broke,
 instead of being noticed in an exam.
+
+*As built:* two course sets (BIO 101, PHYS 210) with seven cases, two of which the material cannot
+answer. `scripts/golden.mjs` runs them stubbed or live, prints a line per case, and compares the
+totals against the baseline it recorded; `scripts/test-golden.mjs` tests the scorer itself, because a
+check that cannot fail is not a check. What the stub run measures is the plumbing — that pages reach
+the prompt, that a citation survives parsing only when its document was supplied, that an admitted
+gap comes back clean — and what `--live` measures is the model. The limitation belongs on the page:
+seven cases are a floor, not a suite, and a course is only measured once somebody writes its set.
+
+## 5.2 — a share that stays honest
+
+A share is a snapshot that never says it has aged. A classmate reads notes from three weeks ago with
+nothing on the page to show it.
+
+- Record the revision a share was cut from; when the course has moved on, the page says so and
+  offers the owner’s newer link rather than pretending.
+- The owner publishes a revision deliberately, so a shared page is never half-updated.
+- A single document can be shared on its own, opening at the page that was meant.
+
+**Done means:** a shared page whose course changed since says which revision it is, and the owner
+can publish a new one without changing the old link’s address.
+
+## 5.3 — group revision
+
+A shared course carries a question bank and nothing uses it. Revision stays single-user.
+
+- Import a shared course’s quiz items and practice questions into your own spaced revision,
+  attributed to the course they came from.
+- Merge duplicates by content rather than by wording, so the same question from two people is
+  asked once.
+- The queue says where an item came from, and nothing on the shared side can be written to.
+
+**Done means:** a revision session includes a classmate’s questions, each labelled with the course
+it came from.
+
+## 5.4 — the marking scheme, learned
+
+Exam rehearsal (4.3) marks against the course persona. A real paper is marked against a scheme.
+
+- Read a supplied marking scheme once, and mark criterion by criterion with the marks the scheme
+  allocates.
+- Feedback names the criterion that was missed and the page or lecture moment that would have
+  supplied it, reusing 4.2 and 4.4.
+- A scheme that cannot be parsed says so instead of marking against a guess.
+
+**Done means:** a marked paper scores each criterion the scheme names, and the feedback points at
+the material that was missed.
+
+## 5.5 — answers that cite the recording
+
+Audio notes carry `[lecture M:SS]` (4.4); answers still cite only pages.
+
+- Teach the citation parser the recording form, and let Answer and Essay point at the moment a
+  claim came from.
+- The chip opens the recording at that offset on the device that holds it, and says plainly when
+  it does not.
+
+**Done means:** an answer says it leant on `lecture-4.m4a 12:40`, and tapping that plays the
+lecture from there.
+
+## 5.6 — a timetable that starts the lecture
+
+The timetable decides which course answers. It does not start anything.
+
+- Capture starts on the timetable’s window with a confirmation the first time, and stops when the
+  window closes, reconciling with the session clock (1.4).
+- A missed window starts nothing and says so; a class that runs over is extended by one tap, not by
+  a setting.
+- The live session record (4.7) is created for the class, so a second device is offered it.
+
+**Done means:** walking into a timetabled class begins the capture it asked about, and leaving the
+window ends it without losing the notes.
+
+## 5.7 — a budget you can see
+
+Sessions are timed, not metered, and a runaway turn is invisible until it is expensive.
+
+- A per-course and per-day cap on tokens, enforced on the server and reported in the app, with the
+  cost of the current session stated plainly.
+- A turn that would exceed the cap is refused with the reason and the option, not silently
+  downgraded to a worse model.
+- The tally the operator panel already keeps is reused, so there is one number and not two.
+
+**Done means:** a course that reaches its cap says so before the next turn, and the number in the app
+matches the server’s.
+
+## 5.8 — a workspace you can carry
+
+Courses, memory, documents and the revision queue live on one device’s server.
+
+- One archive of a whole workspace, hashed file by file, restorable on another instance.
+- Import refuses a partial or corrupt archive and names the entry that failed, rather than half
+  restoring a course.
+- Documents both sides already hold are stored once, by content hash.
+
+**Done means:** a workspace exported from the phone’s server restores on a laptop’s server with the
+same courses, pages and queue.
+
+## 5.9 — the shared page, for everyone
+
+Sharing shipped before the accessibility pass (4.9) reached it.
+
+- Shared pages are keyboard- and screen-reader complete, with the language and direction of the
+  source material, and a print stylesheet that keeps its page labels.
+- A share that was revoked or expired explains itself on the same page rather than as a bare 404.
+
+**Done means:** a shared course can be read with a keyboard and a screen reader, printed, and opened
+in Arabic without mirrored punctuation.
+
+## 6.0 — the lecture, as a document
+
+Capture produces notes and answers. It does not produce a document you could study from.
+
+- A course reader assembled from what was captured: per lecture, an outline, the definitions, the
+  worked examples and the exam hints, in the order they were taught.
+- Every section keeps the anchors it came from — page, offset, timestamp — so the reader is a view
+  of the material rather than a summary of it.
+- The reader is editable, and an edit is kept apart from the capture it came from.
+
+**Done means:** a lecture captured once becomes a reader section whose every claim opens the page
+or moment it came from.
+
+## 6.1 — questions about the reader
+
+A question about the course is answered against pages, not sections.
+
+- Retrieval over the reader: a question maps to the section that answers it, and the reply cites
+  the section as well as the page.
+- A question that spans two lectures says so and cites both.
+- The golden set grows a reader case per course, so this is measured like everything else.
+
+**Done means:** “where did we do osmosis” returns the section, the page and the lecture, and each
+one opens.
+
+## 6.2 — a question bank with shape
+
+Quiz items are produced one paper at a time and thrown away.
+
+- A bank built from the reader, past papers and what was marked wrong, deduplicated by content.
+- Each item carries a difficulty estimated from how it was answered, and the topic it tests.
+- Items are editable, and deleting one removes it from the queue and from future papers.
+
+**Done means:** the bank can produce a paper of a given length and difficulty without repeating a
+question.
+
+## 6.3 — uncertainty that means something
+
+Every reply has a confidence number nothing has ever calibrated.
+
+- Calibrate stated confidence against the golden set: a 90% claim should be right nine times in ten,
+  and the score says whether it is.
+- A claim below the calibrated threshold is labelled in the reply rather than hidden behind a bar.
+- The calibration is recorded per release, so drift is visible.
+
+**Done means:** a marked paper shows the model’s confidence is neither invented nor systematically
+overconfident, or the release fails.
+
+## 6.4 — papers with the shape of the real one
+
+Practice papers are drawn, but a real paper has a structure: sections, marks, a choice.
+
+- Build a practice paper from the bank in the shape of a supplied past paper — the same sections,
+  the same mark allocation, the same choice.
+- The clock, the marking and the revision sheet follow that shape rather than a flat count.
+
+**Done means:** a practice paper matches the section and mark structure of the paper it was modelled
+on.
+
+## 6.5 — feedback that teaches
+
+Marking says what was missed. It does not say what to read.
+
+- Each lost mark points at the criterion, the page and the shortest path to it — a definition, a
+  worked example, a lecture moment.
+- The revision sheet is built from those pointers, in the order they should be revisited.
+- Feedback never restates the answer for a paper that has not been submitted.
+
+**Done means:** a marked paper names, per lost mark, the material that would have earned it.
+
+## 6.6 — a plan for the weeks before
+
+Revision is a queue, not a plan; an exam date changes that.
+
+- A plan from the timetable, the exam date and the queue: what to study on which day, with the time
+  each block actually takes.
+- A missed day is redistributed rather than lost, and the plan says what it dropped.
+- The plan is a proposal that can be edited; nothing is scheduled silently.
+
+**Done means:** with an exam date set, the app can say what to do this week and why, and the plan
+survives a missed day.
+
+## 6.7 — the reader, shared
+
+A share carries notes and documents. It does not carry what was understood.
+
+- Share a lecture reader read-only, with attribution and the revision it was cut from.
+- A reader share never carries memory, answers or the plan.
+
+**Done means:** a classmate can read a lecture reader, and the sharer’s name is on what they
+contributed.
+
+## 6.8 — the reader, offline
+
+The reader is assembled on the server, so a basement has none.
+
+- Cache the reader per course with a size budget, and mark each section that is cached.
+- A question asked offline is kept with the section it was asked against and answered from the cache
+  when the connection returns, page labels intact.
+
+**Done means:** a question about a cached section is answered with the network off in the sense 4.8
+defines: kept, then answered, with its page.
+
+## 6.9 — the reader in your language
+
+A course can be in one language and the student in another.
+
+- The reader keeps the source text and adds an explanation in the course’s chosen language, with
+  the source citation preserved beside it.
+- Direction is per block, so a right-to-left explanation can quote a left-to-right formula.
+
+**Done means:** a lecture in one language can be read in another without losing the page a claim
+came from.
+
+## 7.0 — the course, understood
+
+Everything so far is about a turn, a paper or a lecture. Nothing says what the course is.
+
+- A coverage map: what the course’s material covers, what has been captured, and where the two
+  disagree — with the pages that support each claim.
+- Weak areas from marks, revision history and calibration, named with their evidence rather than a
+  score.
+- One question the app answers well: “what will be on the exam, and what should I do this week”,
+  grounded in the course’s own material, citing the pages and lecture moments, and measured against
+  a golden set like everything else.
+
+**Done means:** the coverage map names a gap the material confirms, the week’s plan follows from it,
+and the answer to the exam question cites the pages it was built from.
 
 ## Not planned
 
@@ -217,6 +462,10 @@ wish list.
 | 4.8 | a question asked with no connection is answered from the cached copy, page intact |
 | 4.9 | capture, an answer and a citation are announced, and Arabic runs right to left |
 | 5.0 | a classmate opens a link, reads notes and documents, and can change neither |
+| 5.1 | the golden set runs in CI, and a degraded citation fails the build with the case that broke |
+| 5.4 | a marked paper scores the criteria its supplied scheme names, and points at the material missed |
+| 6.0 | a lecture captured once becomes a reader section that opens the page it came from |
+| 7.0 | the coverage map names a gap the material confirms, and the week’s plan follows from it |
 
 Every milestone also keeps the existing suite green (`test-saas`, `test-iap`, `test-sources`,
 `test-grounding`, `test-pending`) and ships through the same path as 3.x: commit, tag, deploy to the incus
@@ -225,5 +474,9 @@ container, verify live.
 ## Availability
 
 The release series in this document is the repository and web series in `package.json`. The App Store
-marketing version is separate: the iPhone app is at 1.0 and currently in review. 4.x reaches the web and the
-installed PWA first; the App Store build follows the marketed version, not this file.
+marketing version is separate: the iPhone app is at 1.0 and currently in review. 4.x and 5.x reach the web
+and the installed PWA first; the App Store build follows the marketed version, not this file, so a release
+here does not imply a new build in review.
+
+Milestones past 5.1 are designed, not promised: each one is worth doing only if it makes the three promises
+at the top true, and the order is a straight line rather than a contract.
