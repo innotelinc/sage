@@ -184,6 +184,53 @@ Every PNG is flattened onto `#080b12` with the alpha channel removed. That is no
 cosmetic: uploads are rejected when the large icon is transparent, and the workflow
 re-checks it with `sips -g hasAlpha` instead of trusting the committed file.
 
+## When the certificate cap is reached
+
+A build can fail in **Archive** with Apple's own words:
+
+```
+error: Choose a certificate to revoke. Your account has reached the maximum number of
+       certificates.
+error: No profiles for 'us.inotnel.sage' were found
+```
+
+That is the account, not the code. A team may hold three Apple Distribution
+certificates and Xcode will not mint a fourth. The run imports `IOS_DIST_P12` and finds
+one valid identity, but Xcode no longer accepts that certificate for this team, so it
+tries to create one and Apple refuses. Build 52 failed exactly this way.
+
+Two ways to clear it, both in the developer portal (Certificates, Identifiers &
+Profiles → Certificates):
+
+1. **Revoke the stale certificates** that are not the one inside `IOS_DIST_P12`. The
+   next run mints a fresh one and archives.
+2. **Re-export the live certificate** as a `.p12` with its private key and replace
+   `IOS_DIST_P12` and `IOS_DIST_P12_PASSWORD`. Nothing else changes.
+
+Either way the p12 has to be the certificate the account will sign with: a run that
+mints one instead of using the imported one spends one of the three, which is how a
+team arrives at this cap after a few builds.
+
+## Submitting 1.0 for review
+
+The App Store version is submitted from App Store Connect, not from this repo.
+`scripts/asc-iap.mjs` prepares it (`-f listing=true` publishes the description and the
+review notes) and can submit it (`-f publish=true`), but that second step is
+irreversible and belongs to a person.
+
+1. **A VALID build attached to 1.0.** `-f attach=true` attaches the newest build and
+   `-f probe=true` prints what the version now carries.
+2. **The three consumables are Ready to Submit** and included in this submission, or
+   Apple rejects a build that sells something it cannot see.
+3. **The review notes are the repository's copy** — publish them with `-f listing=true`,
+   so what Apple reads is `reviewNotes()` and nothing transcribed by hand.
+4. **Review Information:** contact name, phone (`APPLE_REVIEW_PHONE`) and email. No demo
+   account: the app has no accounts, and the notes say so.
+5. **The recording.** There is no `APPLE_REVIEW_RECORDING_URL` secret, so the notes
+   promise the video in the message thread — attach it in App Review → Messages right
+   after submitting, or the promise is the only evidence there is.
+6. **Submit** — Version 1.0 → Add for Review → Submit for Review.
+
 ## Still unverified
 
 - **Device behaviour.** The build uploads, but nobody has installed it yet:
