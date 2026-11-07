@@ -577,14 +577,18 @@ async function api(path, options = {}) {
   }
   const data = await res.json().catch(() => ({ error: 'bad_response', message: `HTTP ${res.status}` }));
   if (!res.ok) {
+    const failure = new Error(data.message || `HTTP ${res.status}`);
     if (res.status === 401 && !options.quiet) {
       // A 401 can arrive from a background timer at the exact moment the app
       // comes back to the foreground. Opening Settings on the user's behalf made
       // every return look like the app had thrown them into a menu, so point at
       // the gear and let them decide.
       toast('That key was refused (401). Tap ⚙ if it needs replacing.', 'error');
+      // The caller still wants to offer the way in, but not to say it twice.
+      failure.notified = true;
+      failure.credential = true;
     }
-    throw new Error(data.message || `HTTP ${res.status}`);
+    throw failure;
   }
   return data;
 }
@@ -619,7 +623,9 @@ function courseForTurn() {
 async function agent(mode, { text = '', images = [], maxTokens } = {}) {
   const left = sessionRemainingMs();
   if (left !== null && left <= 0) {
-    throw new Error('Your session ended. Buy another session in Settings → Session.');
+    const ended = new Error('Your session ended. Buy another session in Settings → Session.');
+    offerSession(ended);
+    throw ended;
   }
   const turn = courseForTurn();
   if (turn && turn.id !== state.activeId) switchCourse(turn.id, { auto: true });
@@ -659,12 +665,32 @@ async function agent(mode, { text = '', images = [], maxTokens } = {}) {
       updateStatus();
       throw new Error(`Kept on this device — ${pendingLabel(state.pending)}. It answers as soon as the server is back.`);
     }
+    // A turn refused for want of a credential is the moment the person needs the
+    // two ways in, not a toast that sends them hunting through a menu.
+    if (error.credential || /no model key|needs an API key|rejected this API key/i.test(error.message)) {
+      offerSession(error);
+    }
     throw error;
   }
   res.fromCache = sent.filter((doc) => doc.fromCache).map((doc) => doc.name);
   announce(describeReply(res, mode));
   if (res.notes?.length) addMemory(res.notes, 'learned');
   return res;
+}
+
+/* A turn that cannot reach a model ends where both ways in are described. The
+   card on Live names the key and carries the App Store action when this device
+   can sell a session, so it is shown and Live is opened: the answer tab keeps the
+   question, and the way to answer it is one tap away rather than a menu away. */
+function offerSession(error) {
+  $('setupCard').classList.remove('hidden');
+  if (!setupStoreAsked) {
+    setupStoreAsked = true;
+    loadStore();
+  }
+  syncSetupBuy();
+  if ((state.ui || {}).tab !== 'live') openTab('live');
+  if (!error.notified) toast(error.message, 'error');
 }
 
 /* ── health ────────────────────────────────────────────────── */
