@@ -37,6 +37,10 @@ on:
         description: Submit the draft to App Review — the step that actually publishes
         type: boolean
         default: false
+      certs:
+        description: Certificates on this team — `list`, or `purge-dev` to delete the development ones (distribution is never touched)
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -63,6 +67,7 @@ jobs:
           LISTING: ${{ inputs.listing }}
           WITHDRAW: ${{ inputs.withdraw }}
           PUBLISH: ${{ inputs.publish }}
+          CERTS: ${{ inputs.certs }}
           REPLACE_SHOTS: ${{ inputs.reshoot }}
           APP_STORE_CREATIVE: ${{ inputs.creative }}
           APP_STORE_PROBE: ${{ inputs.probe }}

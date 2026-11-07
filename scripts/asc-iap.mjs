@@ -35,6 +35,8 @@ const SITE = (process.env.SAGE_SITE || 'https://sage.innotel.tech').replace(/\/+
 const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
 const PROBE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_PROBE || ''));
 const SHOT_DIR_DUO = (process.env.APP_STORE_SHOTS_DUO || '').trim();
+/** Certificates are team-wide and capped, so they are handled before any app lookup. */
+const CERTS = String(process.env.CERTS || '').trim().toLowerCase();
 const CREATIVE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_CREATIVE || ''));
 const HEADER_ASSET = (process.env.APP_STORE_HEADER || 'deploy/ios/store-header/header-universal.png').trim();
 const CREATIVE_TYPES = ['PRODUCT_PAGE_HEADER_ASSET', 'APP_STORE_SEARCH_RESULTS_ASSET'];
@@ -1480,6 +1482,67 @@ async function publishForReview(app) {
   });
   console.log(`  publish · submitted · state ${result?.data?.attributes?.state || 'unknown'}`);
   return true;
+}
+
+/**
+ * Certificates belong to the team, not to the app, and Apple caps them: two
+ * development and three distribution certificates per team. A development
+ * certificate left behind by an old run holds one of those slots, and the next
+ * archive is answered with "Choose a certificate to revoke" — which is exactly
+ * how build 52 failed.
+ *
+ *   CERTS=list       print every certificate with its type and expiry
+ *   CERTS=purge-dev  delete the development ones; distribution is never touched
+ */
+async function listCertificates() {
+  const all = [];
+  let path = '/v1/certificates?limit=200';
+  while (path) {
+    const page = await call('GET', path);
+    all.push(...(page?.data || []));
+    const next = page?.links?.next;
+    path = next ? String(next).replace(API, '') : '';
+  }
+  return all;
+}
+
+function certLine(cert) {
+  const a = cert.attributes || {};
+  return `${String(a.certificateType || 'unknown').padEnd(20)} ${String(a.name || '').padEnd(44)} expires ${String(
+    a.expirationDate || ''
+  ).slice(0, 10)} · ${cert.id}`;
+}
+
+async function handleCertificates(mode) {
+  const certs = await listCertificates();
+  console.log(`  certificates · ${certs.length} on this team`);
+  for (const cert of certs) console.log(`  ${certLine(cert)}`);
+  if (!['purge-dev', 'purge-development', 'purge'].includes(mode)) return;
+
+  // Only the iOS development certificates: a macOS development certificate belongs to
+  // some other product on this team and deleting it would break that one instead.
+  const dev = certs.filter((cert) => ['IOS_DEVELOPMENT', 'DEVELOPMENT'].includes(String(cert.attributes?.certificateType || '')));
+  if (!dev.length) {
+    console.log('  purge · no development certificates to remove');
+    return;
+  }
+  for (const cert of dev) {
+    try {
+      await call('DELETE', `/v1/certificates/${cert.id}`);
+      console.log(`  removed · ${certLine(cert)}`);
+    } catch (error) {
+      console.log(`  FAILED · ${certLine(cert)} · ${error.message}`);
+      process.exitCode = 1;
+    }
+  }
+  const after = await listCertificates();
+  console.log(`  certificates · ${after.length} left on this team`);
+  for (const cert of after) console.log(`  ${certLine(cert)}`);
+}
+
+if (CERTS) {
+  await handleCertificates(CERTS);
+  process.exit(process.exitCode || 0);
 }
 
 const app = await resolveAppId();
