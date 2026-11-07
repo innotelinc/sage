@@ -1834,6 +1834,31 @@ function switchCourse(id, options = {}) {
   return true;
 }
 
+/* A first run has one unnamed course, and nothing else says that the course's name is
+   what every note, memory and answer is filed under. The card is asked once on the
+   screen someone lands on, rather than buried in Settings → You. */
+function syncNameCourse() {
+  const card = $('nameCourse');
+  if (!card) return;
+  const named = String(state.persona?.course || '').trim();
+  card.classList.toggle('hidden', Boolean(named) || !isPristine());
+}
+
+function nameCourse() {
+  const input = $('nameCourseInput');
+  const value = String(input?.value || '').trim().slice(0, 80);
+  if (!value) {
+    input?.focus();
+    toast('Give the course a name — it is what the notes are filed under.', 'error');
+    return;
+  }
+  state.persona.course = value;
+  persist();
+  renderCourseUi();
+  syncNameCourse();
+  toast(`Course named ${value}.`);
+}
+
 function newCourse() {
   stashActive();
   const course = defaultCourse({});
@@ -1882,6 +1907,7 @@ function removeCourse() {
 }
 
 function renderCourseUi() {
+  syncNameCourse();
   const select = $('courseSelect');
   if (select) {
     select.innerHTML = '';
@@ -3565,7 +3591,8 @@ function renderStore() {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn ' + (option.slug === plan.slug ? 'primary' : 'ghost');
-    button.textContent = planLabel(option) + ' · ' + planPrice(option);
+    button.textContent =
+      planLabel(option) + ' · ' + planPrice(option) + (option.minutes ? ` · ${option.minutes} min` : '');
     button.onclick = () => {
       store.slug = option.slug;
       renderStore();
@@ -3574,7 +3601,7 @@ function renderStore() {
   }
   if (note) {
     note.textContent =
-      planLabel(plan) + ' — ' + store.minutes + ' minutes of the gateway, ' + planPrice(plan) +
+      planLabel(plan) + ' — ' + (plan.minutes || store.minutes) + ' minutes of the gateway, ' + planPrice(plan) +
       ' each. One key, usable as often as you like until the window closes.';
   }
 }
@@ -3651,6 +3678,16 @@ async function buyWithApple(plan) {
     store.iap?.products?.find((product) => product.planSlug === plan.slug) || store.iap?.products?.[0] || null;
   if (!entry) {
     if (status) status.textContent = 'That session is not set up in the App Store yet.';
+    return;
+  }
+  // StoreKit answers nothing for a product Apple has not released, and the plugin's
+  // own refusal reads like a fault in the app. Say what it is instead: the sessions
+  // are in review with the app, so the store does not sell them yet.
+  if (NATIVE_STORE && store.iap && !Object.keys(store.applePrices || {}).length) {
+    if (status) {
+      status.textContent =
+        'The App Store has not released the sessions yet — Apple only returns a product once it is approved with the app. Nothing has been charged, and a gateway key works in the meantime.';
+    }
     return;
   }
   const email = String($('setReceiptEmail')?.value || '').trim();
@@ -4854,6 +4891,15 @@ function bind() {
   $('btnRevision').onclick = revisionSheet;
   $('courseSelect').onchange = (event) => switchCourse(event.target.value);
   $('btnNewCourse').onclick = newCourse;
+  if ($('btnNameCourse')) $('btnNameCourse').onclick = nameCourse;
+  if ($('nameCourseInput')) {
+    $('nameCourseInput').onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        nameCourse();
+      }
+    };
+  }
   $('btnDeleteCourse').onclick = removeCourse;
   $('btnSlotAdd').onclick = addSlot;
   $('btnSyncNow').onclick = () => syncWorkspace({ announce: true });

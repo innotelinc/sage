@@ -13,10 +13,20 @@
  * instead of inventing a price or a slug.
  */
 
+import { SESSION_PLANS, sessionPlan } from './plans.mjs';
+import { trialRefusal, rememberTrial } from './iap.mjs';
+
 const CACHE_MS = 10 * 60 * 1000;
 const MAX_SESSIONS = 10;
 
-let cache = { at: 0, plans: [], minutes: 15 };
+// The local catalog is the floor, not a copy: Magnate's page still decides the price
+// when it can be read, but a storefront that cannot be reached must not leave the app
+// with no idea what a session costs or how long it runs.
+let cache = {
+  at: 0,
+  plans: SESSION_PLANS.map((plan) => ({ slug: plan.slug, priceCents: plan.priceCents, name: plan.name, minutes: plan.minutes })),
+  minutes: sessionPlan('sage-session-trial')?.minutes || 5,
+};
 
 /** Both the plain and the escaped form appear: one in markup, one in a payload. */
 function extractPlans(html) {
@@ -41,7 +51,10 @@ function extractPlans(html) {
       found.set(slug, {
         slug,
         priceCents: Number(match[3]),
-        name: label || slug.replace(/^sage-session-/, '').replace(/-/g, ' '),
+        name: label || sessionPlan(slug)?.name || slug.replace(/^sage-session-/, '').replace(/-/g, ' '),
+        // How long the plan runs is ours, not the storefront's: the trial is short by
+        // design and the page carries one `minutes` for every session.
+        minutes: sessionPlan(slug)?.minutes || 15,
       });
     }
   }
@@ -58,14 +71,14 @@ async function refresh(base) {
     const html = await res.text();
     const plans = extractPlans(html);
     const minutes = Number((html.match(/"minutes"\s*:\s*(\d{1,3})/i) || [])[1]) || cache.minutes || 15;
-    if (plans.length) cache = { at: Date.now(), plans, minutes };
+    if (plans.length) cache = { at: Date.now(), plans: plans.map((plan) => ({ ...plan, minutes: plan.minutes || minutes })), minutes };
   } catch {
     // A storefront that cannot be read is not a reason to fail: the app falls back
     // to opening Magnate's own page.
   }
 }
 
-export async function handleStore(request, url, cfg, json) {
+export async function handleStore(request, url, cfg, json, context = {}) {
   const base = String(cfg.magnateUrl || 'https://magnate.innotel.us').replace(/\/+$/, '');
 
   if (url.pathname === '/api/store' && request.method === 'GET') {
@@ -87,6 +100,13 @@ export async function handleStore(request, url, cfg, json) {
   }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return json({ error: 'bad_email', message: 'The receipt needs an email address — that is where the key is shown.' }, 400);
+  }
+  // The trial is once per person and once per connection on the web checkout too:
+  // the App Store route is not the only door to the same five minutes.
+  const trial = planSlug === 'sage-session-trial';
+  if (trial) {
+    const refusal = trialRefusal({ email, ip: context.ip });
+    if (refusal) return json({ error: 'trial_used', message: refusal }, 409);
   }
 
   let upstream;
@@ -111,5 +131,6 @@ export async function handleStore(request, url, cfg, json) {
   if (!/^https:\/\//.test(String(data.url))) {
     return json({ error: 'bad_checkout', message: 'The store returned a checkout link that is not secure.' }, 502);
   }
-  return json({ url: String(data.url) });
+  if (trial) rememberTrial({ email, ip: context.ip });
+  return json({ url: String(data.url), minutes: sessionPlan(planSlug)?.minutes || 0 });
 }

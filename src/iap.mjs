@@ -18,6 +18,10 @@
  * never take money it cannot hand a key back for.
  */
 import { X509Certificate, verify as verifySignature } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { sessionMinutes, sessionPlan } from './plans.mjs';
 
 /**
  * Apple Root CA - G3, the anchor every StoreKit 2 signing chain ends at. Pinned by
@@ -37,6 +41,66 @@ const SEEN_LIMIT = 2000;
 // authority — it must refuse a transaction it has already paid out — and this is the
 // cheap guard in front of it, so a replayed request cannot walk through on the way.
 const handedOut = new Set();
+
+/**
+ * A trial is once per person and once per connection.
+ *
+ * Five minutes is enough to show what the app does and not enough to be worth
+ * farming, but only if a second attempt is refused: without a record, the same
+ * email or the same address mints trial after trial. The ledger is on disk
+ * because the process restarts, keyed by the normalised email and by the client
+ * address the server actually saw.
+ */
+function trialFile() {
+  const override = String(process.env.TRIAL_LEDGER_FILE || '').trim();
+  return override || join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'trial-claims.json');
+}
+
+let trialLedger = null;
+
+function readTrialLedger() {
+  if (trialLedger) return trialLedger;
+  try {
+    const parsed = JSON.parse(readFileSync(trialFile(), 'utf8'));
+    trialLedger = { emails: parsed.emails || {}, ips: parsed.ips || {} };
+  } catch {
+    trialLedger = { emails: {}, ips: {} };
+  }
+  return trialLedger;
+}
+
+function trialKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+/** Why this trial cannot be given, or '' when it can. */
+export function trialRefusal({ email, ip } = {}) {
+  const ledger = readTrialLedger();
+  const mail = trialKey(email);
+  if (mail && ledger.emails[mail]) {
+    return 'That email has already used its trial session. A trial is one five-minute session per person.';
+  }
+  const address = trialKey(ip);
+  if (address && ledger.ips[address]) {
+    return 'A trial session has already been used from this connection. A trial is one five-minute session per person.';
+  }
+  return '';
+}
+
+export function rememberTrial({ email, ip, transactionId } = {}) {
+  const ledger = readTrialLedger();
+  const at = new Date().toISOString();
+  const mail = trialKey(email);
+  const address = trialKey(ip);
+  if (mail) ledger.emails[mail] = { at, transactionId: String(transactionId || '') };
+  if (address) ledger.ips[address] = { at, transactionId: String(transactionId || '') };
+  try {
+    mkdirSync(dirname(trialFile()), { recursive: true });
+    writeFileSync(trialFile(), `${JSON.stringify(ledger, null, 2)}\n`);
+  } catch {
+    // A read-only filesystem still refuses a second trial for this process's lifetime.
+  }
+}
 
 export function bundleId(env = {}) {
   return String(env.APPLE_BUNDLE_ID || 'us.innotel.sage').trim();
@@ -196,7 +260,7 @@ function remember(transactionId) {
  * the route does not have to know this app's product ids, and the transaction id is
  * the idempotency key the route pays out against exactly once.
  */
-async function mintSession({ productId, planSlug, transactionId, email, payload }, env) {
+async function mintSession({ productId, planSlug, transactionId, email, payload, minutes }, env) {
   const url = String(env.IAP_MINT_URL || '').trim();
   if (!url) return { error: 'in_app_purchase is not enabled on this server', status: 501 };
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
@@ -215,6 +279,9 @@ async function mintSession({ productId, planSlug, transactionId, email, payload 
       body: JSON.stringify({
         productId,
         planSlug,
+        // How long the session runs is the catalog's answer, not the store's: the
+        // trial is five minutes by design and the mint service is told so.
+        minutes,
         transactionId: String(transactionId),
         email,
         bundleId: payload.bundleId,
@@ -249,7 +316,7 @@ async function mintSession({ productId, planSlug, transactionId, email, payload 
   };
 }
 
-export async function handleIap(request, url, env, json) {
+export async function handleIap(request, url, env, json, context = {}) {
   if (url.pathname === '/api/iap/config' && request.method === 'GET') {
     return json(iapConfig(env));
   }
@@ -275,6 +342,12 @@ export async function handleIap(request, url, env, json) {
 
   const { payload, entry } = verified;
   const transactionId = String(payload.transactionId);
+  const plan = sessionPlan(entry.planSlug);
+  const trial = entry.planSlug === 'sage-session-trial';
+  if (trial) {
+    const refusal = trialRefusal({ email, ip: context.ip });
+    if (refusal) return json({ error: 'trial_used', message: refusal }, 409);
+  }
   if (handedOut.has(transactionId)) {
     return json({ error: 'already_redeemed', message: 'That purchase has already been exchanged for a session.' }, 409);
   }
@@ -286,11 +359,19 @@ export async function handleIap(request, url, env, json) {
       transactionId,
       email,
       payload,
+      minutes: plan?.minutes || sessionMinutes(entry.planSlug),
     },
     env,
   );
   if (minted.error) return json({ error: 'mint_failed', message: minted.error }, minted.status || 502);
 
   remember(transactionId);
-  return json({ ...minted.session, productId: String(payload.productId), transactionId });
+  // Recorded only after the key exists: a refused mint must not spend the trial.
+  if (trial) rememberTrial({ email, ip: context.ip, transactionId });
+  return json({
+    ...minted.session,
+    productId: String(payload.productId),
+    transactionId,
+    minutes: plan?.minutes || 0,
+  });
 }

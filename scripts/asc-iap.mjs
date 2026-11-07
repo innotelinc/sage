@@ -108,7 +108,7 @@ const COPY = {
     'QUIZ — photograph a question and get the answer with why each of the other options was ruled out.',
     'ESSAY — a brief comes back as an argument, in the voice you set, with a note on how to defend it in your own words.',
     'MEMORY — Sage keeps a record per course: the corrections you gave it, the sources it used, what you have already covered. A study pack exports the lot so another device picks up where you left off.',
-    'SESSIONS — access is sold in fifteen-minute sessions. One price, no subscription, no auto-renewal. Buy in the app and the clock stops capture for you when the window closes.',
+    'SESSIONS — access is sold in timed sessions: fifteen minutes for standard and intensive, five for the trial, which is offered once per person and once per connection. One price, no subscription, no auto-renewal. Buy in the app and the clock stops capture for you when the window closes.',
     'Sage does not replace your reading or your judgement. It is a study aid: check what it tells you.',
   ].join('\n\n'),
   // The subtitle is what a search result shows under the name; the promotional text
@@ -153,7 +153,7 @@ function reviewNotes() {
     '3 · SETUP AND ACCESS',
     access,
     'Nothing is captured until a source is started, and each source asks once: Listen (microphone), Watch (screen broadcast), Aim (camera). Answer, Quiz and Essay need no capture — type a question, or pick a photo of a slide or handout.',
-    'A session is bought in Settings (the gear, top right) → Session → Buy with the App Store, with a sandbox Apple Account, so no card is charged and nothing renews. The purchase is a fifteen-minute consumable at USD 3.00 / 9.00 / 19.00 on the US storefront, priced in Apple\u2019s local tiers elsewhere; there is no subscription, no auto-renewal and no free trial that converts. StoreKit returns a signed transaction, our server verifies it against Apple\u2019s root certificate, and the session installs itself the moment Apple confirms. There is no Stripe or external checkout anywhere in the iOS build.',
+    'A session is bought in Settings (the gear, top right) → Session → Buy with the App Store, with a sandbox Apple Account, so no card is charged and nothing renews. The purchase is a consumable at USD 3.00 / 9.00 / 19.00 on the US storefront — five minutes for the trial, fifteen for the others — priced in Apple\u2019s local tiers elsewhere; there is no subscription, no auto-renewal and no free trial that converts. StoreKit returns a signed transaction, our server verifies it against Apple\u2019s root certificate, and the session installs itself the moment Apple confirms. There is no Stripe or external checkout anywhere in the iOS build.',
     'Until a session is bought the app still opens and keeps its courses, notes and settings on the device; the Live tab shows a card that points to Settings instead of starting a capture it could not answer.',
 
     '4 · EXTERNAL SERVICES',
@@ -188,7 +188,7 @@ const PLANS = [
     productId: `${BUNDLE}.session.trial`,
     referenceName: 'Sage Trial Session',
     name: 'Sage Trial Session',
-    description: 'A 15-minute study session.',
+    description: 'A five-minute trial session, once per person.',
     price: '3.00',
   },
   {

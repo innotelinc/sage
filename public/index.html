@@ -157,6 +157,21 @@
               </div>
             </div>
 
+            <!-- First run: one unnamed course, and the name is what everything is filed
+                 under afterwards. Asked here, once, rather than buried in Settings. -->
+            <div class="setup hidden" id="nameCourse">
+              <h3>What are you studying?</h3>
+              <p>
+                Name the course and the notes, memory and answers are kept under it. More courses can be added
+                later from the header.
+              </p>
+              <div class="dialog-actions">
+                <input id="nameCourseInput" type="text" maxlength="80" placeholder="e.g. BIO 101 — Cells"
+                       aria-label="Course name" />
+                <button class="btn primary small" id="btnNameCourse">Start</button>
+              </div>
+            </div>
+
             <div class="capture-grid">
               <button class="cap-btn" id="btnListen">
                 <span class="cap-ico" aria-hidden="true">🎙</span>

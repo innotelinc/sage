@@ -131,6 +131,17 @@ function authorised(request, cfg, runtime) {
   return provided && runtime.accessAccepted(provided, cfg.accessCode);
 }
 
+/** The address a request came from, as far as the proxy chain in front knows. */
+function clientIp(request) {
+  const forwarded = String(request.headers.get('x-forwarded-for') || '').split(',')[0].trim();
+  return (
+    String(request.headers.get('cf-connecting-ip') || '') ||
+    String(request.headers.get('x-real-ip') || '') ||
+    forwarded ||
+    ''
+  ).trim();
+}
+
 /** A rejected key is a user problem, not a server one: say so plainly. */
 function keyRejected(status, detail) {
   return json(
@@ -681,7 +692,9 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
   // App Store purchases: Apple's rules put the payment inside the app, so the
   // verification and the minting live here, behind the same gate as a checkout.
   if (url.pathname === '/api/iap/config' || url.pathname === '/api/iap/purchase') {
-    return handleIap(request, url, env, json);
+    // The address travels with the purchase: a trial is once per person *and* once
+    // per connection, and only this side knows what the connection was.
+    return handleIap(request, url, env, json, { ip: clientIp(request) });
   }
 
   // A foundation document is read once, here: the text comes back to the app and
@@ -693,7 +706,7 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
 
   // Buying a session happens in the app now; the payment itself stays Magnate's.
   if (url.pathname === '/api/store/checkout') {
-    return handleStore(request, url, cfg, json);
+    return handleStore(request, url, cfg, json, { ip: clientIp(request) });
   }
 
   if (url.pathname.startsWith('/api/relay/')) {

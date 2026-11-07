@@ -19,6 +19,9 @@ import { join } from 'node:path';
 import { handleIap, iapConfig, verifySignedTransaction } from '../src/iap.mjs';
 
 const dir = mkdtempSync(join(tmpdir(), 'sage-iap-'));
+// A trial is recorded on disk, so a test run gets its own ledger: without this the
+// second run would find its own email already spent.
+process.env.TRIAL_LEDGER_FILE = join(dir, 'trial-claims.json');
 const file = (name) => join(dir, name);
 const BUNDLE = 'us.innotel.sage';
 // The consumables are registered under this prefix, which is not the bundle id.
@@ -227,14 +230,15 @@ const env = {
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-async function purchase(signed, target = env) {
+async function purchase(signed, target = env, { email = 'admin@innotel.us', ip = '' } = {}) {
   const url = new URL('http://localhost:8787/api/iap/purchase');
   const request = new Request(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ signedTransaction: signed, email: 'admin@innotel.us' }),
+    body: JSON.stringify({ signedTransaction: signed, email }),
   });
-  const response = await handleIap(request, url, target, json);
+  // The address is the second half of the trial rule, and only the server knows it.
+  const response = await handleIap(request, url, target, json, { ip });
   return { status: response.status, body: await response.json() };
 }
 
@@ -245,9 +249,10 @@ await check('purchase is disabled until a mint endpoint exists', async () => {
 });
 
 await check('a verified purchase becomes a session key', async () => {
-  const result = await purchase(
-    jws(transaction({ transactionId: '2000000000000100' })),
-  );
+  const result = await purchase(jws(transaction({ transactionId: '2000000000000100' })), env, {
+    email: 'admin@innotel.us',
+    ip: '203.0.113.9',
+  });
   expect(result.status === 200, `answered ${result.status} ${JSON.stringify(result.body)}`);
   expect(result.body.key === 'sk-session-test', 'no key came back');
   expect(result.body.secondsLeft === 900, 'the session length did not survive');
@@ -256,6 +261,7 @@ await check('a verified purchase becomes a session key', async () => {
   expect(call.payload.transactionId === '2000000000000100', 'the wrong transaction was minted');
   expect(call.payload.planSlug === 'sage-session-trial', 'the wrong plan was minted');
   expect(call.payload.environment === 'Sandbox', 'the environment was not passed through');
+  expect(call.payload.minutes === 5, 'the trial was not sold as five minutes');
 });
 
 await check('the same purchase cannot be redeemed twice', async () => {
@@ -263,6 +269,22 @@ await check('the same purchase cannot be redeemed twice', async () => {
   const result = await purchase(jws(transaction({ transactionId: '2000000000000100' })));
   expect(result.status === 409, `answered ${result.status} instead of refusing a replay`);
   expect(minted.length === before, 'a replay reached the mint service');
+});
+
+await check('a trial is once per email and once per connection', async () => {
+  // Same email, another address: refused on the email.
+  const sameEmail = await purchase(jws(transaction({ transactionId: '2000000000000501' })), env, {
+    email: 'admin@innotel.us',
+    ip: '198.51.100.7',
+  });
+  expect(sameEmail.status === 409, `answered ${sameEmail.status} for a second trial on one email`);
+  expect(sameEmail.body.error === 'trial_used', 'the refusal was not the trial rule');
+  // Another email, same address: refused on the connection.
+  const sameIp = await purchase(jws(transaction({ transactionId: '2000000000000502' })), env, {
+    email: 'someone-else@innotel.us',
+    ip: '203.0.113.9',
+  });
+  expect(sameIp.status === 409, `answered ${sameIp.status} for a second trial on one connection`);
 });
 
 await check('a forged purchase never reaches the mint service', async () => {
@@ -283,7 +305,10 @@ await check('a missing signed transaction is a bad request', async () => {
 
 await check('a failing mint service is reported, not swallowed', async () => {
   const broken = { ...env, IAP_MINT_URL: `http://127.0.0.1:${port}/fail` };
-  const result = await purchase(jws(transaction({ transactionId: '2000000000000300' })), broken);
+  const result = await purchase(jws(transaction({ transactionId: '2000000000000300' })), broken, {
+    email: 'mint-failure@innotel.us',
+    ip: '203.0.113.10',
+  });
   expect(result.status === 502, `answered ${result.status}`);
   expect(/billing is down/.test(result.body.message || ''), 'the reason was lost');
 });

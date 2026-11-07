@@ -59,6 +59,52 @@ export const PLANS = [
   },
 ];
 
+/**
+ * The session catalog.
+ *
+ * A session is a timed key, not a subscription, so it is priced per session and
+ * the minutes are part of what is sold. The trial is deliberately short: five
+ * minutes is enough to prove the app works and not worth farming, and it is
+ * granted once per address and once per person (see `src/iap.mjs` and
+ * `src/store.mjs`).
+ *
+ * These numbers are the ones the storefront page sells at and the ones the App
+ * Store consumables carry, so the app, the web and Apple cannot drift apart.
+ */
+export const SESSION_PLANS = [
+  {
+    slug: 'sage-session-trial',
+    name: 'Trial session',
+    priceCents: 300,
+    minutes: 5,
+    blurb: 'Five minutes of model access, once per person.',
+  },
+  {
+    slug: 'sage-session-standard',
+    name: 'Standard session',
+    priceCents: 900,
+    minutes: 15,
+    blurb: 'Fifteen minutes of model access.',
+  },
+  {
+    slug: 'sage-session-intensive',
+    name: 'Intensive session',
+    priceCents: 1900,
+    minutes: 15,
+    blurb: 'Fifteen minutes, most messages per session.',
+  },
+];
+
+export function sessionPlan(slug) {
+  return SESSION_PLANS.find((plan) => plan.slug === String(slug || '')) || null;
+}
+
+/** Minutes a plan actually buys. Unknown slugs buy nothing. */
+export function sessionMinutes(slug) {
+  const plan = sessionPlan(slug);
+  return plan ? plan.minutes : 0;
+}
+
 export function planBySlug(slug) {
   return PLANS.find((plan) => plan.slug === String(slug || '')) || null;
 }
