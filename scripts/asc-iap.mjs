@@ -145,32 +145,34 @@ function reviewNotes() {
   return [
     '1 · SCREEN RECORDING (physical device, current iOS)',
     recording,
-    'Typical flow shown end to end: launching the app from the Home Screen; adding a course in the picker (＋), naming it, and removing it again (✕); Listen with the microphone; Watch with the system broadcast started, so notes keep arriving while another app is in front; Aim with the camera on a handout; Answer; Quiz; Essay; Memory; Settings → Session, where all three sessions load at App Store prices and a sandbox purchase completes through StoreKit; Settings → You.',
+    'Flow shown end to end: launching from the Home Screen; naming a course on first run (＋ adds one, ✕ removes it); Listen; Watch over the system broadcast, so notes keep arriving while another app is in front; Aim at a handout; Answer; Quiz; Essay; Memory; Settings → Session, where all three sessions load at App Store prices and a sandbox purchase completes through StoreKit.',
 
     '2 · PURPOSE AND TARGET AUDIENCE',
-    'Sage is a study aid for students in higher education aged 17 and over. A lecture moves faster than anyone can write, and a recording is never replayed, so notes are missed and revision starts from nothing. Sage follows the lecture as it happens — transcript, slides, board or camera — keeps the notes per course, and answers questions about that material with the reasoning shown, so the student can check the answer and explain it. It does not replace the reading, and it does not sit an assessment for anyone.',
+    'Sage is a study aid for students in higher education aged 17 and over. A lecture moves faster than anyone can write, so notes are missed and revision starts from nothing. Sage follows the lecture as it happens — transcript, slides, board or camera — keeps the notes per course, and answers questions about that material with the reasoning shown, so the student can check the answer and explain it. It does not replace the reading, and it does not sit an assessment for anyone.',
 
     '3 · SETUP AND ACCESS',
     access,
     'Nothing is captured until a source is started, and each source asks once: Listen (microphone), Watch (screen broadcast), Aim (camera). Answer, Quiz and Essay need no capture — type a question, or pick a photo of a slide or handout.',
-    'A session is bought in Settings (the gear, top right) → Session → Buy with the App Store, with a sandbox Apple Account, so no card is charged and nothing renews. The purchase is a consumable at USD 3.00 / 9.00 / 19.00 on the US storefront — five minutes for the trial, fifteen for the others — priced in Apple\u2019s local tiers elsewhere; there is no subscription, no auto-renewal and no free trial that converts. StoreKit returns a signed transaction, our server verifies it against Apple\u2019s root certificate, and the session installs itself the moment Apple confirms. There is no Stripe or external checkout anywhere in the iOS build.',
+    'A session is bought in Settings (gear, top right) → Session → Buy with the App Store, with a sandbox Apple Account, so no card is charged. The consumable is USD 3.00 / 9.00 / 19.00 on the US storefront — five minutes for the trial, fifteen for the others — priced in Apple\u2019s local tiers elsewhere; no subscription, no auto-renewal. StoreKit returns a signed transaction, our server verifies it against Apple\u2019s root certificate, and the session installs the moment Apple confirms. There is no Stripe or external checkout in the iOS build.',
     'Until a session is bought the app still opens and keeps its courses, notes and settings on the device; the Live tab shows a card that points to Settings instead of starting a capture it could not answer.',
 
     '4 · EXTERNAL SERVICES',
     '· Innotel OmniRoute gateway (gateway.innotel.us) — the language and vision models that write notes and answers. Reached from our server, so no provider key is ever in the app.',
-    '· Self-hosted Whisper (faster-whisper) transcription on our own server. Optional: if it is unreachable, iOS falls back to Apple\u2019s on-device speech recognition.',
+    '· Self-hosted Whisper (faster-whisper) transcription, with Apple\u2019s on-device speech recognition as the fallback.',
     '· Apple StoreKit 2 — the in-app purchase of sessions, with the signed transaction verified server-side against Apple\u2019s root certificate.',
-    '· Self-hosted Kokoro text-to-speech, with Apple\u2019s built-in speech synthesis as the fallback, for read-aloud.',
-    '· Stripe and the Magnate storefront — the web build only; the iOS build sells exclusively through StoreKit.',
-    '· Cerulean (Authentik) — sign-in for the operator panel at /admin only, never part of a student flow.',
+    '· Self-hosted Kokoro text-to-speech, with Apple\u2019s built-in synthesis as the fallback, for read-aloud.',
+    '· Stripe and the Magnate storefront — the web build only; iOS sells exclusively through StoreKit.',
     'No advertising, analytics or attribution SDK is included, and no data is sold or shared with a broker.',
 
     '5 · REGIONAL DIFFERENCES',
-    'None. The same features, material and behaviour in every storefront and region. The only difference is price, which follows Apple\u2019s per-storefront tiers for the three consumables. The interface is English; answers are written in the language of the material supplied.',
+    'None. The same features and behaviour in every storefront. The only difference is price, which follows Apple\u2019s per-storefront tiers. The interface is English; answers follow the language of the material supplied.',
 
     '6 · REGULATED INDUSTRY AND THIRD-PARTY MATERIAL',
-    'Sage is not in a regulated industry: it is a study aid, not a school or an accredited institution, and it gives no medical, legal or financial advice. No third-party protected material is bundled — the artwork, copy and code are ours, and the code is MIT licensed — and model output is generated per request from material the student supplies.',
+    'Sage is not in a regulated industry: it is a study aid, not a school or an accredited institution, and it gives no medical, legal or financial advice. No third-party protected material is bundled — the artwork, copy and code are ours, and the code is MIT licensed — and output is generated per request from material the student supplies.',
   ].join('\n\n');
+  // App Store Connect refuses a notes field over 4000 characters, and it refuses it
+  // late: the listing run is what discovers it. Failing here says so at the source.
+  if (notes.length > 4000) throw new Error(`review notes are ${notes.length} characters; App Review takes 4000`);
 }
 
 
