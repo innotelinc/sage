@@ -752,6 +752,13 @@ const cap = {
   watchOn: false,
   cameraOn: false,
   study: false,
+  // Which sound Listen reads: the room, or another app's audio. `captureStream`
+  // is whichever stream is being transcribed, so one recorder serves both.
+  listenMode: 'lecture',
+  captureStream: null,
+  deviceStream: null,
+  keepRecordings: true,
+  watchAudio: false,
   restarting: false,
   audioChunks: [],
   audioStart: 0,
@@ -853,7 +860,7 @@ function toJpeg(source, maxWidth = 1280, quality = 0.72) {
 
 function updateStatus() {
   const bits = [];
-  if (cap.listenOn) bits.push('listening');
+  if (cap.listenOn) bits.push(cap.keepRecordings ? 'listening' : 'reading the sound');
   if (cap.watchOn) bits.push('watching screen');
   if (cap.cameraOn) bits.push('camera on');
   $('captureStatus').textContent = bits.length
@@ -1002,13 +1009,14 @@ async function transcribeBlob(blob) {
 }
 
 function startRecorder() {
-  if (!cap.micStream) return;
+  const stream = cap.captureStream || cap.micStream;
+  if (!stream) return;
   const mime = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
     ? 'audio/webm;codecs=opus'
     : '';
   let rec;
   try {
-    rec = new MediaRecorder(cap.micStream, mime ? { mimeType: mime } : undefined);
+    rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
   } catch (error) {
     toast(`Recorder unavailable: ${error.message}`, 'error');
     return;
@@ -1021,7 +1029,9 @@ function startRecorder() {
   rec.onstop = async () => {
     clearTimeout(cap.recTimer);
     const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
-    keepAudio(blob, chunkStart);
+    // Only a lecture is kept. Another app's audio is read and then dropped: it is
+    // not ours to store, and the point is the text, not a copy of the book.
+    if (cap.keepRecordings) keepAudio(blob, chunkStart);
     if (blob.size > 3000) await transcribeBlob(blob);
     if (cap.listenOn && !transcribeBlocked) startRecorder();
   };
@@ -1032,7 +1042,109 @@ function startRecorder() {
   }, 12000);
 }
 
+/* Listen reads one source at a time: the room, or another app's sound. */
+function setListenMode(mode, options = {}) {
+  const next = mode === 'audiobook' ? 'audiobook' : 'lecture';
+  const changed = cap.listenMode !== next;
+  cap.listenMode = next;
+  const button = $('btnListenMode');
+  if (button) button.textContent = `Listen: ${next}`;
+  const note = $('listenNote');
+  if (note) {
+    note.textContent =
+      next === 'audiobook'
+        ? 'Audiobook: reads the sound another app is playing. No microphone, and nothing is kept as a recording.'
+        : 'Lecture: the microphone. Watch adds the screen and the sound that comes with it.';
+  }
+  if (changed && cap.listenOn && !options.quiet) {
+    stopListening();
+    setTimeout(() => startListening(), 250);
+  }
+}
+
+/*
+ * Listening to an audiobook rather than a room.
+ *
+ * A browser will only let a page hear another application through a share request, so
+ * this asks for one and throws the picture away at once: the video track is stopped in
+ * the same tick it arrives, which is what makes this "extract the audio without
+ * recording" rather than a screen recording that happens to have sound.
+ */
+async function startDeviceAudio() {
+  if (cap.listenOn) return stopListening();
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    toast('This shell cannot hear another app. Use the lecture microphone, or open SAGE in Chrome or Edge to read audiobook audio.', 'error');
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      systemAudio: 'include',
+      selfBrowserSurface: 'exclude',
+      surfaceSwitching: 'include',
+    });
+  } catch (error) {
+    if (error.name !== 'NotAllowedError') toast(`Could not open the audio share: ${error.message}`, 'error');
+    return;
+  }
+  const audio = stream.getAudioTracks();
+  if (!audio.length) {
+    stream.getTracks().forEach((track) => track.stop());
+    toast('That share carried no sound. Pick the tab or screen with “share audio” ticked.', 'error');
+    return;
+  }
+  // The picture was the price of the sound. Stop it before anything is drawn.
+  stream.getVideoTracks().forEach((track) => track.stop());
+  cap.deviceStream = new MediaStream(audio);
+  cap.captureStream = cap.deviceStream;
+  cap.keepRecordings = false;
+  cap.listenOn = true;
+  dropAudio();
+  cap.audioStart = Date.now();
+  audio[0].addEventListener('ended', () => {
+    if (!cap.listenOn) return;
+    stopListening();
+    toast('The other app stopped playing, so listening ended.');
+  });
+  startRecorder();
+  if (!cap.noteTimer) {
+    cap.noteTimer = setInterval(flushTranscript, Math.max(8, state.settings.noteIntervalSec) * 1000);
+  }
+  updateStatus();
+  toast('Listening to the other app — transcribed as it plays, nothing kept.');
+}
+
+/*
+ * Watch carries the sound of what it watches: a lecture recording, a video, an
+ * audiobook playing in another window. It is read into the same transcript the
+ * microphone feeds, once, and never kept as a recording.
+ */
+function attachWatchedAudio(tracks) {
+  if (!tracks.length) return;
+  if (cap.listenOn && cap.listenMode === 'lecture') stopListening();
+  cap.deviceStream = new MediaStream(tracks);
+  cap.captureStream = cap.deviceStream;
+  cap.keepRecordings = false;
+  cap.watchAudio = true;
+  cap.listenOn = true;
+  cap.audioStart = cap.audioStart || Date.now();
+  tracks[0].addEventListener('ended', () => {
+    if (!cap.watchAudio) return;
+    cap.watchAudio = false;
+    stopListening();
+  });
+  startRecorder();
+  if (!cap.noteTimer) {
+    cap.noteTimer = setInterval(flushTranscript, Math.max(8, state.settings.noteIntervalSec) * 1000);
+  }
+  updateStatus();
+  toast('Reading the sound with the picture — no audio is kept.');
+}
+
 async function startListening() {
+  if (cap.listenMode === 'audiobook') return startDeviceAudio();
   // Before the microphone opens, so the session is mixable rather than taking
   // the audiobook the person is listening to with it.
   await holdAudioSession();
@@ -1107,6 +1219,11 @@ function stopListening() {
   cap.recorder = null;
   cap.micStream?.getTracks().forEach((t) => t.stop());
   cap.micStream = null;
+  cap.deviceStream?.getTracks().forEach((t) => t.stop());
+  cap.deviceStream = null;
+  cap.captureStream = null;
+  cap.keepRecordings = true;
+  cap.watchAudio = false;
   showInterim('');
   updateStatus();
 }
@@ -1124,7 +1241,10 @@ async function toggleWatch() {
       // 'monitor' is a hint: sharing the desktop is the only pick that keeps
       // seeing the lecture after you switch to another application.
       video: { frameRate: 2, displaySurface: 'monitor' },
-      audio: false,
+      // The sound that comes with the screen, so a lecture recording or an
+      // audiobook in another window is read as text as well as watched.
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      systemAudio: 'include',
       preferCurrentTab: false,
       selfBrowserSurface: 'exclude',
       surfaceSwitching: 'include',
@@ -1148,6 +1268,9 @@ async function toggleWatch() {
     toast('Sharing stopped. Tap Watch again to pick the screen back up.', 'error');
   });
   cap.watchOn = true;
+  // A share may carry sound; when it does, it is read here rather than played.
+  const watchedAudio = cap.screenStream.getAudioTracks();
+  if (watchedAudio.length) attachWatchedAudio(watchedAudio);
   attachVideo(cap.screenStream, 'screen');
   startSnapLoop();
   updateStatus();
@@ -4901,6 +5024,32 @@ async function askReader() {
   }
 }
 
+/* The first-run card asks for a code as well as offering a purchase: someone handed a
+   session should not have to find Settings before the app will answer a question. */
+async function redeemSetupCode() {
+  const field = $('setupCode');
+  const out = $('setupCodeStatus');
+  const code = String(field?.value || '').trim();
+  if (!code) {
+    field?.focus();
+    return;
+  }
+  if (out) out.textContent = 'Checking the code…';
+  try {
+    const res = await api('/api/iap/grant', { body: { code } });
+    const applied = await applySessionKey(res, {});
+    if (out) {
+      out.textContent = applied?.ok === false
+        ? applied.message
+        : `Session installed — ${Number(res.minutes) || 0} minutes.`;
+    }
+    if (applied?.ok !== false && field) field.value = '';
+  } catch (error) {
+    if (out) out.textContent = '';
+    toast(`That code was not accepted: ${error.message}`, 'error');
+  }
+}
+
 /* A session without the App Store: an operator's signed code, redeemed here, which
    mints a real session through the same route a purchase uses. */
 async function redeemGrantCode() {
@@ -5001,6 +5150,16 @@ function bind() {
   $('btnReaderBuild').onclick = renderReader;
   $('btnRenameCourse').onclick = renameCourse;
   $('btnRedeemGrant').onclick = redeemGrantCode;
+  $('btnSetupCode').onclick = redeemSetupCode;
+  $('setupCode')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      redeemSetupCode();
+    }
+  });
+  $('btnListenMode').onclick = () =>
+    setListenMode(cap.listenMode === 'lecture' ? 'audiobook' : 'lecture');
+  setListenMode(cap.listenMode, { quiet: true });
   $('courseRename')?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();

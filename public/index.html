@@ -160,6 +160,12 @@
                 when Apple confirms it.
               </p>
               <div class="dialog-actions">
+                <input id="setupCode" type="text" autocomplete="off" spellcheck="false"
+                       placeholder="Session code (sage1.…)" aria-label="Session code" />
+                <button class="btn ghost small" id="btnSetupCode">Use a session code</button>
+              </div>
+              <p class="mini muted" id="setupCodeStatus"></p>
+              <div class="dialog-actions">
                 <button class="btn primary small" id="btnSetupBuy" hidden>Buy with the App Store</button>
                 <button class="btn ghost small" id="btnRetryHealth">Check again</button>
               </div>
@@ -206,6 +212,11 @@
             <div class="study-bar">
               <button class="btn primary" id="btnStudy">Start study mode</button>
               <span class="study-note" id="studyNote">Listens and watches at the same time, answers when a question appears.</span>
+            </div>
+
+            <div class="study-bar">
+              <button class="btn ghost small" id="btnListenMode" aria-live="polite">Listen: lecture</button>
+              <span class="study-note" id="listenNote">Lecture uses the microphone. Audiobook reads the sound another app is playing — no microphone, and nothing kept as a recording.</span>
             </div>
 
             <div class="statusline">
