@@ -2473,13 +2473,19 @@ async function toggleStudyMode() {
   if (cap.study) return stopStudyMode();
   setStudyUi(true);
   if (!cap.listenOn) await startListening();
-  if (!cap.watchOn && !cap.cameraOn) {
-    if (!IS_NATIVE && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) await toggleWatch();
-    else await toggleCamera();
-  }
+  // Study mode is listening and watching. Falling back to the camera made this
+  // button open the Aim viewfinder instead — a different feature, aimed at a board,
+  // with no picture of the slides at all. Watch is the thing that matches the label,
+  // and when it cannot start it says so rather than quietly aiming.
+  if (!cap.watchOn && !cap.cameraOn) await toggleWatch();
   stopStudyTimer();
   studyTimer = setInterval(studyTick, 20000);
-  toast('Study mode on. It will answer questions as they appear.');
+  toast(
+    cap.watchOn
+      ? 'Study mode on — listening and watching. It answers questions as they appear.'
+      : 'Study mode is listening. Screen watching needs the broadcast started first, then press Watch.',
+    cap.watchOn ? undefined : 'error'
+  );
 }
 
 function stopStudyTimer() {
@@ -4895,6 +4901,29 @@ async function askReader() {
   }
 }
 
+/* A session without the App Store: an operator's signed code, redeemed here, which
+   mints a real session through the same route a purchase uses. */
+async function redeemGrantCode() {
+  const field = $('setGrantCode');
+  const out = $('buyStatus');
+  const code = String(field?.value || '').trim();
+  if (!code) {
+    field?.focus();
+    return;
+  }
+  if (out) out.textContent = 'Checking the code…';
+  try {
+    const res = await api('/api/iap/grant', { body: { code } });
+    await applySessionKey(res, {});
+    if (out) out.textContent = `Session installed — ${Number(res.minutes) || 0} minutes.`;
+    if (field) field.value = '';
+    saveSettings();
+  } catch (error) {
+    if (out) out.textContent = '';
+    toast(`That code was not accepted: ${error.message}`, 'error');
+  }
+}
+
 function saveReaderEdit(blockId) {
   const node = readerNode(blockId);
   const text = String(node?.querySelector('.reader-edit')?.value || '').trim();
@@ -4971,6 +5000,7 @@ function bind() {
   $('nav-reader')?.addEventListener('click', renderReader);
   $('btnReaderBuild').onclick = renderReader;
   $('btnRenameCourse').onclick = renameCourse;
+  $('btnRedeemGrant').onclick = redeemGrantCode;
   $('courseRename')?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();

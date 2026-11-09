@@ -677,6 +677,12 @@
             A session is a timed key: pay once, then use the gateway as much as you like until the window closes.
           </p>
           <div class="chips" id="storePlans"></div>
+          <div class="field-row">
+            <input id="setGrantCode" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="sage1.…" aria-label="Session code" />
+            <button type="button" class="btn ghost small" id="btnRedeemGrant">Use a session code</button>
+          </div>
+          <p class="mini muted">Bought nothing? A session code from your operator installs the same kind of session.</p>
           <div class="grid2">
             <label>Sessions <input id="setSessions" type="number" min="1" max="10" step="1" value="1" /></label>
             <label>Email for the receipt

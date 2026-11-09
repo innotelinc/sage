@@ -112,6 +112,29 @@ endpoint — and Apple's own In-App Purchase setup guide states that the agreeme
 Active before in-app purchases can be tested in the sandbox. Until it is, StoreKit answers
 with an empty product list and that is not a fault in the app.
 
+### Granting a session without the store
+
+A signed session code is the way through while the agreement is missing, and it is not a
+second kind of session: redeeming one mints a key through the same service a purchase uses.
+
+1. Put a secret on the server: `SESSION_GRANT_SECRET` in the service environment (or reuse
+   `SAGE_ADMIN_SECRET`, which the server falls back to).
+2. Mint a code on any machine holding the same secret — nothing is sent anywhere:
+
+   ```sh
+   SESSION_GRANT_SECRET=… node scripts/grant-session.mjs --plan sage-session-standard --email you@example.com
+   ```
+
+   `--plan` takes `sage-session-trial`, `sage-session-standard` or `sage-session-intensive`,
+   and `--days` sets how long the code stays redeemable (default 7). The minutes are the
+   plan's own, so a granted trial is still five minutes.
+3. In the app: **Settings → Session → “Use a session code”**, paste, done. The session clock
+   and the expiry behave exactly as they do after a purchase.
+
+A code is single-use: the server remembers the nonce it paid out against. Without the
+secret the route answers 501 rather than accepting anything, which is the failure mode worth
+having.
+
 The App Store Connect API cannot read that tab: the old `/v1/agreements` endpoint is gone,
 and a lapsed agreement shows up only as `403 REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED` on an
 otherwise valid request. `gh workflow run asc-iap.yml -f iap_status=true` prints each

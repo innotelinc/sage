@@ -75,3 +75,7 @@ jobs:
         run: node scripts/test-reader.mjs
       - name: The session products still price correctly
         run: node scripts/test-iap.mjs
+      # The grant code is the only billing path left when the store agreement is
+      # missing, so a forged, expired or replayed code has to fail here.
+      - name: Session codes are signed, and refusable
+        run: node scripts/test-grants.mjs

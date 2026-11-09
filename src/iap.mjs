@@ -22,6 +22,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sessionMinutes, sessionPlan } from './plans.mjs';
+import { verifyGrant } from './grants.mjs';
 
 /**
  * Apple Root CA - G3, the anchor every StoreKit 2 signing chain ends at. Pinned by
@@ -316,10 +317,72 @@ async function mintSession({ productId, planSlug, transactionId, email, payload,
   };
 }
 
+/**
+ * Redeem a signed session code.
+ *
+ * Deliberately the same mint the purchase path uses, with a synthetic transaction id
+ * built from the code's nonce: a granted session is a session, not a parallel kind of
+ * key that would drift from the one StoreKit installs. Without the secret the route is
+ * closed rather than open, and a code is paid out once.
+ */
+async function handleGrant(request, env, json) {
+  if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
+  const secret = String(env.SESSION_GRANT_SECRET || env.SAGE_ADMIN_SECRET || '').trim();
+  if (!secret) {
+    return json(
+      {
+        error: 'grants_disabled',
+        message: 'Session codes are off on this server: set SESSION_GRANT_SECRET, then mint one with scripts/grant-session.mjs.',
+      },
+      501,
+    );
+  }
+  const body = await request.json().catch(() => null);
+  if (!body) return json({ error: 'bad_json', message: 'Body must be JSON.' }, 400);
+
+  const verified = await verifyGrant(body.code, secret);
+  if (verified.error) return json({ error: 'grant_refused', message: verified.error }, 400);
+
+  const { planSlug, email, nonce } = verified.grant;
+  const plan = sessionPlan(planSlug);
+  if (!plan) {
+    return json({ error: 'grant_refused', message: `that code names a plan this server does not sell (${planSlug})` }, 400);
+  }
+  const transactionId = `grant:${nonce || planSlug}`;
+  if (handedOut.has(transactionId)) {
+    return json({ error: 'already_redeemed', message: 'That session code has already been used.' }, 409);
+  }
+
+  const minted = await mintSession(
+    {
+      productId: `grant.${planSlug}`,
+      planSlug,
+      transactionId,
+      email,
+      payload: { bundleId: bundleId(env), environment: 'Grant' },
+      minutes: plan.minutes || sessionMinutes(planSlug),
+    },
+    env,
+  );
+  if (minted.error) return json({ error: 'mint_failed', message: minted.error }, minted.status || 502);
+
+  remember(transactionId);
+  return json({
+    ...minted.session,
+    productId: `grant.${planSlug}`,
+    transactionId,
+    minutes: plan.minutes || 0,
+    granted: true,
+  });
+}
+
 export async function handleIap(request, url, env, json, context = {}) {
   if (url.pathname === '/api/iap/config' && request.method === 'GET') {
     return json(iapConfig(env));
   }
+  // A session granted by the operator instead of bought. The paid agreement can be
+  // missing from an account for weeks; that must not stop the product working.
+  if (url.pathname === '/api/iap/grant') return handleGrant(request, env, json);
   if (url.pathname !== '/api/iap/purchase') return json({ error: 'not_found' }, 404);
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
