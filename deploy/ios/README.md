@@ -84,6 +84,34 @@ tax still have to be complete for the row to read *Active*. Reading metadata ove
 succeeds while the row is unsigned — the refusal happens at the point of sale — so a
 green App Store Connect run does not mean the agreement is signed.
 
+### When there is no Paid Apps row at all
+
+Some accounts show only the Free Apps Agreement, with the banner "To offer apps or other
+in-app purchases, you must sign the Paid Apps Agreement" and no row to click. There is no
+self-service request button: Apple offers the row when the account is in a state that can
+hold a paid contract. Check these in order, because each one hides the row the same way:
+
+1. **The role.** Only the Account Holder can sign, and only Account Holder, Admin or
+   Finance can see the row at all. Users and Access → your name → Role. An Admin sees the
+   warning and cannot clear it, which is the most common way a team gets stranded here.
+2. **The team.** The Apple ID must belong to the team that owns the app — compare the team
+   ID on Users and Access with the one in the developer account. A second team, or an
+   individual account, has its own agreements.
+3. **The Program License Agreement.** developer.apple.com/account → Membership details. If
+   Apple is asking for a revised agreement there, accept it: the Paid Apps row can be held
+   back until the current Program License Agreement is accepted, and that is what "the
+   Agreements tab shows nothing to accept" usually means.
+4. **Membership status.** An expired or pending membership has no paid contract to sign,
+   and an organisation still being verified has none either.
+
+If all four are right and the row is still absent, it is an account state only Apple can
+change: developer.apple.com/contact, choose Agreements, Tax, and Banking, and say the Paid
+Apps row is missing while the Free Apps agreement is Active, quoting the team ID. Nothing
+in this repository or in the App Store Connect API can create it — there is no agreements
+endpoint — and Apple's own In-App Purchase setup guide states that the agreement must be
+Active before in-app purchases can be tested in the sandbox. Until it is, StoreKit answers
+with an empty product list and that is not a fault in the app.
+
 The App Store Connect API cannot read that tab: the old `/v1/agreements` endpoint is gone,
 and a lapsed agreement shows up only as `403 REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED` on an
 otherwise valid request. `gh workflow run asc-iap.yml -f iap_status=true` prints each

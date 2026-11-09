@@ -53,8 +53,11 @@ Build numbers move; the plan does not. Install whichever build is attached to ve
 a localization, a price, availability and a review screenshot; whether the build came from
 App Store Connect at all; and whether Business → Agreements still reads *Active*.
 
-Approval is **not** the gate: a sandbox purchase works before the app is reviewed, which
-is what makes it possible to test billing at all. An empty answer means the store will not
+Approval is **not** the gate — a sandbox purchase works before the app is reviewed, which is
+what makes it possible to test billing at all — but the **Paid Apps Agreement must be
+Active**, because Apple requires it for in-app purchases in the sandbox. An account whose
+Business → Agreements page shows only the Free Apps row cannot buy anything yet: see
+`deploy/ios/README.md`, "When there is no Paid Apps row at all". An empty answer means the store will not
 sell that product to that build, so the fault is in the account or the product record, not
 in the review queue.
 
