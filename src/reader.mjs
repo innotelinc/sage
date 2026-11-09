@@ -147,6 +147,65 @@ function momentOf(text) {
   return match ? clockSeconds(match[1]) : null;
 }
 
+const STOP = new Set(
+  'the a an of and or to in on for is are was were what where when which how why did do does we it that this with about from at as be by i you me my our there has have had than then so but if not'.split(' ')
+);
+
+/** Words worth matching on: lower case, punctuation gone, stopwords dropped. */
+export function tokenise(text) {
+  const words = String(text || '')
+    .toLowerCase()
+    .match(/[a-z0-9][a-z0-9'-]+/g);
+  return (words || []).filter((word) => !STOP.has(word));
+}
+
+/**
+ * Which sections answer a question about the course (6.1).
+ *
+ * Lexical on purpose: every token in the question that the section actually contains
+ * counts one, and nothing is invented. Two sections within sixty percent of the best
+ * score mean the answer spans lectures, and saying so is better than silently picking
+ * one — that is the milestone's promise, and the caller renders both.
+ */
+export function findSections(sections, question, limit = 2) {
+  const words = [...new Set(tokenise(question))];
+  if (!words.length) return { question: String(question || ''), matches: [], spans: false };
+  // One shared word out of two is a coincidence, not a match: "the Krebs cycle"
+  // would otherwise land on any lecture that mentions a cycle. A question has to
+  // carry at least half its words into the section, and two when it has more than one.
+  const needed = words.length === 1 ? 1 : Math.max(2, Math.ceil(words.length / 2));
+  const scored = [];
+  for (const section of Array.isArray(sections) ? sections : []) {
+    const words_there = new Set(tokenise([section.title, ...(section.blocks || []).map((block) => block.text)].join(' ')));
+    const hits = words.filter((word) => words_there.has(word));
+    if (hits.length < needed) continue;
+    const seen = new Set();
+    const anchors = [];
+    for (const block of section.blocks || []) {
+      for (const anchor of block.anchors || []) {
+        if (anchor.kind === 'note') continue;
+        const key = `${anchor.kind}|${anchor.doc || ''}|${anchor.locator || ''}|${anchor.clock || ''}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        anchors.push(anchor);
+        if (anchors.length >= 12) break;
+      }
+    }
+    scored.push({
+      sectionId: section.id,
+      title: section.title,
+      captured: section.captured || '',
+      score: hits.length,
+      hits,
+      anchors,
+    });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const matches = scored.slice(0, Math.max(1, limit));
+  const spans = matches.length === 2 && matches[1].score >= matches[0].score * 0.6;
+  return { question: String(question || ''), matches, spans };
+}
+
 /**
  * Build the reader for one course.
  *

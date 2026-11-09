@@ -1865,6 +1865,29 @@ function nameCourse() {
   toast(`Course named ${value}.`);
 }
 
+/* Renaming was only reachable from Settings → You, which is not where anyone looks
+   for it. The name is what every note is filed under, so it gets its own field
+   beside the course picker. */
+function renameCourse() {
+  const field = $('courseRename');
+  const value = String(field?.value || '').trim().slice(0, 80);
+  if (!activeCourse()) return;
+  if (!value) {
+    field?.focus();
+    toast('A course needs a name — it is what the notes are filed under.', 'error');
+    return;
+  }
+  if ((state.persona?.course || '') === value) {
+    toast('That is already the name.');
+    return;
+  }
+  state.persona.course = value;
+  persist();
+  renderCourseUi();
+  syncNameCourse();
+  toast(`Renamed to ${value}.`);
+}
+
 function newCourse() {
   stashActive();
   const course = defaultCourse({});
@@ -1914,6 +1937,10 @@ function removeCourse() {
 
 function renderCourseUi() {
   syncNameCourse();
+  const rename = $('courseRename');
+  // Not while it is being typed into: re-rendering on every keystroke would fight
+  // the person renaming the course.
+  if (rename && document.activeElement !== rename) rename.value = state.persona?.course || '';
   const select = $('courseSelect');
   if (select) {
     select.innerHTML = '';
@@ -4087,6 +4114,20 @@ async function shareCourse(scope = 'course', docName = '') {
         kind: scope === 'document' ? 'document' : 'course',
         notes,
         docs: docs.map((doc) => ({ name: doc.name, kind: doc.kind, text: doc.text, segments: doc.segments || [] })),
+        // A shared reader is the sections with their anchors, so a classmate can
+        // open the page or moment a claim came from without any live state.
+        reader:
+          scope === 'document'
+            ? []
+            : (readerDoc?.sections || []).map((section) => ({
+                title: section.title,
+                captured: section.captured,
+                blocks: section.blocks.map((block) => ({
+                  kind: block.kind,
+                  text: block.edited ? block.edited.text : block.text,
+                  anchors: block.anchors,
+                })),
+              })),
       },
     });
     const link = res.url || `${location.origin}${res.path}`;
@@ -4725,7 +4766,8 @@ function drawReader(meta, body, doc) {
       : '';
   }
   if (!doc.sections.length) {
-    body.innerHTML = `<p class="empty">${escapeHtml(doc.note || 'Nothing captured yet.')}</p>`;
+    body.innerHTML = `<p class="empty">${escapeHtml(doc.note || 'Nothing captured yet.')}</p>
+      <p><button type="button" class="mini" data-reader-example="1">see an example</button></p>`;
     return;
   }
   body.innerHTML = doc.sections
@@ -4761,6 +4803,98 @@ function beginReaderEdit(blockId) {
   node.querySelector('.reader-edit')?.focus();
 }
 
+/* An example, so the feature can be seen before a lecture has been captured. It is
+   drawn from nothing and saved nowhere: the reader of a real course comes from its
+   own notes. */
+function readerExample() {
+  return {
+    courseId: 'example',
+    course: 'Example lecture',
+    builtAt: '',
+    note: '',
+    counts: { sections: 1, blocks: 4, outline: 1, definition: 1, example: 1, hint: 1, pages: 1, moments: 1, notes: 1, edited: 0 },
+    sections: [
+      {
+        id: 'example-lecture-1',
+        title: 'Lecture 1',
+        captured: 'example',
+        blocks: [
+          {
+            id: 'r:example:0',
+            kind: 'definition',
+            text: 'Osmosis is defined as the movement of water across a semi-permeable membrane, from the dilute side to the concentrated side.',
+            edited: null,
+            anchors: [{ kind: 'page', doc: 'week-3.pdf', locator: 'p.4' }],
+          },
+          {
+            id: 'r:example:1',
+            kind: 'outline',
+            text: 'Water potential decides the direction: pure water has the highest potential, so it moves towards the solute.',
+            edited: null,
+            anchors: [{ kind: 'moment', clock: '12:30', at: 750 }],
+          },
+          {
+            id: 'r:example:2',
+            kind: 'example',
+            text: 'For example, a red blood cell in pure water takes in water until it bursts; in salt water it shrivels.',
+            edited: null,
+            anchors: [{ kind: 'page', doc: 'week-3.pdf', locator: 'p.5' }],
+          },
+          {
+            id: 'r:example:3',
+            kind: 'hint',
+            text: 'EXAM: they almost always ask for the direction of flow and the reason, not the definition.',
+            edited: null,
+            anchors: [{ kind: 'note', at: 0, label: 'example' }],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function showReaderExample() {
+  const body = $('readerBody');
+  if (!body) return;
+  drawReader($('readerMeta'), body, readerExample());
+  const answer = $('readerAnswer');
+  if (answer) answer.innerHTML = '<p class="mini muted">An example, drawn from nothing of yours. Start Live and your own lecture replaces it.</p>';
+}
+
+async function askReader() {
+  const field = $('readerAsk');
+  const out = $('readerAnswer');
+  if (!out) return;
+  const question = String(field?.value || '').trim();
+  if (!question) {
+    field?.focus();
+    return;
+  }
+  out.innerHTML = '<p class="mini muted">Looking through the reader…</p>';
+  try {
+    const res = await api('/api/reader', { body: { course: readerCourse(), edits: state.readerEdits || [], question } });
+    readerDoc = res;
+    drawReader($('readerMeta'), $('readerBody'), res);
+    const found = res.question || { matches: [], spans: false };
+    if (!found.matches.length) {
+      out.innerHTML = '<p class="mini">Nothing captured answers that yet.</p>';
+      return;
+    }
+    const label = found.spans
+      ? `This spans ${found.matches.map((match) => match.title).join(' and ')}.`
+      : `${found.matches[0].title} answers this.`;
+    out.innerHTML = `<p class="mini">${escapeHtml(label)}</p>${found.matches
+      .map(
+        (match) => `<div class="reader-hit"><strong>${escapeHtml(match.title)}</strong> <span class="mini muted">${escapeHtml(
+          match.hits.join(', ')
+        )}</span> ${match.anchors.map(anchorChip).join(' ')}</div>`
+      )
+      .join('')}`;
+  } catch (error) {
+    out.innerHTML = `<p class="mini">${escapeHtml(error.message)}</p>`;
+  }
+}
+
 function saveReaderEdit(blockId) {
   const node = readerNode(blockId);
   const text = String(node?.querySelector('.reader-edit')?.value || '').trim();
@@ -4794,7 +4928,7 @@ function playMoment(seconds, clock) {
 }
 
 document.addEventListener('click', (event) => {
-  const target = event.target.closest?.('[data-reader-edit], [data-reader-save], [data-reader-cancel], [data-reader-reset], [data-moment]');
+  const target = event.target.closest?.('[data-reader-edit], [data-reader-save], [data-reader-cancel], [data-reader-reset], [data-moment], [data-reader-example]');
   if (!target) return;
   const data = target.dataset;
   if (data.readerEdit) beginReaderEdit(data.readerEdit);
@@ -4802,6 +4936,7 @@ document.addEventListener('click', (event) => {
   else if (data.readerCancel) renderReader();
   else if (data.readerReset) resetReaderEdit(data.readerReset);
   else if (data.moment) playMoment(Number(data.moment) || 0, data.clock || '');
+  else if (data.readerExample) showReaderExample();
 });
 
 /* ── wiring ────────────────────────────────────────────────── */
@@ -4835,6 +4970,20 @@ function bind() {
   $('nav-review')?.addEventListener('click', renderReview);
   $('nav-reader')?.addEventListener('click', renderReader);
   $('btnReaderBuild').onclick = renderReader;
+  $('btnRenameCourse').onclick = renameCourse;
+  $('courseRename')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      renameCourse();
+    }
+  });
+  $('btnReaderAsk').onclick = askReader;
+  $('readerAsk')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      askReader();
+    }
+  });
   $('btnReviewStart').onclick = () => {
     if (reviewRun) {
       reviewRun = null;

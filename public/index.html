@@ -66,6 +66,11 @@
             <button class="icon-btn" id="btnNewCourse" title="New course" aria-label="New course">＋</button>
             <button class="icon-btn" id="btnDeleteCourse" title="Remove this course" aria-label="Remove this course">✕</button>
           </div>
+          <div class="course-row">
+            <input id="courseRename" type="text" maxlength="80" placeholder="Rename this course"
+                   aria-label="Rename the active course" />
+            <button class="icon-btn" id="btnRenameCourse" title="Rename this course" aria-label="Rename this course">↵</button>
+          </div>
         </div>
 
         <nav class="tabs" id="tabs" role="tablist" aria-label="Sage workspace">
@@ -402,6 +407,12 @@
               <div class="actions"><button class="btn ghost small" id="btnReaderBuild">Rebuild</button></div>
             </div>
             <p class="mini muted" id="readerMeta"></p>
+            <div class="field-row">
+              <input id="readerAsk" type="text" maxlength="200" placeholder="Where was osmosis covered?"
+                     aria-label="Ask where something was covered" />
+              <button class="btn small" id="btnReaderAsk">Find it</button>
+            </div>
+            <div id="readerAnswer" aria-live="polite"></div>
             <div id="readerBody" dir="auto"></div>
           </section>
 

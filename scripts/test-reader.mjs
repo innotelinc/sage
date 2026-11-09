@@ -4,7 +4,7 @@
  * Only the pure builder is exercised here — no server, no clock — so each case
  * pins the behaviour the reader promises rather than the shape of a response.
  */
-import { buildReader, clockSeconds, kindOf } from '../src/reader.mjs';
+import { buildReader, clockSeconds, findSections, kindOf, tokenise } from '../src/reader.mjs';
 
 let passed = 0;
 const failed = [];
@@ -210,6 +210,45 @@ check('a course with no foundation keeps the moment and the note, not a page', (
     now: NOW,
   });
   eq(reader.sections[0].blocks[0].anchors.map((anchor) => anchor.kind), ['moment'], 'moment only');
+});
+
+check('a question finds the section that answers it, with the page it came from', () => {
+  const reader = buildReader({
+    course: course([
+      { text: 'The cell cycle has four phases [week-3.pdf p.4]', at: 1000 },
+      { text: 'Osmosis is defined as the movement of water across a membrane [week-3.pdf p.4]', at: 1000 + 3 * HOUR },
+    ]),
+    now: NOW,
+  });
+  const found = findSections(reader.sections, 'where did we do osmosis?');
+  eq(found.matches.length, 1, 'one match');
+  eq(found.matches[0].title, 'Lecture 2', 'the osmosis lecture');
+  eq(found.matches[0].anchors, [{ kind: 'page', doc: 'week-3.pdf', locator: 'p.4' }], 'the page');
+  eq(found.spans, false, 'one lecture');
+});
+
+check('a question that spans two lectures says so and keeps both', () => {
+  const reader = buildReader({
+    course: course([
+      { text: 'Osmosis and diffusion are both passive transport [week-3.pdf p.4]', at: 1000 },
+      { text: 'Osmosis in a plant cell causes turgor [week-3.pdf p.4]', at: 1000 + 3 * HOUR },
+    ]),
+    now: NOW,
+  });
+  const found = findSections(reader.sections, 'osmosis');
+  eq(found.matches.length, 2, 'two matches');
+  eq(found.spans, true, 'spans lectures');
+});
+
+check('a question nothing covers matches nothing rather than the nearest lecture', () => {
+  const reader = buildReader({ course: course([{ text: 'the cell cycle has four phases', at: 1000 }]), now: NOW });
+  eq(findSections(reader.sections, 'what is the Krebs cycle').matches, [], 'no match');
+});
+
+check('stop words alone are not a question', () => {
+  eq(tokenise('where did we do it'), [], 'stopwords');
+  const reader = buildReader({ course: course([{ text: 'the cell cycle', at: 1000 }]), now: NOW });
+  eq(findSections(reader.sections, 'where did we do it').matches, [], 'nothing to match on');
 });
 
 console.log(`\n${passed} passed`);

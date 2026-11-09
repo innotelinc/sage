@@ -154,13 +154,39 @@ export function sanitiseShareBody(body = {}) {
     .filter((text) => typeof text === 'string' && text.trim())
     .slice(-MAX_SHARE_NOTES)
     .map((text) => String(text).slice(0, 1200));
-  if (!docs.length && !notes.length) return null;
+  // The reader travels with the notes it was built from, as sections and their
+  // anchors. Read-only like everything else here: a shared block is text and a
+  // pointer, never memory, an answer or the plan.
+  const reader = (Array.isArray(body.reader) ? body.reader : [])
+    .slice(0, 20)
+    .map((section) => ({
+      title: String(section?.title || 'Lecture').slice(0, 80),
+      captured: String(section?.captured || '').slice(0, 40),
+      blocks: (Array.isArray(section?.blocks) ? section.blocks : [])
+        .slice(0, 200)
+        .map((block) => ({
+          kind: String(block?.kind || 'outline').slice(0, 20),
+          text: String(block?.text || '').slice(0, 1200),
+          anchors: (Array.isArray(block?.anchors) ? block.anchors : [])
+            .slice(0, 6)
+            .map((anchor) => ({
+              kind: String(anchor?.kind || 'note').slice(0, 12),
+              doc: String(anchor?.doc || '').slice(0, 120),
+              locator: String(anchor?.locator || '').slice(0, 40),
+              clock: String(anchor?.clock || '').slice(0, 12),
+            })),
+        }))
+        .filter((block) => block.text),
+    }))
+    .filter((section) => section.blocks.length);
+  if (!docs.length && !notes.length && !reader.length) return null;
   return {
     kind: body.kind === 'document' ? 'document' : 'course',
     courseName: String(body.courseName || 'A course').slice(0, 120),
     sharedBy: String(body.name || '').slice(0, 60),
     notes,
     docs,
+    reader,
   };
 }
 
@@ -180,6 +206,7 @@ export function publicShare(share, docs = []) {
     expiresAt: share.expiresAt,
     views: Number(share.views) || 0,
     notes: Array.isArray(share.notes) ? share.notes : [],
+    reader: Array.isArray(share.reader) ? share.reader : [],
     docs: docs.map((doc) => ({
       name: doc.name,
       kind: doc.kind,
@@ -195,6 +222,28 @@ export function publicShare(share, docs = []) {
 export function renderSharePage(share, docs = []) {
   const notes = (share.notes || [])
     .map((note) => `<li>${escapeHtml(note)}</li>`)
+    .join('\n');
+  const reader = (share.reader || [])
+    .map((section) => {
+      const blocks = (section.blocks || [])
+        .map((block) => {
+          const anchors = (block.anchors || [])
+            .filter((anchor) => anchor.kind !== 'note')
+            .map((anchor) =>
+              anchor.kind === 'page'
+                ? `<span class="loc">${escapeHtml(anchor.doc)} ${escapeHtml(anchor.locator)}</span>`
+                : `<span class="loc">lecture ${escapeHtml(anchor.clock)}</span>`
+            )
+            .join(' · ');
+          return `<div class="seg"><span class="loc">${escapeHtml(block.kind)}</span><p>${escapeHtml(
+            block.text
+          )}</p>${anchors ? `<span class="loc">${anchors}</span>` : ''}</div>`;
+        })
+        .join('');
+      return `<details class="doc" open><summary>${escapeHtml(section.title)}${
+        section.captured ? ` · ${escapeHtml(section.captured)}` : ''
+      }</summary>${blocks}</details>`;
+    })
     .join('\n');
   const documents = docs
     .map((doc) => {
@@ -250,6 +299,7 @@ export function renderSharePage(share, docs = []) {
   <p class="note">This is a read-only copy. Nothing here can be edited, and it carries no personal memory, answers or settings.</p>
   <h2>Notes</h2>
   ${notes ? `<ul>\n${notes}\n</ul>` : '<p class="note">No notes were shared.</p>'}
+  ${reader ? `<h2>The reader</h2>\n  ${reader}` : ''}
   <h2>Documents</h2>
   ${documents || '<p class="note">No documents were shared.</p>'}
   <footer>Link expires ${escapeHtml(String(share.expiresAt || '').slice(0, 10))}. Shared from Sage.</footer>

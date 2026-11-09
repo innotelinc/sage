@@ -11,7 +11,7 @@ import { openSession, closeSession, accepts, recordFrame, readNotes } from './br
 import { handleStore } from './store.mjs';
 import { handleIap } from './iap.mjs';
 import { handleSources } from './sources.mjs';
-import { buildReader } from './reader.mjs';
+import { buildReader, findSections } from './reader.mjs';
 import { publicPlans } from './plans.mjs';
 import { synthesize, ttsConfig } from './tts.mjs';
 
@@ -719,7 +719,13 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
     if (!body || typeof body !== 'object' || !body.course) {
       return json({ error: 'bad_course', message: 'A reader needs a course.' }, 400);
     }
-    return json(buildReader({ course: body.course, edits: body.edits }));
+    const reader = buildReader({ course: body.course, edits: body.edits });
+    // A question is answered against what was captured: which section covers it, and
+    // the page or moment inside that section that backs it.
+    if (typeof body.question === 'string' && body.question.trim()) {
+      reader.question = findSections(reader.sections, body.question);
+    }
+    return json(reader);
   }
 
   if (url.pathname === '/api/store/checkout') {
