@@ -1807,21 +1807,39 @@ async function ensureAppStoreProfile(bundleIdId, identifier, certificateId) {
   // Any live profile for this bundle id will do: the team has one distribution
   // certificate, so its contents cannot differ between profiles. Apple refuses a
   // second profile with the same name, so creation is the fallback, not the norm.
-  const reuse = async () => {
+  const wanted = `Sage App Store ${identifier}`;
+  const reuse = async (note = '') => {
     const list = await call('GET', '/v1/profiles?limit=200');
-    const mine = (list?.data || []).filter(
-      (profile) =>
-        profile.relationships?.bundleId?.data?.id === bundleIdId &&
-        String(profile.attributes?.profileType || '') === 'IOS_APP_STORE'
-    );
-    return mine.find((profile) => String(profile.attributes?.profileState || 'ACTIVE') !== 'INVALID') || null;
+    const all = list?.data || [];
+    const usable = all.filter((profile) => String(profile.attributes?.profileState || 'ACTIVE') !== 'INVALID');
+    // By name first: that is what Apple's conflict is about, and the profile this
+    // script made is named after the bundle id. Linkage is only a fallback because
+    // the list endpoint does not always carry the relationship.
+    const sameBundle = (profile) => {
+      const linked = profile.relationships?.bundleId?.data?.id;
+      return !linked || linked === bundleIdId;
+    };
+    const match =
+      usable.find((profile) => sameBundle(profile) && String(profile.attributes?.name || '') === wanted) ||
+      usable.find(
+        (profile) =>
+          sameBundle(profile) &&
+          String(profile.attributes?.profileType || '') === 'IOS_APP_STORE' &&
+          String(profile.attributes?.name || '').includes(identifier)
+      ) ||
+      null;
+    if (match) {
+      console.log(
+        `  profile · reusing ${match.attributes?.name} for ${identifier}${note} · ${all.length} on the team`
+      );
+    } else {
+      console.log(`  profile · none for ${identifier}${note} · ${all.length} on the team`);
+    }
+    return match;
   };
 
   const existing = await reuse();
-  if (existing) {
-    console.log(`  profile · reusing ${existing.attributes?.name} for ${identifier}`);
-    return existing;
-  }
+  if (existing) return existing;
 
   try {
     const created = await call('POST', '/v1/profiles', {
@@ -1840,13 +1858,11 @@ async function ensureAppStoreProfile(bundleIdId, identifier, certificateId) {
     console.log(`  profile · created ${created.data.attributes?.name} for ${identifier}`);
     return created.data;
   } catch (error) {
-    // A profile made seconds ago by another run is a race, not a failure.
+    // A profile made seconds ago by another run is a race, not a failure — but a
+    // 409 also means the list above disagreed with Apple, so it is re-read here.
     if (error.status === 409 || /409/.test(String(error.message))) {
-      const raced = await reuse();
-      if (raced) {
-        console.log(`  profile · reusing ${raced.attributes?.name} for ${identifier} after a 409`);
-        return raced;
-      }
+      const raced = await reuse(' after a 409');
+      if (raced) return raced;
     }
     throw error;
   }
