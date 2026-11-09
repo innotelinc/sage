@@ -713,10 +713,9 @@ async function checkAttachedBuild(app) {
     ? (versions.included || []).find((item) => item.type === 'builds' && item.id === attachedId)
     : null;
 
-  const list = await call(
-    'GET',
-    `/v1/apps/${app}/builds?limit=50&include=preReleaseVersion&fields[builds]=version,processingState,expired&fields[preReleaseVersions]=version,platform`
-  );
+  // No fields[] here: Apple answers 400 PARAMETER_ERROR.ILLEGAL when a sparse fieldset
+  // is combined with include on this endpoint.
+  const list = await call('GET', `/v1/apps/${app}/builds?limit=50&include=preReleaseVersion`);
   const releases = new Map(
     (list?.included || [])
       .filter((item) => item.type === 'preReleaseVersions')
