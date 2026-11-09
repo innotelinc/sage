@@ -49,6 +49,10 @@ on:
         description: Certificates on this team — `list`, or `purge-dev` to delete the development ones (distribution is never touched)
         type: string
         default: ''
+      testflight:
+        description: TestFlight builds — `list`, or `expire-old` (every 1.1 build, and every 1.0 but the one version 1.0 holds)
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -76,6 +80,7 @@ jobs:
           WITHDRAW: ${{ inputs.withdraw }}
           PUBLISH: ${{ inputs.publish }}
           CERTS: ${{ inputs.certs }}
+          TESTFLIGHT: ${{ inputs.testflight }}
           REPLACE_SHOTS: ${{ inputs.reshoot }}
           APP_STORE_CREATIVE: ${{ inputs.creative }}
           APP_STORE_PROBE: ${{ inputs.probe }}

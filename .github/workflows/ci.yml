@@ -83,3 +83,10 @@ jobs:
       # about a refusal and a rejected option has to stay right.
       - name: The capture test names what the shell did
         run: node scripts/test-device-page.mjs
+      # The broadcast extension writes its own WAV container, so what the route
+      # accepts is a rule to keep: malformed audio is refused rather than sent on.
+      - name: A broadcast chunk is a container the route can read
+        run: node scripts/test-wav.mjs
+      # A chunk becomes a note, or a counted drop. Neither may end the broadcast.
+      - name: Broadcast audio lands as a note
+        run: node scripts/test-broadcast-audio.mjs

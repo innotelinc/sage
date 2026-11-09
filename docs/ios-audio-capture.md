@@ -12,6 +12,9 @@ native bridge would take if one of them is worth building.
 Verify the platform claims here against the SDK at build time. If Apple ships a loopback API,
 this is the file that should say so.
 
+**Status:** the microphone half (§3b, §4) is implemented — extension, route and tests — but the
+two hardware questions in §3b are unanswered, so it is built and reviewed rather than proven.
+
 ## 1 · What each shell can do today
 
 | Shell | Other app's audio | Mechanism | Kept? |
@@ -81,8 +84,11 @@ Two facts to settle on hardware before building it:
 2. Whether `.audioMic` buffers arrive reliably when the extension is not the frontmost thing.
    Expected: yes, the extension keeps receiving; measure it rather than assume.
 
-**Verdict:** the one native item worth building, and it is small: audio-buffer handling in
-`SampleHandler` plus one server route.
+**Verdict:** the one native item worth building, and it is small. It is now in the tree:
+`SampleHandler` converts `.audioMic` to 16 kHz mono PCM16, drops chunks below the audible
+threshold, and posts each five-second window to `/api/broadcast/audio`, which turns it into a
+note on the same session the frames use. What is not yet proven is what only a phone can
+decide — whether the microphone buffers keep arriving with the app in the background.
 
 ### c · Import the file (exact, but only for files the person owns)
 

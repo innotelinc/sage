@@ -47,15 +47,20 @@ Never revoke an `IOS_DISTRIBUTION` certificate to clear this: that is the one ev
 build and every App Store submission signs with, and its replacement has to be reissued and its
 `.p12` re-uploaded as a secret.
 
-## Keeping it from coming back
+## How it is kept from coming back
 
-The durable fix is to stop the extension from needing a development certificate: pin it to the
-imported distribution identity (`CODE_SIGN_STYLE = Manual` plus a
-`PROVISIONING_PROFILE_SPECIFIER`) instead of `Automatic` in `add-broadcast-target.rb`. That
-change cannot be validated from the Windows workstation — it needs an archive on a macOS runner
-to prove the profile is created for `us.inotell.sage.broadcast` from the existing certificate —
-so it belongs in a build whose failure is acceptable, not in the middle of a release.
+The extension no longer needs a development certificate. The workflow asks the API for an App
+Store profile per bundle id before the archive (`PROFILES=ensure` in `scripts/asc-iap.mjs`),
+installs each `.mobileprovision` into the runner's profile directory, and exports the UUIDs as
+`APP_PROFILE_UUID` and `EXT_PROFILE_UUID`. `add-broadcast-target.rb` then pins both Release
+configurations to them:
 
-Until then: when a build fails at `Archive` with the text above, run `certs=list`, expect a
-double-digit count of `Apple Development: Created via API`, purge the development ones, and
-rebuild. Two or three consecutive builds is roughly what the freed slots buy.
+```ruby
+'CODE_SIGN_STYLE' => 'Manual',
+'CODE_SIGN_IDENTITY' => 'iPhone Distribution',
+'PROVISIONING_PROFILE_SPECIFIER' => profile,
+```
+
+Profiles are not capped, so this is repeatable; a local run without the UUIDs still falls back
+to automatic signing. If a build ever fails at `Archive` with the text above again, the fallback
+is still the same: `certs=list`, then `certs=purge-dev`, then rebuild.

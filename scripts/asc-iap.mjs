@@ -14,7 +14,7 @@
  * from the same bundle id the server uses instead of being written down twice.
  */
 import { createHash, createPrivateKey, sign } from 'node:crypto';
-import { readFile, readdir } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const API = 'https://api.appstoreconnect.apple.com';
@@ -40,6 +40,10 @@ const RELEASE_CHECK = /^(1|true|yes)$/i.test(String(process.env.RELEASE_CHECK ||
 const SHOT_DIR_DUO = (process.env.APP_STORE_SHOTS_DUO || '').trim();
 /** Certificates are team-wide and capped, so they are handled before any app lookup. */
 const CERTS = String(process.env.CERTS || '').trim().toLowerCase();
+/** Profiles are not capped, so the archive is signed with one instead of minting a cert. */
+const PROFILES = String(process.env.PROFILES || '').trim().toLowerCase();
+/** TestFlight keeps every upload until it is expired; this is the way to prune it. */
+const TESTFLIGHT = String(process.env.TESTFLIGHT || '').trim().toLowerCase();
 const CREATIVE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_CREATIVE || ''));
 const HEADER_ASSET = (process.env.APP_STORE_HEADER || 'deploy/ios/store-header/header-universal.png').trim();
 const CREATIVE_TYPES = ['PRODUCT_PAGE_HEADER_ASSET', 'APP_STORE_SEARCH_RESULTS_ASSET'];
@@ -1721,8 +1725,214 @@ async function handleCertificates(mode) {
   for (const cert of after) console.log(`  ${certLine(cert)}`);
 }
 
+/**
+ * App Store provisioning profiles for the two bundle ids the archive signs.
+ *
+ * A profile is not capped the way a certificate is, so CI asks for one instead of
+ * letting Xcode mint a development certificate per run. The UUIDs are exported to
+ * the build as APP_PROFILE_UUID / EXT_PROFILE_UUID and `add-broadcast-target.rb`
+ * pins each target to one; the certificate referenced is the distribution one
+ * already imported into the runner's keychain.
+ *
+ *   PROFILES=ensure
+ */
+async function handleProfiles(mode) {
+  if (mode !== 'ensure') {
+    console.log(`  profiles · unknown mode "${mode}" — use ensure`);
+    process.exitCode = 1;
+    return;
+  }
+  const bundles = String(process.env.PROFILE_BUNDLES || `${BUNDLE},${BUNDLE}.broadcast`)
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const certificates = await listCertificates();
+  const distribution =
+    certificates.find((cert) => String(cert.attributes?.certificateType || '') === 'IOS_DISTRIBUTION') ||
+    certificates.find((cert) => String(cert.attributes?.certificateType || '') === 'DISTRIBUTION');
+  if (!distribution) {
+    console.log('  profiles · FAILED · this team has no distribution certificate');
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`  profiles · signing with ${distribution.attributes?.name} · ${distribution.id}`);
+
+  const exported = {};
+  const directory = join(process.env.HOME || '.', 'Library', 'MobileDevice', 'Provisioning Profiles');
+  await mkdir(directory, { recursive: true });
+  for (const identifier of bundles) {
+    const bundle = await ensureBundleId(identifier);
+    const profile = await ensureAppStoreProfile(bundle.id, identifier, distribution.id);
+    const uuid = profile?.attributes?.uuid;
+    const content = profile?.attributes?.profileContent;
+    if (!uuid || !content) {
+      console.log(`  profiles · FAILED · ${identifier} has no usable profile`);
+      process.exitCode = 1;
+      continue;
+    }
+    await writeFile(join(directory, `${uuid}.mobileprovision`), Buffer.from(content, 'base64'));
+    exported[identifier === BUNDLE ? 'APP_PROFILE_UUID' : 'EXT_PROFILE_UUID'] = uuid;
+    console.log(`  profiles · ${identifier} · ${profile.attributes?.name} · ${uuid}`);
+  }
+  const lines = Object.entries(exported)
+    .map(([name, value]) => `${name}=${value}`)
+    .join('\n');
+  if (process.env.GITHUB_ENV) {
+    await appendFile(process.env.GITHUB_ENV, `${lines}\n`);
+    console.log('  profiles · exported for the archive step');
+  } else {
+    console.log(lines);
+  }
+}
+
+async function ensureBundleId(identifier) {
+  const found = await call('GET', `/v1/bundleIds?filter[identifier]=${encodeURIComponent(identifier)}&limit=1`);
+  const existing = found?.data?.[0];
+  if (existing) return existing;
+  const created = await call('POST', '/v1/bundleIds', {
+    data: {
+      type: 'bundleIds',
+      attributes: { identifier, name: identifier.split('.').pop(), platform: 'IOS' },
+    },
+  });
+  console.log(`  bundle · created ${identifier} · ${created.data.id}`);
+  return created.data;
+}
+
+async function ensureAppStoreProfile(bundleIdId, identifier, certificateId) {
+  const list = await call(
+    'GET',
+    '/v1/profiles?limit=200&fields[profiles]=name,profileType,profileState,uuid,expirationDate,profileContent'
+  );
+  const mine = (list?.data || []).filter(
+    (profile) =>
+      profile.relationships?.bundleId?.data?.id === bundleIdId &&
+      String(profile.attributes?.profileType || '') === 'IOS_APP_STORE'
+  );
+  const week = 7 * 24 * 60 * 60 * 1000;
+  const usable = mine.find(
+    (profile) =>
+      String(profile.attributes?.profileState || '') === 'ACTIVE' &&
+      new Date(profile.attributes?.expirationDate || 0).getTime() > Date.now() + week
+  );
+  if (usable) {
+    console.log(`  profile · reusing ${usable.attributes?.name} for ${identifier}`);
+    return usable;
+  }
+  const created = await call('POST', '/v1/profiles', {
+    data: {
+      type: 'profiles',
+      attributes: {
+        name: `Sage App Store ${identifier}`,
+        profileType: 'IOS_APP_STORE',
+      },
+      relationships: {
+        bundleId: { data: { type: 'bundleIds', id: bundleIdId } },
+        certificates: { data: [{ type: 'certificates', id: certificateId }] },
+      },
+    },
+  });
+  console.log(`  profile · created ${created.data.attributes?.name} for ${identifier}`);
+  return created.data;
+}
+
+/**
+ * TestFlight keeps every upload, and a build for a version that is not going to
+ * review is just an installable old binary. Expiring is the API's way of taking one
+ * out of TestFlight: the record stays, and testers stop being offered it.
+ *
+ *   TESTFLIGHT=list        every build, its version string, state and upload date
+ *   TESTFLIGHT=expire-old  every 1.1 build, and every 1.0 build but the one the
+ *                          App Store version holds
+ */
+async function testFlightBuilds(app) {
+  const details = await call(
+    'GET',
+    `/v1/apps/${app}/builds?limit=200&fields[builds]=version,processingState,expired,uploadedDate`
+  );
+  const byId = new Map((details?.data || []).map((build) => [build.id, build]));
+  const groups = await call(
+    'GET',
+    `/v1/preReleaseVersions?filter[app]=${app}&filter[platform]=IOS&limit=200&include=builds`
+  );
+  const rows = [];
+  for (const group of groups?.data || []) {
+    const release = String(group.attributes?.version || '');
+    for (const ref of group.relationships?.builds?.data || []) {
+      const build = byId.get(ref.id);
+      const version = Number(build?.attributes?.version ?? ref.attributes?.version);
+      if (!Number.isFinite(version)) continue;
+      rows.push({
+        id: ref.id,
+        release,
+        version,
+        state: build?.attributes?.processingState || 'UNKNOWN',
+        expired: Boolean(build?.attributes?.expired),
+        uploaded: build?.attributes?.uploadedDate ? String(build.attributes.uploadedDate).slice(0, 10) : '',
+      });
+    }
+  }
+  return rows.sort((a, b) => b.version - a.version);
+}
+
+/** The build the App Store version holds: the one that must never be expired. */
+async function attachedBuildId(app) {
+  const versions = await call(
+    'GET',
+    `/v1/apps/${app}/appStoreVersions?limit=20&include=build&fields[appStoreVersions]=versionString,platform,appStoreState,build`
+  );
+  const ios = (versions?.data || []).filter((version) => version.attributes?.platform === 'IOS');
+  const version = ios.find((row) => row.attributes?.appStoreState === 'PREPARE_FOR_SUBMISSION') || ios[0];
+  return version?.relationships?.build?.data?.id || '';
+}
+
+async function handleTestFlight(app) {
+  const rows = await testFlightBuilds(app);
+  console.log(`  testflight · ${rows.length} build(s)`);
+  for (const row of rows) {
+    console.log(
+      `  ${row.expired ? 'expired' : row.state.toLowerCase()} · ${row.release} (${row.version}) · ${row.uploaded || 'no date'}`
+    );
+  }
+  if (!['expire-old', 'expire', 'prune'].includes(TESTFLIGHT)) return;
+
+  const keep = (await attachedBuildId(app)) || rows.find((row) => row.release === '1.0' && !row.expired)?.id || '';
+  const kept = rows.find((row) => row.id === keep);
+  if (!keep) {
+    console.log('  testflight · no build to keep — nothing was expired');
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`  testflight · keeping ${kept?.release} (${kept?.version})`);
+  // The rule is the person's, not a guess at what looks recent: 1.1 is not going
+  // anywhere, and 1.0 keeps only the build its version holds.
+  const doomed = rows.filter(
+    (row) => !row.expired && row.id !== keep && (row.release === '1.0' || row.release === '1.1')
+  );
+  if (!doomed.length) {
+    console.log('  testflight · nothing to expire');
+    return;
+  }
+  for (const row of doomed) {
+    try {
+      await call('PATCH', `/v1/builds/${row.id}`, {
+        data: { type: 'builds', id: row.id, attributes: { expired: true } },
+      });
+      console.log(`  expired · ${row.release} (${row.version})`);
+    } catch (error) {
+      console.log(`  FAILED · ${row.release} (${row.version}) · ${error.message}`);
+      process.exitCode = 1;
+    }
+  }
+}
+
 if (CERTS) {
   await handleCertificates(CERTS);
+  process.exit(process.exitCode || 0);
+}
+
+if (PROFILES) {
+  await handleProfiles(PROFILES);
   process.exit(process.exitCode || 0);
 }
 
@@ -1733,6 +1943,10 @@ const app = await resolveAppId().catch((error) => {
 });
 console.log(`App ${BUNDLE} (${app}) · base territory ${TERRITORY}`);
 await report(app);
+if (TESTFLIGHT) {
+  await handleTestFlight(app);
+  process.exit(process.exitCode || 0);
+}
 if (RELEASE_CHECK) process.exit((await checkAttachedBuild(app)) ? 0 : 1);
 if (WITHDRAW) await withdrawReview(app);
 if (ATTACH) await attachVersion(app);

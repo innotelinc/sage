@@ -69,6 +69,20 @@ jobs:
           echo "=== signing identities available to this run:"
           security find-identity -v -p codesigning "$KEYCHAIN"
 
+      # A profile is not capped, a certificate is. Asking the API for one per bundle
+      # id, and pinning each target to its UUID below, is what stopped the archive
+      # from minting a development certificate every run: the team reached ten and
+      # the next build was refused with "Choose a certificate to revoke".
+      - name: Ensure App Store provisioning profiles
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          APPLE_BUNDLE_ID: us.inotell.sage
+          PROFILE_BUNDLES: us.innotel.sage,us.innotel.sage.broadcast
+          PROFILES: ensure
+        run: node scripts/asc-iap.mjs
+
       - name: Configure project
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -175,6 +189,10 @@ jobs:
             CONTAINER="-project ios/App/App.xcodeproj"
           fi
           echo "building with $CONTAINER"
+          # Manual when the profiles exist, so Xcode signs with the distribution
+          # certificate already in the keychain and asks Apple for nothing.
+          if [ -n "$APP_PROFILE_UUID" ]; then SIGN_STYLE=Manual; else SIGN_STYLE=Automatic; fi
+          echo "signing style: $SIGN_STYLE · app ${APP_PROFILE_UUID:-none} · extension ${EXT_PROFILE_UUID:-none}"
           xcodebuild \
             $CONTAINER \
             -scheme App \
@@ -187,7 +205,7 @@ jobs:
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE="$SIGN_STYLE" \
             ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon \
             archive
 

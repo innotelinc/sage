@@ -33,7 +33,10 @@ public class SageBroadcastPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async {
             let picker = RPSystemBroadcastPickerView(frame: CGRect(x: 0, y: 0, width: 72, height: 72))
             picker.preferredExtension = self.broadcastExtension
-            picker.showsMicrophoneButton = false
+            // The extension reads the microphone as well as the screen: that is the
+            // only way an audiobook playing out loud reaches Sage on the iPhone, and
+            // Apple's own sheet is where the person grants it.
+            picker.showsMicrophoneButton = true
             // The picker is a view that draws a button; sending it the touch is how
             // the sheet is opened without placing the view on screen first.
             for case let button as UIButton in picker.subviews {

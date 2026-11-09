@@ -90,9 +90,14 @@ names the email and the address.
 6. Kill the audio app and reopen it: SAGE follows the new track on the same share. If the share
    itself died, `Start listening again` is the way back, and the run stays armed until then.
 7. Play audio in another app, then start Listen (lecture): the other app's audio does not stop.
+8. **Broadcast audio**: Watch → the sheet now offers the microphone as well as the screen. Start
+   it, open the book, and let it play for a minute with the app in the background. Notes should
+   arrive from the audio alone. Five minutes of a quiet room should send nothing at all: silence
+   is dropped in the extension, not posted and refused.
 
 **Pass:** notes arrive with the screen locked and the app backgrounded; the audiobook run
-starts before playback, waits through silence, and resumes on sound without a tap.
+starts before playback, waits through silence, and resumes on sound without a tap; and
+broadcast audio produces notes while the screen never changes.
 
 Why iOS cannot simply hand SAGE another app's audio — and what a native bridge would look like
 if it could — is `docs/ios-audio-capture.md`. Item 4 is the only audiobook path on iPhone until

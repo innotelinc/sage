@@ -48,6 +48,28 @@ app.source_build_phase.add_file_reference(store)
 audio = app_group.new_file('SageAudioSessionPlugin.swift')
 app.source_build_phase.add_file_reference(audio)
 
+# Signing used to be automatic for both targets, and that is what filled the account's
+# certificate cap: a fresh runner has no private key for an existing development
+# certificate, so every archive asked Apple for another one until the team had ten and
+# the next build was refused with "Choose a certificate to revoke". The workflow now
+# asks the API for an App Store profile per bundle id and passes its UUID here, so the
+# archive signs with the single distribution certificate already in the keychain and
+# mints nothing. Without the UUIDs — a local run — it falls back to automatic.
+app_profile = ENV['APP_PROFILE_UUID'].to_s
+ext_profile = ENV['EXT_PROFILE_UUID'].to_s
+signing = lambda do |profile|
+  if profile.empty?
+    { 'CODE_SIGN_STYLE' => 'Automatic', 'DEVELOPMENT_TEAM' => team }
+  else
+    {
+      'CODE_SIGN_STYLE' => 'Manual',
+      'CODE_SIGN_IDENTITY' => 'iPhone Distribution',
+      'PROVISIONING_PROFILE_SPECIFIER' => profile,
+      'DEVELOPMENT_TEAM' => team,
+    }
+  end
+end
+
 extension.build_configurations.each do |config|
   config.build_settings.merge!(
     'PRODUCT_BUNDLE_IDENTIFIER' => 'us.innotel.sage.broadcast',
@@ -57,11 +79,7 @@ extension.build_configurations.each do |config|
     # here would fail to sign rather than do anything.
     'PRODUCT_NAME' => 'SageBroadcast',
     'WRAPPER_EXTENSION' => 'appex',
-    # Automatic, deliberately: the extension gets its own bundle id here and has
-    # no stored profile, so Xcode is what registers and signs it. Naming a
-    # distribution identity on top of that is a conflict, not a pin.
-    'CODE_SIGN_STYLE' => 'Automatic',
-    'DEVELOPMENT_TEAM' => team,
+    **signing.call(ext_profile),
     'SWIFT_VERSION' => '5.0',
     'IPHONEOS_DEPLOYMENT_TARGET' => '15.0',
     'TARGETED_DEVICE_FAMILY' => '1,2',
@@ -71,6 +89,13 @@ extension.build_configurations.each do |config|
     'MARKETING_VERSION' => version,
     'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks'
   )
+end
+
+# The app target signs the same way. Release only: a Debug configuration pointing at
+# a distribution profile is a trap for anyone building the app on their own machine.
+app.build_configurations.each do |config|
+  next unless config.name == 'Release'
+  config.build_settings.merge!(signing.call(app_profile))
 end
 
 app.add_dependency(extension)

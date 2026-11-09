@@ -8,6 +8,7 @@ import { handleWorkspace } from './workspace.mjs';
 import { handleLiveSession } from './livesession.mjs';
 import { handleShare } from './share.mjs';
 import { openSession, closeSession, accepts, recordFrame, readNotes } from './broadcast.mjs';
+import { handleBroadcastAudio } from './broadcast-audio.mjs';
 import { handleStore } from './store.mjs';
 import { handleIap } from './iap.mjs';
 import { handleSources } from './sources.mjs';
@@ -506,27 +507,32 @@ async function modelCandidates(cfg, tier = 'best') {
   return [...new Set(ordered)].slice(0, 5);
 }
 
-async function handleTranscribe(request, cfg) {
-  const route = cfg.sttKey
+/** A dedicated speech route when one is configured, the model gateway otherwise. */
+function sttRoute(cfg) {
+  return cfg.sttKey
     ? { baseUrl: cfg.sttBaseUrl, key: cfg.sttKey, model: cfg.sttModel }
     : { baseUrl: cfg.baseUrl, key: cfg.key, model: cfg.transcribeModel };
-  if (!route.key) {
-    return json({ error: 'no_key', message: 'Transcription needs an API key — enter a gateway key in Settings.' }, 503);
-  }
+}
 
-  let form;
-  try {
-    form = await request.formData();
-  } catch {
-    return json({ error: 'bad_form', message: 'Expected multipart form data with an "audio" file.' }, 400);
+/**
+ * One upload to the speech route, shared by the page's chunks and the broadcast
+ * extension's. It answers `{ ok: true, text, model }` or `{ ok: false, status,
+ * response }` so each caller decides what a failure means: the page shows it,
+ * while the extension records a chunk with no text and keeps capturing.
+ */
+async function transcribeUpstream(buffer, name, mime, cfg, language) {
+  const route = sttRoute(cfg);
+  if (!route.key) {
+    return {
+      ok: false,
+      status: 503,
+      response: json({ error: 'no_key', message: 'Transcription needs an API key — enter a gateway key in Settings.' }, 503),
+    };
   }
-  const audio = form.get('audio');
-  if (!audio || typeof audio === 'string') return json({ error: 'no_audio', message: 'Missing audio file.' }, 400);
 
   const outbound = new FormData();
-  outbound.append('file', audio, audio.name || 'chunk.webm');
+  outbound.append('file', new Blob([buffer], { type: mime }), name);
   outbound.append('model', route.model);
-  const language = form.get('language');
   if (language) outbound.append('language', String(language));
 
   let upstream;
@@ -538,17 +544,44 @@ async function handleTranscribe(request, cfg) {
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
   } catch (error) {
-    return json({ error: 'upstream_unreachable', message: error.message }, 502);
+    return { ok: false, status: 502, response: json({ error: 'upstream_unreachable', message: error.message }, 502) };
   }
 
   if (!upstream.ok) {
     const detail = await upstream.text().catch(() => '');
-    if (upstream.status === 401 || upstream.status === 403) return keyRejected(upstream.status, detail);
-    return json({ error: 'upstream_error', message: `Transcription returned ${upstream.status}. ${String(detail).slice(0, 400)}` }, 502);
+    if (upstream.status === 401 || upstream.status === 403) {
+      return { ok: false, status: upstream.status, response: keyRejected(upstream.status, detail) };
+    }
+    return {
+      ok: false,
+      status: 502,
+      response: json({ error: 'upstream_error', message: `Transcription returned ${upstream.status}. ${String(detail).slice(0, 400)}` }, 502),
+    };
   }
 
   const data = await upstream.json().catch(() => ({}));
-  return json({ text: String(data.text || '').trim(), model: route.model });
+  return { ok: true, text: String(data.text || '').trim(), model: route.model };
+}
+
+async function handleTranscribe(request, cfg) {
+  let form;
+  try {
+    form = await request.formData();
+  } catch {
+    return json({ error: 'bad_form', message: 'Expected multipart form data with an "audio" file.' }, 400);
+  }
+  const audio = form.get('audio');
+  if (!audio || typeof audio === 'string') return json({ error: 'no_audio', message: 'Missing audio file.' }, 400);
+
+  const out = await transcribeUpstream(
+    await audio.arrayBuffer(),
+    audio.name || 'chunk.webm',
+    audio.type || 'audio/webm',
+    cfg,
+    form.get('language')
+  );
+  if (!out.ok) return out.response;
+  return json({ text: out.text, model: out.model });
 }
 
 const MAX_CLAIM_LENGTH = 64;
@@ -641,6 +674,18 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
   // strength of a session the app opened with that code.
   if (url.pathname === '/api/broadcast/frame' && request.method === 'POST') {
     return handleBroadcastFrame(request, cfg);
+  }
+
+  // The extension's microphone arrives the same way its frames do: the session the
+  // app opened is the credential, and the text lands in the notes it already drains.
+  // Nothing is stored — a chunk becomes a note or a counted drop.
+  if (url.pathname === '/api/broadcast/audio' && request.method === 'POST') {
+    return handleBroadcastAudio(request, cfg, {
+      transcribe: async (bytes) => {
+        const out = await transcribeUpstream(bytes, 'chunk.wav', 'audio/wav', cfg);
+        return out.ok ? { text: out.text } : { text: '', reason: `transcription unavailable (${out.status})` };
+      },
+    });
   }
 
   // The workspace is decided per identity, not per access code alone, so it is
