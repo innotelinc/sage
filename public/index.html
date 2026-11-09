@@ -87,6 +87,9 @@
           <button class="tab" data-tab="read" role="tab" id="nav-read" aria-controls="tab-read" aria-selected="false">
             <span class="tab-ico" aria-hidden="true">▤</span><span class="tab-label">Read</span><kbd>6</kbd>
           </button>
+          <button class="tab" data-tab="reader" role="tab" id="nav-reader" aria-controls="tab-reader" aria-selected="false">
+            <span class="tab-ico" aria-hidden="true">▥</span><span class="tab-label">Reader</span>
+          </button>
           <button class="tab" data-tab="foundation" role="tab" id="nav-foundation" aria-controls="tab-foundation" aria-selected="false">
             <span class="tab-ico" aria-hidden="true">▣</span><span class="tab-label">Foundation</span><kbd>7</kbd>
           </button>
@@ -389,6 +392,17 @@
             <textarea id="readPaste" rows="4" dir="auto" aria-label="Text to read" placeholder="…or paste text / notes here"></textarea>
             <button class="btn primary block" id="btnRead">Read &amp; extract</button>
             <div class="result" id="readResult" aria-live="polite" dir="auto" hidden><div class="prose" id="readOutput"></div></div>
+          </section>
+
+          <!-- ── READER ────────────────────────────────────────── -->
+          <section class="panel" id="tab-reader" role="tabpanel" aria-labelledby="nav-reader" tabindex="-1">
+            <div class="page-head">
+              <h1>The reader</h1>
+              <p class="page-sub">What was captured, as a document: per lecture the outline, the definitions, the worked examples and the exam hints, in the order they were taught. Every claim opens the page or the moment it came from.</p>
+              <div class="actions"><button class="btn ghost small" id="btnReaderBuild">Rebuild</button></div>
+            </div>
+            <p class="mini muted" id="readerMeta"></p>
+            <div id="readerBody" dir="auto"></div>
           </section>
 
           <!-- ── MEMORY ───────────────────────────────────────────── -->

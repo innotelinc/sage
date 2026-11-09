@@ -314,7 +314,7 @@ Sharing shipped before the accessibility pass (4.9) reached it.
 **Done means:** a shared course can be read with a keyboard and a screen reader, printed, and opened
 in Arabic without mirrored punctuation.
 
-## 6.0 — the lecture, as a document
+## 6.0 — the lecture, as a document *(shipped in 6.0.0)*
 
 Capture produces notes and answers. It does not produce a document you could study from.
 
@@ -480,3 +480,7 @@ here does not imply a new build in review.
 
 Milestones past 5.1 are designed, not promised: each one is worth doing only if it makes the three promises
 at the top true, and the order is a straight line rather than a contract.
+
+6.0 was built before 5.2–5.9, so those eight are marked *deferred* on the landing page rather than
+shipped or deleted. The line is broken on purpose and the page says so: the reader was the next thing
+worth having, and the eight behind it are still worth having later.

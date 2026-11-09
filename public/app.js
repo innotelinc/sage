@@ -122,6 +122,9 @@ const defaultState = () => ({
   // The moment of the last save here, so a copy from the server can be judged
   // newer or older without a second table of revisions.
   savedAt: '',
+  // Reader edits live beside the capture, keyed by block id, so a rebuild keeps
+  // them and removing one restores what was captured.
+  readerEdits: [],
   ui: { tab: 'live' },
 });
 
@@ -148,6 +151,7 @@ function defaultCourse(seed = {}) {
     evolution: Array.isArray(seed.evolution) ? seed.evolution : [],
     history: normalizeHistory(seed.history),
     foundation: Array.isArray(seed.foundation) ? seed.foundation : [],
+    readerEdits: Array.isArray(seed.readerEdits) ? seed.readerEdits : [],
     session: { transcript: [], notes: [], ...(seed.session || {}) },
   };
 }
@@ -185,6 +189,7 @@ function stashActive() {
   course.history = state.history;
   course.session = state.session;
   course.foundation = state.foundation;
+  course.readerEdits = state.readerEdits;
 }
 
 function hydrateActive() {
@@ -196,6 +201,7 @@ function hydrateActive() {
   state.history = course.history;
   state.session = course.session;
   state.foundation = course.foundation;
+  state.readerEdits = course.readerEdits || [];
 }
 
 let state = defaultState();
@@ -4658,6 +4664,146 @@ function takeHandoff() {
   toast(`${incoming.length} note${incoming.length === 1 ? '' : 's'} carried over from ${record.label || 'the other device'}.`);
 }
 
+/* ── the reader: the lecture, as a document ─────────────────── */
+
+const READER_KINDS = { outline: 'Outline', definition: 'Definition', example: 'Worked example', hint: 'Exam hint' };
+let readerDoc = null;
+
+function readerCourse() {
+  return {
+    id: state.activeId || 'general',
+    name: state.persona?.course || 'This course',
+    foundation: (state.foundation || [])
+      .filter((doc) => doc.on !== false)
+      .map((doc) => ({ name: doc.name, segments: doc.segments || [] })),
+    session: state.session,
+  };
+}
+
+async function renderReader() {
+  const body = $('readerBody');
+  const meta = $('readerMeta');
+  if (!body) return;
+  body.innerHTML = '<p class="mini muted">Assembling the reader…</p>';
+  try {
+    const res = await api('/api/reader', { body: { course: readerCourse(), edits: state.readerEdits || [] } });
+    readerDoc = res;
+    drawReader(meta, body, res);
+  } catch (error) {
+    body.innerHTML = `<p class="mini">The reader could not be assembled: ${escapeHtml(error.message)}</p>`;
+    if (meta) meta.textContent = '';
+  }
+}
+
+function readerBlock(blockId) {
+  for (const section of readerDoc?.sections || []) {
+    const found = section.blocks.find((block) => block.id === blockId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function readerNode(blockId) {
+  return [...document.querySelectorAll('.reader-block')].find((node) => node.dataset.block === blockId) || null;
+}
+
+function anchorChip(anchor) {
+  if (anchor.kind === 'page') {
+    return `<button type="button" class="cite-chip" data-cite="${escapeHtml(anchor.doc)}" data-locator="${escapeHtml(anchor.locator)}">${escapeHtml(anchor.doc)} · ${escapeHtml(anchor.locator)}</button>`;
+  }
+  if (anchor.kind === 'moment') {
+    return `<button type="button" class="cite-chip" data-moment="${Number(anchor.at) || 0}" data-clock="${escapeHtml(anchor.clock)}">lecture ${escapeHtml(anchor.clock)}</button>`;
+  }
+  return `<span class="reader-anchor">note · ${escapeHtml(anchor.label || '')}</span>`;
+}
+
+function drawReader(meta, body, doc) {
+  const counts = doc.counts || {};
+  if (meta) {
+    meta.textContent = doc.sections.length
+      ? `${counts.blocks} block${counts.blocks === 1 ? '' : 's'} · ${counts.definition} definition${counts.definition === 1 ? '' : 's'} · ${counts.example} worked example${counts.example === 1 ? '' : 's'} · ${counts.hint} exam hint${counts.hint === 1 ? '' : 's'}${counts.edited ? ` · ${counts.edited} edited` : ''}`
+      : '';
+  }
+  if (!doc.sections.length) {
+    body.innerHTML = `<p class="empty">${escapeHtml(doc.note || 'Nothing captured yet.')}</p>`;
+    return;
+  }
+  body.innerHTML = doc.sections
+    .map(
+      (section) => `<article class="reader-sec">
+        <h3>${escapeHtml(section.title)}${section.captured ? ` <span class="mini muted">${escapeHtml(section.captured)}</span>` : ''}</h3>
+        ${section.blocks
+          .map(
+            (block) => `<div class="reader-block" data-block="${escapeHtml(block.id)}">
+              <span class="reader-kind">${escapeHtml(READER_KINDS[block.kind] || 'Outline')}</span>
+              ${block.edited ? '<span class="readonly-badge">edited</span>' : ''}
+              <p class="reader-text" dir="auto">${escapeHtml(block.edited ? block.edited.text : block.text)}</p>
+              <div class="reader-anchors">${block.anchors.map(anchorChip).join(' ')}</div>
+              <div class="reader-tools">
+                <button type="button" class="mini" data-reader-edit="${escapeHtml(block.id)}">edit</button>
+                ${block.edited ? `<button type="button" class="mini" data-reader-reset="${escapeHtml(block.id)}">undo</button>` : ''}
+              </div>
+            </div>`
+          )
+          .join('')}
+      </article>`
+    )
+    .join('');
+}
+
+function beginReaderEdit(blockId) {
+  const node = readerNode(blockId);
+  const block = readerBlock(blockId);
+  if (!node || !block) return;
+  const text = block.edited ? block.edited.text : block.text;
+  node.querySelector('.reader-text').outerHTML = `<textarea class="reader-edit" rows="3" dir="auto" aria-label="Edit this block">${escapeHtml(text)}</textarea>`;
+  node.querySelector('.reader-tools').innerHTML = `<button type="button" class="mini" data-reader-save="${escapeHtml(blockId)}">save</button><button type="button" class="mini" data-reader-cancel="${escapeHtml(blockId)}">cancel</button>`;
+  node.querySelector('.reader-edit')?.focus();
+}
+
+function saveReaderEdit(blockId) {
+  const node = readerNode(blockId);
+  const text = String(node?.querySelector('.reader-edit')?.value || '').trim();
+  if (!text) {
+    toast('An edit cannot be empty — undo the block instead.', 'error');
+    return;
+  }
+  state.readerEdits = (state.readerEdits || []).filter((edit) => edit.blockId !== blockId);
+  state.readerEdits.push({ blockId, text, at: Date.now() });
+  persist();
+  renderReader();
+}
+
+function resetReaderEdit(blockId) {
+  state.readerEdits = (state.readerEdits || []).filter((edit) => edit.blockId !== blockId);
+  persist();
+  renderReader();
+}
+
+/* A moment plays from the recording held on this device, if this is the device that
+   made it. The anchor is kept either way: the reader never pretends to have audio. */
+function playMoment(seconds, clock) {
+  const chunk = [...(cap.audioChunks || [])].reverse().find((item) => item.start <= seconds);
+  if (!chunk) {
+    toast(`Lecture ${clock} — that recording is on the device that made it, so this one cannot play it.`, 'error');
+    return;
+  }
+  const audio = new Audio(chunk.url);
+  audio.currentTime = Math.max(0, seconds - chunk.start);
+  audio.play().then(() => toast(`Playing from ${clock}.`)).catch(() => toast('The recording could not be played.', 'error'));
+}
+
+document.addEventListener('click', (event) => {
+  const target = event.target.closest?.('[data-reader-edit], [data-reader-save], [data-reader-cancel], [data-reader-reset], [data-moment]');
+  if (!target) return;
+  const data = target.dataset;
+  if (data.readerEdit) beginReaderEdit(data.readerEdit);
+  else if (data.readerSave) saveReaderEdit(data.readerSave);
+  else if (data.readerCancel) renderReader();
+  else if (data.readerReset) resetReaderEdit(data.readerReset);
+  else if (data.moment) playMoment(Number(data.moment) || 0, data.clock || '');
+});
+
 /* ── wiring ────────────────────────────────────────────────── */
 function bind() {
   applyDirection();
@@ -4687,6 +4833,8 @@ function bind() {
   };
   $('btnResetKey').onclick = resetSavedKey;
   $('nav-review')?.addEventListener('click', renderReview);
+  $('nav-reader')?.addEventListener('click', renderReader);
+  $('btnReaderBuild').onclick = renderReader;
   $('btnReviewStart').onclick = () => {
     if (reviewRun) {
       reviewRun = null;

@@ -1,11 +1,16 @@
 /**
  * Stamps the landing roadmap with the version this repository actually carries.
  *
- * The page keeps two lists: rows marked shipped, and rows that are still planned. A page
- * cannot be trusted to remember which of those is true, so the split is checked against
- * package.json every time the page is built, and the heading states the version the
- * repository has reached. A shipped row above that version, or a planned row at or below
- * it, fails the build instead of publishing a claim the repository cannot back.
+ * The page keeps three lists: rows marked shipped, rows marked deferred, and rows that are
+ * still planned. A page cannot be trusted to remember which of those is true, so the split
+ * is checked against package.json every time the page is built, and the heading states the
+ * version the repository has reached. A shipped row above that version, a planned row at or
+ * below it, or a deferred row that is not below it all fail the build instead of publishing
+ * a claim the repository cannot back.
+ *
+ * Deferred exists because this series is a straight line only while every row is built in
+ * order: 6.0 shipped before 5.2–5.9 were written, and saying so on the page is honest,
+ * whereas marking them shipped or quietly deleting them would not be.
  *
  * `--check` compares without writing, which is what a CI step wants when the committed
  * page should already be stamped.
@@ -42,18 +47,21 @@ function compare(a, b) {
 
 const html = readFileSync(PAGE, 'utf8');
 
-const rows = [...html.matchAll(/<div class="road-row( shipped)?"><span class="v">v?([0-9.]+)<\/span>/g)].map((match) => ({
-  shipped: Boolean(match[1]),
-  version: match[2],
-}));
+const rows = [...html.matchAll(/<div class="road-row( shipped| deferred)?"><span class="v">v?([0-9.]+)<\/span>/g)].map(
+  (match) => ({
+    state: match[1] ? match[1].trim() : 'planned',
+    version: match[2],
+  })
+);
 
 if (!rows.length) {
   console.error('No roadmap rows found in web/landing/index.html — the marker changed, so nothing was stamped.');
   process.exit(1);
 }
 
-const shipped = rows.filter((row) => row.shipped);
-const planned = rows.filter((row) => !row.shipped);
+const shipped = rows.filter((row) => row.state === 'shipped');
+const deferred = rows.filter((row) => row.state === 'deferred');
+const planned = rows.filter((row) => row.state === 'planned');
 
 const problems = [];
 for (let index = 1; index < shipped.length; index += 1) {
@@ -71,6 +79,11 @@ for (const row of planned) {
     problems.push(`v${row.version} is still listed as planned, but package.json says ${version} — it has shipped`);
   }
 }
+for (const row of deferred) {
+  if (compare(row.version, version) >= 0) {
+    problems.push(`v${row.version} is marked deferred while package.json says ${version} — deferred means behind a release that happened, not ahead of it`);
+  }
+}
 if (problems.length) {
   console.error('The roadmap and package.json disagree:');
   for (const problem of problems) console.error(`  · ${problem}`);
@@ -78,7 +91,9 @@ if (problems.length) {
 }
 
 const stamp = `v${version}`;
-const counted = `${shipped.length} shipped, ${planned.length} planned`;
+const counted = deferred.length
+  ? `${shipped.length} shipped, ${deferred.length} deferred, ${planned.length} planned`
+  : `${shipped.length} shipped, ${planned.length} planned`;
 const stamped = html
   .replace(/(<b class="stamp-version">)[^<]*(<\/b>)/, (_all, open, close) => `${open}${stamp}${close}`)
   .replace(/(<span class="stamp-count">)[^<]*(<\/span>)/, (_all, open, close) => `${open}${counted}${close}`);

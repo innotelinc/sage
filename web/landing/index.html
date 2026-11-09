@@ -173,6 +173,8 @@
     .road-row .v { font-family: var(--mono); font-size: 12.5px; color: var(--brand); min-width: 56px; }
     .road-row p { margin: 0; font-size: 14px; color: var(--text-2); }
     .road-row.shipped .v { color: var(--live-bright); }
+    .road-row.deferred { opacity: 0.72; }
+    .road-row.deferred .v::after { content: ' deferred'; font-size: 0.82em; opacity: 0.8; }
     .road-next { margin: 18px 2px 9px; font-size: 13.5px; color: var(--text-2); }
     .road-stamp { margin: 4px 2px 16px; font-family: var(--mono); font-size: 12.5px; color: var(--text-2); }
     .road-stamp b { color: var(--text-1, var(--text-2)); font-weight: 600; }
@@ -414,7 +416,7 @@
   <div class="wrap">
     <h2>Roadmap.</h2>
     <p class="section-lead">Shipped is shipped; the rest is named honestly.</p>
-    <p class="road-stamp">as of <b class="stamp-version">v5.1.0</b> — <span class="stamp-count">23 shipped, 19 planned</span></p>
+    <p class="road-stamp">as of <b class="stamp-version">v6.0.0</b> — <span class="stamp-count">24 shipped, 8 deferred, 10 planned</span></p>
     <div class="road">
       <div class="road-row shipped"><span class="v">v1.0</span><p>Listening, watching, reading, quiz and essay surfaces, self-evolution memory, gateway wiring, PWA install.</p></div>
       <div class="road-row shipped"><span class="v">v1.1</span><p>Study mode with automatic question detection, and the cross-device relay for mirrored phones, tablets and cast windows.</p></div>
@@ -443,15 +445,15 @@
 
     <p class="road-next">Next — <a href="https://github.com/innotelinc/sage/blob/main/docs/roadmap-4.0.md">the plan through v7.0</a>, in the order it ships.</p>
     <div class="road">
-      <div class="road-row"><span class="v">v5.2</span><p>A share that stays honest: a shared page says which revision it is, and the owner publishes a new one without changing its address.</p></div>
-      <div class="road-row"><span class="v">v5.3</span><p>Group revision: a classmate's questions join your revision queue, merged by content and labelled with the course they came from.</p></div>
-      <div class="road-row"><span class="v">v5.4</span><p>The marking scheme, learned: a paper marked criterion by criterion against the scheme you supplied, with the material you missed named.</p></div>
-      <div class="road-row"><span class="v">v5.5</span><p>Answers that cite the recording: a claim points at the lecture moment, and the chip plays it from there.</p></div>
-      <div class="road-row"><span class="v">v5.6</span><p>A timetable that starts the lecture: capture begins with the class and ends with the window.</p></div>
-      <div class="road-row"><span class="v">v5.7</span><p>A budget you can see: per-course and per-day token caps, enforced on the server and stated in the app.</p></div>
-      <div class="road-row"><span class="v">v5.8</span><p>A workspace you can carry: one archive, restorable on another instance, with documents stored once by hash.</p></div>
-      <div class="road-row"><span class="v">v5.9</span><p>The shared page, for everyone: keyboard, screen reader, print and right-to-left all reach a share.</p></div>
-      <div class="road-row"><span class="v">v6.0</span><p>The lecture, as a document: captures become a course reader whose every claim opens the page or moment it came from.</p></div>
+      <div class="road-row deferred"><span class="v">v5.2</span><p>A share that stays honest: a shared page says which revision it is, and the owner publishes a new one without changing its address.</p></div>
+      <div class="road-row deferred"><span class="v">v5.3</span><p>Group revision: a classmate's questions join your revision queue, merged by content and labelled with the course they came from.</p></div>
+      <div class="road-row deferred"><span class="v">v5.4</span><p>The marking scheme, learned: a paper marked criterion by criterion against the scheme you supplied, with the material you missed named.</p></div>
+      <div class="road-row deferred"><span class="v">v5.5</span><p>Answers that cite the recording: a claim points at the lecture moment, and the chip plays it from there.</p></div>
+      <div class="road-row deferred"><span class="v">v5.6</span><p>A timetable that starts the lecture: capture begins with the class and ends with the window.</p></div>
+      <div class="road-row deferred"><span class="v">v5.7</span><p>A budget you can see: per-course and per-day token caps, enforced on the server and stated in the app.</p></div>
+      <div class="road-row deferred"><span class="v">v5.8</span><p>A workspace you can carry: one archive, restorable on another instance, with documents stored once by hash.</p></div>
+      <div class="road-row deferred"><span class="v">v5.9</span><p>The shared page, for everyone: keyboard, screen reader, print and right-to-left all reach a share.</p></div>
+      <div class="road-row shipped"><span class="v">v6.0</span><p>The lecture, as a document: captures become a course reader whose every claim opens the page or moment it came from.</p></div>
       <div class="road-row"><span class="v">v6.1</span><p>Questions about the reader: a question maps to the section that answers it and cites the section as well as the page, and a question that spans two lectures says so and cites both.</p></div>
       <div class="road-row"><span class="v">v6.2</span><p>A question bank with shape: items built from the reader, past papers and what was marked wrong, deduplicated, each carrying the topic it tests and a difficulty learned from how it was answered.</p></div>
       <div class="road-row"><span class="v">v6.3</span><p>Uncertainty that means something: stated confidence is calibrated against the golden set, a claim below the calibrated threshold is labelled rather than hidden behind a bar, and the score is recorded per release.</p></div>

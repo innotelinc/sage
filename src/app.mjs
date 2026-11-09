@@ -11,6 +11,7 @@ import { openSession, closeSession, accepts, recordFrame, readNotes } from './br
 import { handleStore } from './store.mjs';
 import { handleIap } from './iap.mjs';
 import { handleSources } from './sources.mjs';
+import { buildReader } from './reader.mjs';
 import { publicPlans } from './plans.mjs';
 import { synthesize, ttsConfig } from './tts.mjs';
 
@@ -705,6 +706,22 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
   }
 
   // Buying a session happens in the app now; the payment itself stays Magnate's.
+  // The course reader: assembled from what was captured, with every block keeping
+  // the page or the moment it came from. Pure and read-only, so it writes nothing and
+  // needs no origin check; it echoes only the course it was handed.
+  if (url.pathname === '/api/reader' && request.method === 'POST') {
+    let body = null;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: 'bad_json', message: 'Body must be JSON.' }, 400);
+    }
+    if (!body || typeof body !== 'object' || !body.course) {
+      return json({ error: 'bad_course', message: 'A reader needs a course.' }, 400);
+    }
+    return json(buildReader({ course: body.course, edits: body.edits }));
+  }
+
   if (url.pathname === '/api/store/checkout') {
     return handleStore(request, url, cfg, json, { ip: clientIp(request) });
   }

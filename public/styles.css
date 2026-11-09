@@ -1337,3 +1337,15 @@ dialog.sheet form {
 [dir='rtl'] code,
 [dir='rtl'] .cite-loc,
 [dir='rtl'] .cite-chip { direction: ltr; unicode-bidi: isolate; }
+
+/* The reader: one block per captured line, anchored under it. */
+.reader-sec { border-top: 1px solid var(--line, rgba(255, 255, 255, 0.08)); padding: 18px 0 6px; }
+.reader-sec h3 { margin: 0 0 10px; font-size: 1rem; }
+.reader-block { padding: 10px 0 12px; }
+.reader-kind { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; }
+.reader-text { margin: 4px 0 6px; white-space: pre-wrap; }
+.reader-anchors { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.reader-anchor { font-size: 0.72rem; opacity: 0.6; }
+.reader-tools { display: flex; gap: 6px; }
+.reader-edit { width: 100%; margin: 4px 0 6px; font: inherit; }
+.readonly-badge { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.6; }
