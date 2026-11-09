@@ -1,0 +1,116 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Warm paper, ink and brass: a coin cabinet rather than a dashboard. */
+  --color-bg: #f5f1e8;
+  --color-surface: #fffdf8;
+  --color-surface-2: #ece6d9;
+  --color-raised: #e3dbc9;
+  --color-line: #e6dfd1;
+  --color-line-strong: #d2c9b6;
+  --color-fg: #1a1712;
+  --color-muted: #6d675c;
+  --color-faint: #9b9384;
+  --color-accent: #96681f;
+  --color-accent-soft: #f6ecda;
+  --color-success: #2c6b4b;
+  --color-success-soft: #e4efe6;
+  --color-warning: #9c6a1a;
+  --color-warning-soft: #f8eeda;
+  --color-danger: #ac3a2a;
+  --color-danger-soft: #f9e6e1;
+
+  --radius-control: 14px;
+  --radius-card: 20px;
+  --radius-dialog: 24px;
+  --radius-tile: 12px;
+  --radius-bubble: 20px;
+
+  --shadow-card: 0 1px 2px rgb(26 23 18 / 0.04), 0 0 0 1px rgb(26 23 18 / 0.05);
+  --shadow-pop: 0 0 0 1px rgb(26 23 18 / 0.06), 0 12px 40px -12px rgb(26 23 18 / 0.25);
+  --shadow-dialog: 0 0 0 1px rgb(26 23 18 / 0.06), 0 30px 80px -20px rgb(26 23 18 / 0.35);
+  --shadow-coin: 0 18px 44px -24px rgb(26 23 18 / 0.4), 0 2px 6px -2px rgb(26 23 18 / 0.12);
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    corner-shape: squircle;
+    border-color: var(--color-line);
+  }
+  .round,
+  .round::before,
+  .round::after {
+    corner-shape: round;
+  }
+  html {
+    background: var(--color-bg);
+    color-scheme: light;
+    overscroll-behavior-y: none;
+  }
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 14.5px;
+    letter-spacing: -0.006em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+  }
+  :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+    outline-offset: 1px;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+@utility text-balance {
+  text-wrap: balance;
+}
+
+/* Museum-label capitals for field names and section headings. In the
+   components layer so colour utilities still win on the dark value card. */
+@layer components {
+  .label-caps {
+    color: var(--color-faint);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.13em;
+    line-height: 1.4;
+    text-transform: uppercase;
+  }
+}
+
+/* The table a coin is photographed on. */
+.coin-photo {
+  background:
+    radial-gradient(circle at 50% 34%, #fdf9ef 0%, #f1e9d8 58%, #e4dac5 100%);
+}

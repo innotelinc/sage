@@ -1,0 +1,12 @@
+node_modules
+dist
+# Generated locally by `npx cap add ios`; CI creates it on the macOS runner.
+ios
+.wrangler
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+.DS_Store
+*.log

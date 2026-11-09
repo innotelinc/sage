@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mintmark",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-29",
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  // Local development bindings. Freebuff Sites attaches the real DB binding on
+  // deploy (sites_add_storage).
+  //
+  // Local secrets come from `.env` (see .env.example): MINTMARK_API_KEY is the
+  // key for the OmniRoute gateway that reads the coin photos, and a key pasted
+  // into /admin is stored in D1 instead. Do not add a `.dev.vars` file; its
+  // presence stops Wrangler from reading `.env`.
+  "d1_databases": [
+    { "binding": "DB", "database_name": "mintmark", "database_id": "00000000-0000-0000-0000-000000000000" }
+  ],
+  "observability": { "enabled": true }
+}
