@@ -759,6 +759,13 @@ const cap = {
   deviceStream: null,
   keepRecordings: true,
   watchAudio: false,
+  // A device share can be opened before the other app has made a sound, so the
+  // run waits for the first audible window instead of giving up or transcribing
+  // silence into notes that say nothing.
+  heardSound: false,
+  listenWait: false,
+  soundWatch: null,
+  soundContext: null,
   restarting: false,
   audioChunks: [],
   audioStart: 0,
@@ -1032,7 +1039,9 @@ function startRecorder() {
     // Only a lecture is kept. Another app's audio is read and then dropped: it is
     // not ours to store, and the point is the text, not a copy of the book.
     if (cap.keepRecordings) keepAudio(blob, chunkStart);
-    if (blob.size > 3000) await transcribeBlob(blob);
+    // A device share opened before playback is a silent track: sending it would
+    // spend a request to learn that nothing was said, once every twelve seconds.
+    if (blob.size > 3000 && (cap.keepRecordings || cap.heardSound)) await transcribeBlob(blob);
     if (cap.listenOn && !transcribeBlocked) startRecorder();
   };
   rec.start();
@@ -1053,7 +1062,7 @@ function setListenMode(mode, options = {}) {
   if (note) {
     note.textContent =
       next === 'audiobook'
-        ? 'Audiobook: reads the sound another app is playing. No microphone, and nothing is kept as a recording.'
+        ? 'Press it first, then open the app and start the audio. Nothing is kept as a recording.'
         : 'Lecture: the microphone. Watch adds the screen and the sound that comes with it.';
   }
   if (changed && cap.listenOn && !options.quiet) {
@@ -1092,28 +1101,106 @@ async function startDeviceAudio() {
   const audio = stream.getAudioTracks();
   if (!audio.length) {
     stream.getTracks().forEach((track) => track.stop());
-    toast('That share carried no sound. Pick the tab or screen with “share audio” ticked.', 'error');
+    awaitNoteSound('That share carried no sound.');
     return;
   }
   // The picture was the price of the sound. Stop it before anything is drawn.
   stream.getVideoTracks().forEach((track) => track.stop());
-  cap.deviceStream = new MediaStream(audio);
+  adoptDeviceAudio(audio);
+  // The order matters, and it is the opposite of the obvious one: leaving SAGE to
+  // start the audiobook takes the audiobook to the background, so the sound has to
+  // begin after this run is already open and reading.
+  toast('Listening. Now open the app and start the audio — SAGE reads the first sound it hears.');
+}
+
+/* One adoption path for "the sound is now this stream", shared by reconnects. */
+function adoptDeviceAudio(tracks) {
+  cap.deviceStream = new MediaStream(tracks);
   cap.captureStream = cap.deviceStream;
   cap.keepRecordings = false;
   cap.listenOn = true;
+  cap.heardSound = false;
+  cap.listenWait = false;
+  const retry = $('btnListenRetry');
+  if (retry) retry.hidden = true;
   dropAudio();
-  cap.audioStart = Date.now();
-  audio[0].addEventListener('ended', () => {
+  cap.audioStart = cap.audioStart || Date.now();
+  tracks[0].addEventListener('ended', () => {
     if (!cap.listenOn) return;
     stopListening();
     toast('The other app stopped playing, so listening ended.');
   });
   startRecorder();
-  if (!cap.noteTimer) {
-    cap.noteTimer = setInterval(flushTranscript, Math.max(8, state.settings.noteIntervalSec) * 1000);
-  }
+  watchForSound();
   updateStatus();
-  toast('Listening to the other app — transcribed as it plays, nothing kept.');
+}
+
+/*
+ * The first audible window is what turns a silent share into the source being read.
+ * Until then nothing is sent for transcription, so opening this before playback costs
+ * one open stream rather than a stream of empty transcriptions.
+ */
+function watchForSound() {
+  clearInterval(cap.soundWatch);
+  cap.soundWatch = null;
+  try {
+    cap.soundContext?.close?.();
+  } catch {
+    /* already closed */
+  }
+  if (!cap.deviceStream || !(window.AudioContext || window.webkitAudioContext)) return;
+  let analyser;
+  try {
+    cap.soundContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = cap.soundContext.createMediaStreamSource(cap.deviceStream);
+    analyser = cap.soundContext.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+    cap.soundContext.resume?.();
+  } catch {
+    return;
+  }
+  const buffer = new Float32Array(analyser.fftSize);
+  cap.soundWatch = setInterval(() => {
+    if (!cap.deviceStream) {
+      clearInterval(cap.soundWatch);
+      return;
+    }
+    analyser.getFloatTimeDomainData(buffer);
+    let peak = 0;
+    for (const sample of buffer) {
+      const value = Math.abs(sample);
+      if (value > peak) peak = value;
+    }
+    if (peak < 0.012 || cap.heardSound) return;
+    cap.heardSound = true;
+    clearInterval(cap.soundWatch);
+    cap.soundWatch = null;
+    setListenState('reading the other app');
+    if (!cap.noteTimer) {
+      cap.noteTimer = setInterval(flushTranscript, Math.max(8, state.settings.noteIntervalSec) * 1000);
+    }
+    toast('Heard it — reading that source now.');
+  }, 400);
+}
+
+/* Waiting is a state, not a failure: the button that opens the share again is the way out. */
+function awaitNoteSound(message) {
+  cap.listenWait = true;
+  const retry = $('btnListenRetry');
+  if (retry) retry.hidden = false;
+  setListenState('waiting for sound');
+  toast(`${message} Press “Start listening again”, then start the audio in the other app.`, 'error');
+}
+
+function setListenState(text) {
+  const note = $('listenNote');
+  if (!note) return;
+  note.textContent = text
+    ? `${text} — ${cap.listenMode === 'audiobook' ? 'the other app’s audio' : 'the microphone'}.`
+    : cap.listenMode === 'audiobook'
+      ? 'Press it first, then open the app and start the audio. Nothing is kept as a recording.'
+      : 'Lecture: the microphone. Watch adds the screen and the sound that comes with it.';
 }
 
 /*
@@ -1127,6 +1214,9 @@ function attachWatchedAudio(tracks) {
   cap.deviceStream = new MediaStream(tracks);
   cap.captureStream = cap.deviceStream;
   cap.keepRecordings = false;
+  // Watch already carries the sound it needs from the first frame, so it does not
+  // wait for a level reading the way a share opened ahead of playback does.
+  cap.heardSound = true;
   cap.watchAudio = true;
   cap.listenOn = true;
   cap.audioStart = cap.audioStart || Date.now();
@@ -1203,6 +1293,18 @@ async function startListening() {
 
 function stopListening() {
   cap.listenOn = false;
+  clearInterval(cap.soundWatch);
+  cap.soundWatch = null;
+  cap.heardSound = false;
+  cap.listenWait = false;
+  try {
+    cap.soundContext?.close?.();
+  } catch {
+    /* already closed */
+  }
+  cap.soundContext = null;
+  const retry = $('btnListenRetry');
+  if (retry) retry.hidden = true;
   cap.audioStart = 0;
   try {
     cap.recog?.stop();
@@ -5209,6 +5311,25 @@ function bind() {
   });
   $('btnListenMode').onclick = () =>
     setListenMode(cap.listenMode === 'lecture' ? 'audiobook' : 'lecture');
+  $('btnListenRetry').onclick = () => {
+    cap.listenWait = false;
+    stopListening();
+    setTimeout(() => startListening(), 200);
+  };
+
+  // iOS and Android both freeze a page the moment another app is in front, and a
+  // capture that died while hidden must come back without the person hunting for
+  // the button again: on return, restart the recorder, or say the source is gone.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !cap.listenOn) return;
+    const track = cap.deviceStream?.getAudioTracks?.()[0];
+    if (cap.deviceStream && (!track || track.readyState === 'ended')) {
+      stopListening();
+      awaitNoteSound('The audio source stopped while SAGE was in the background.');
+      return;
+    }
+    if (cap.deviceStream && cap.recorder?.state !== 'recording') startRecorder();
+  });
   setListenMode(cap.listenMode, { quiet: true });
   $('courseRename')?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
