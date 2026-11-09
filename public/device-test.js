@@ -223,6 +223,21 @@ function boot() {
       body.appendChild(tr);
     }
     $('report').value = summariseReport(rows, facts);
+    // Kept so Settings can say what this device last answered without running the
+    // probes again — the page is the only place a capture can be asked for.
+    try {
+      const verdicts = {};
+      for (const path of PATHS) {
+        const row = rows.find((item) => item.path === path.id);
+        if (row) verdicts[path.id] = { status: row.status, detail: row.detail };
+      }
+      localStorage.setItem(
+        'sage.capture',
+        JSON.stringify({ at: Date.now(), verdicts, report: $('report').value })
+      );
+    } catch {
+      /* storage disabled: the report is still on screen */
+    }
   };
 
   const record = (path, status, detail, details = {}) => {

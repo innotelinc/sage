@@ -114,3 +114,8 @@ the app's WebView and again in Chrome, and press **Test both**. Each source gets
 Copy the report into `docs/` next to the device notes. It is the evidence that a Listen or
 Watch path is unavailable on a build because of the shell, rather than because of the code
 that ships.
+
+The page is also one click from **Settings → Capture test**, which repeats the last verdict
+it stored on this device ("the microphone (refused) unavailable on this device") instead of
+leaving the question open. The reader tab has a shortcut as well: press **R** anywhere the
+page is not a text field to open it.

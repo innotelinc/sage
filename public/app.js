@@ -3946,6 +3946,7 @@ function openSettings() {
   if ($('buyStatus')) $('buyStatus').textContent = '';
   loadStore();
   syncKeyReset();
+  renderCaptureNote();
   $('settingsDialog').showModal();
 }
 
@@ -4542,6 +4543,36 @@ function openTab(name) {
     document.getElementById(`tab-${name}`)?.focus({ preventScroll: true });
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/*
+ * The capture test is the only place a device can be asked what it can hear — the
+ * microphone, another app's audio, neither — so Settings reports its last answer
+ * instead of guessing, and links to the page that can produce a new one.
+ */
+function renderCaptureNote() {
+  const note = $('captureNote');
+  if (!note) return;
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem('sage.capture') || 'null');
+  } catch {
+    saved = null;
+  }
+  if (!saved?.verdicts) {
+    note.textContent =
+      'Not run on this device yet. The test asks the microphone and another app’s audio, and says which one this shell actually allows.';
+    return;
+  }
+  const names = { lecture: 'the microphone', audiobook: 'another app’s audio' };
+  const blocked = Object.entries(saved.verdicts)
+    .filter(([, value]) => value?.status !== 'allowed')
+    .map(([key, value]) => `${names[key] || key} (${value?.status || 'unknown'})`);
+  const at = new Date(saved.at || Date.now());
+  const stamp = Number.isNaN(at.getTime()) ? 'earlier' : at.toLocaleString();
+  note.textContent = blocked.length
+    ? `Last tested ${stamp}: ${blocked.join(', ')} unavailable on this device. Run it again after changing shell or phone.`
+    : `Last tested ${stamp}: both sources opened — the microphone and another app’s audio.`;
 }
 
 function offerScreenFallback() {
@@ -5147,6 +5178,22 @@ function bind() {
   $('btnResetKey').onclick = resetSavedKey;
   $('nav-review')?.addEventListener('click', renderReview);
   $('nav-reader')?.addEventListener('click', renderReader);
+
+  // R opens the reader from anywhere — the tab is where the was material turns into
+  // something readable, and reaching for the nav to get there is a needless step.
+  // A field or an open dialog keeps the keystroke: typing an R is not a command.
+  document.addEventListener('keydown', (event) => {
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.key !== 'r' && event.key !== 'R') return;
+    const target = event.target;
+    const tag = String(target?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) return;
+    if (document.querySelector('dialog[open]')) return;
+    event.preventDefault();
+    openTab('reader');
+    renderReader();
+    toast('Reader — sections, definitions and the lecture moment each one came from.');
+  });
   $('btnReaderBuild').onclick = renderReader;
   $('btnRenameCourse').onclick = renameCourse;
   $('btnRedeemGrant').onclick = redeemGrantCode;
