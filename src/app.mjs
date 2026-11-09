@@ -692,7 +692,13 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
 
   // App Store purchases: Apple's rules put the payment inside the app, so the
   // verification and the minting live here, behind the same gate as a checkout.
-  if (url.pathname === '/api/iap/config' || url.pathname === '/api/iap/purchase') {
+  // The grant route lives beside the purchase route because it mints through the same
+  // service; the path has to be listed here or it never reaches the handler.
+  if (
+    url.pathname === '/api/iap/config' ||
+    url.pathname === '/api/iap/purchase' ||
+    url.pathname === '/api/iap/grant'
+  ) {
     // The address travels with the purchase: a trial is once per person *and* once
     // per connection, and only this side knows what the connection was.
     return handleIap(request, url, env, json, { ip: clientIp(request) });
