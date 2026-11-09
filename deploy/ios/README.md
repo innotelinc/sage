@@ -90,6 +90,15 @@ otherwise valid request. `gh workflow run asc-iap.yml -f iap_status=true` prints
 product's state, price coverage and submission, and names that refusal explicitly when
 Apple gives it — which is as close as a machine can get to reading the tab.
 
+### The release check
+
+`gh workflow run asc-iap.yml -f release_check=true` fails when the build attached to the
+version Apple would take is older than the newest valid build for that version string.
+That is the failure mode a version's build relationship creates: a fresh upload appears in
+TestFlight and the App Store record keeps the previous binary, so a submission reviews code
+nobody can install. It also fails when no build is attached at all, and when there is no
+iOS version. Read-only — it never attaches anything, it names the fix instead.
+
 Server configuration (without a mint endpoint the app keeps the store page and no
 purchase can happen):
 

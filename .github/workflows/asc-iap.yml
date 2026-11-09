@@ -17,6 +17,10 @@ on:
         description: Print each session product's state, version state and territory availability (read-only)
         type: boolean
         default: false
+      release_check:
+        description: Fail when the build attached to the version is older than the newest valid build (read-only)
+        type: boolean
+        default: false
       creative:
         description: Upload the header and search result creative into the asset library
         type: boolean
@@ -76,6 +80,7 @@ jobs:
           APP_STORE_CREATIVE: ${{ inputs.creative }}
           APP_STORE_PROBE: ${{ inputs.probe }}
           IAP_STATUS: ${{ inputs.iap_status }}
+          RELEASE_CHECK: ${{ inputs.release_check }}
           SAGE_SITE: https://sage.innotel.tech
           APP_STORE_SHOTS_PHONE: deploy/ios/store-phone
           APP_STORE_SHOTS: deploy/ios/store

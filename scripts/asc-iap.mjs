@@ -36,6 +36,7 @@ const SHOT_DIR = (process.env.APP_STORE_SHOTS || '').trim();
 const PROBE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_PROBE || ''));
 /** Read-only: print what the store holds for each session, then stop. */
 const IAP_STATUS = /^(1|true|yes)$/i.test(String(process.env.IAP_STATUS || ''));
+const RELEASE_CHECK = /^(1|true|yes)$/i.test(String(process.env.RELEASE_CHECK || ''));
 const SHOT_DIR_DUO = (process.env.APP_STORE_SHOTS_DUO || '').trim();
 /** Certificates are team-wide and capped, so they are handled before any app lookup. */
 const CERTS = String(process.env.CERTS || '').trim().toLowerCase();
@@ -679,6 +680,80 @@ async function newestBuild(app) {
     .sort((a, b) => b.version - a.version);
   console.log(`  valid builds: ${builds.map((build) => build.version).join(', ') || 'none'}`);
   return builds[0] || null;
+}
+
+/**
+ * The check that keeps a stale binary out of a submission.
+ *
+ * A version keeps the build it was first given, so a fresh upload lands in TestFlight
+ * and stays invisible to the App Store record until it is swapped in — which is how
+ * build 55 could have gone to review while build 56 sat valid and unnoticed. This
+ * compares what the version holds with the newest valid build for that same version
+ * string and exits non-zero when they differ, so it can gate a release rather than
+ * describe one.
+ */
+async function checkAttachedBuild(app) {
+  const versions = await call(
+    'GET',
+    `/v1/apps/${app}/appStoreVersions?limit=20&include=build&fields[appStoreVersions]=versionString,platform,appStoreState,build`
+  );
+  const rows = versions?.data || [];
+  const ios = rows.filter((row) => row.attributes?.platform === 'IOS');
+  const version =
+    ios.find((row) => row.attributes?.appStoreState === 'PREPARE_FOR_SUBMISSION') ||
+    ios.find((row) => /REVIEW|WAITING|PENDING/.test(String(row.attributes?.appStoreState || ''))) ||
+    ios[0];
+  if (!version) {
+    console.error('  release check · FAILED — there is no iOS version to submit');
+    return false;
+  }
+  const label = version.attributes?.versionString;
+  const attachedId = version.relationships?.build?.data?.id;
+  const attached = attachedId
+    ? (versions.included || []).find((item) => item.type === 'builds' && item.id === attachedId)
+    : null;
+
+  const list = await call(
+    'GET',
+    `/v1/apps/${app}/builds?limit=50&include=preReleaseVersion&fields[builds]=version,processingState,expired&fields[preReleaseVersions]=version,platform`
+  );
+  const releases = new Map(
+    (list?.included || [])
+      .filter((item) => item.type === 'preReleaseVersions')
+      .map((item) => [item.id, item.attributes?.version])
+  );
+  // A 1.1 upload is not a candidate for a 1.0 version: the store refuses that pair, so
+  // comparing across version strings would fail the check for something it cannot fix.
+  const valid = (list?.data || [])
+    .filter((build) => build.attributes?.processingState === 'VALID' && !build.attributes?.expired)
+    .map((build) => ({
+      id: build.id,
+      version: Number(build.attributes?.version),
+      release: releases.get(build.relationships?.preReleaseVersion?.data?.id),
+    }))
+    .filter(
+      (build) => Number.isFinite(build.version) && (!build.release || build.release === label)
+    )
+    .sort((a, b) => b.version - a.version);
+
+  const newest = valid[0];
+  const held = Number(attached?.attributes?.version);
+  console.log(`  release check · ${label} holds build ${Number.isFinite(held) ? held : 'none'}`);
+  console.log(`  release check · newest valid build for ${label} is ${newest?.version ?? 'none'}`);
+  if (!attached) {
+    console.error(`  release check · FAILED — ${label} has no build, so a submission would be refused`);
+    console.error('  release check · fix · gh workflow run asc-iap.yml -f attach=true');
+    return false;
+  }
+  if (newest && newest.id !== attached.id && newest.version > held) {
+    console.error(
+      `  release check · FAILED — build ${held} would ship while build ${newest.version} is valid and unattached`
+    );
+    console.error('  release check · fix · gh workflow run asc-iap.yml -f attach=true');
+    return false;
+  }
+  console.log('  release check · ok — the attached build is the newest valid one');
+  return true;
 }
 
 /**
@@ -1646,6 +1721,7 @@ const app = await resolveAppId().catch((error) => {
 });
 console.log(`App ${BUNDLE} (${app}) · base territory ${TERRITORY}`);
 await report(app);
+if (RELEASE_CHECK) process.exit((await checkAttachedBuild(app)) ? 0 : 1);
 if (WITHDRAW) await withdrawReview(app);
 if (ATTACH) await attachVersion(app);
 if (LISTING) await ensureListing(app);
