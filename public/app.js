@@ -3837,7 +3837,7 @@ async function micCheck() {
    decision is made. The checkout is started by our own server so the browser
    never needs CORS access to a billing origin, and the receipt page opens this
    app at #claim=<code>, which installs the key with no copying. */
-const store = { plans: [], slug: '', page: '', minutes: 15, iap: null, applePrices: {} };
+const store = { plans: [], slug: '', page: '', minutes: 15, iap: null, applePrices: {}, iapAsked: [], iapError: '' };
 
 function chosenPlan() {
   return store.plans.find((plan) => plan.slug === store.slug) || store.plans[0] || null;
@@ -3873,9 +3873,16 @@ async function loadStore() {
     // The App Store is the price list the phone is charged against, so on iOS
     // the numbers above the buttons are StoreKit's own, never Magnate's.
     store.applePrices = {};
+    store.iapAsked = [];
+    store.iapError = '';
     if (store.iap && NATIVE_STORE) {
       const ids = store.iap.products.map((product) => product.productId);
-      const priced = await NATIVE_STORE.products({ ids }).catch(() => null);
+      store.iapAsked = ids;
+      const priced = await NATIVE_STORE.products({ ids }).catch((error) => {
+        store.iapError = 'The plugin answered with an error: ' + (error?.message || error) + '.';
+        return null;
+      });
+      if (!priced && !store.iapError) store.iapError = 'The plugin answered with nothing at all.';
       for (const product of priced?.products || []) {
         if (product?.productId && product?.price) store.applePrices[product.productId] = product.price;
       }
@@ -3888,11 +3895,57 @@ async function loadStore() {
   renderStore();
 }
 
+/* What StoreKit actually answered, named on the device. An empty list is StoreKit's
+   quiet answer for a product it will not sell, and it looks like a dead button: the
+   ids asked for and the count that came back belong in the panel, not only in the
+   moment a purchase is attempted. */
+function renderIapDiag() {
+  const host = $('iapDiag');
+  if (!host) return;
+  if (!IOS_APP) {
+    host.hidden = true;
+    host.textContent = '';
+    return;
+  }
+  const asked = store.iapAsked || [];
+  const answered = Object.entries(store.applePrices || {});
+  let line;
+  if (!store.iap) {
+    line = 'The server is not offering App Store sessions right now, so StoreKit was asked for no products.';
+  } else if (!NATIVE_STORE) {
+    line = 'The App Store plugin did not load in this build, so no product could be requested.';
+  } else if (!asked.length) {
+    line = 'The server listed no product ids, so there was nothing to ask the App Store for.';
+  } else if (!answered.length) {
+    line =
+      'StoreKit was asked for ' +
+      asked.length +
+      ' product' +
+      (asked.length === 1 ? '' : 's') +
+      ' (' +
+      asked.join(', ') +
+      ') and returned none, so there is nothing to price or charge.' +
+      (store.iapError ? ' ' + store.iapError : '');
+  } else {
+    line =
+      'StoreKit returned ' +
+      answered.length +
+      ' of ' +
+      asked.length +
+      ': ' +
+      answered.map(([id, price]) => id + ' ' + price).join(', ') +
+      '.';
+  }
+  host.hidden = false;
+  host.textContent = line;
+}
+
 function renderStore() {
   const host = $('storePlans');
   if (!host) return;
   host.innerHTML = '';
   syncSetupBuy();
+  renderIapDiag();
   const note = $('storeNote');
   const buy = $('btnBuy');
   const page = $('btnStorePage');
