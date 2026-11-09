@@ -219,6 +219,11 @@ function focusCurrentField() {
 const typingIn = (el) =>
   !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
 
+/* The digits follow the rail, except that the reader takes 7 — that is the key people
+   reach for, and Review is left to R, which is where a letter belongs. A tenth tab has
+   no digit left, so Search takes the 0. */
+const NUMBERED_TABS = ['live', 'answer', 'quiz', 'exam', 'essay', 'read', 'reader', 'foundation', 'memory', 'search'];
+
 document.addEventListener('keydown', (event) => {
   const key = event.key;
 
@@ -236,14 +241,13 @@ document.addEventListener('keydown', (event) => {
   if (typingIn(event.target) || document.querySelector('dialog[open]:not(#palette)')) return;
 
   const index = Number(key);
-  if (index >= 1 && index <= TABS.length) {
+  if (index >= 1 && index <= 9) {
     event.preventDefault();
-    return openTab(TABS[index - 1].id);
+    return openTab(NUMBERED_TABS[index - 1]);
   }
-  // A tenth tab has no digit left, so it takes the one under the nine.
-  if (key === '0' && TABS.length >= 10) {
+  if (key === '0') {
     event.preventDefault();
-    return openTab(TABS[9].id);
+    return openTab(NUMBERED_TABS[9]);
   }
   if (key === '/') {
     event.preventDefault();

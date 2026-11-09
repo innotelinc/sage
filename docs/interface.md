@@ -34,10 +34,11 @@ live and success state. Neutral surfaces, radii and type follow the reference.
 - **Command palette** — `⌘K` / `Ctrl K`, or the *Command* button in the rail.
   Jumps to any tab and runs the real actions: study mode, stop capture, sync,
   evolve, study pack, revision sheet, settings, theme.
-- **Keyboard** — `1`–`6` switch tabs, `/` focuses the current tab's field, `s`
-  toggles study mode, `.` stops all capture, `t` cycles the theme, `?` opens the
-  shortcut sheet. All of it is suppressed while you are typing in a field or
-  while a dialog is open, except `⌘K`.
+- **Keyboard** — `1`–`9` switch tabs (`7` is the reader, `8` Foundation, `9`
+  Memory), `R` opens Review, `/` focuses the current tab's field, `s` toggles
+  study mode, `.` stops all capture, `t` cycles the theme, `?` opens the shortcut
+  sheet. All of it is suppressed while you are typing in a field or while a
+  dialog is open, except `⌘K`.
 - **Theme** — auto / dark / light, persisted in `localStorage` under
   `sage.shell.v1`, painted before first paint so there is no flash, and
   re-applied when the OS preference changes.

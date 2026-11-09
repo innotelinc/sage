@@ -134,5 +134,5 @@ that ships.
 
 The page is also one click from **Settings → Capture test**, which repeats the last verdict
 it stored on this device ("the microphone (refused) unavailable on this device") instead of
-leaving the question open. The reader tab has a shortcut as well: press **R** anywhere the
-page is not a text field to open it.
+leaving the question open. The reader tab has a shortcut as well: press **7** anywhere the
+page is not a text field to open it, and **R** to open Review.

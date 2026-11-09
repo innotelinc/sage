@@ -5359,23 +5359,33 @@ function bind() {
   $('nav-review')?.addEventListener('click', renderReview);
   $('nav-reader')?.addEventListener('click', renderReader);
 
-  // R opens the reader from anywhere — the tab is where the was material turns into
-  // something readable, and reaching for the nav to get there is a needless step.
-  // A field or an open dialog keeps the keystroke: typing an R is not a command.
+  // Two shortcuts, one keystroke each: 7 opens the reader — the tab where the material
+  // turns into something readable — and R opens Review, the queue of what is due. A
+  // field or an open dialog keeps the keystroke: typing either is not a command.
   document.addEventListener('keydown', (event) => {
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
-    if (event.key !== 'r' && event.key !== 'R') return;
     const target = event.target;
     const tag = String(target?.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) return;
     if (document.querySelector('dialog[open]')) return;
-    event.preventDefault();
-    openTab('reader');
-    renderReader();
-    // The address is how a tab is remembered across a reload, so opening one from the
-    // keyboard has to say so there too, not just in the panel.
-    if (location.hash !== '#reader') history.replaceState(null, '', '#reader');
-    toast('Reader — sections, definitions and the lecture moment each one came from.');
+    const key = String(event.key || '').toLowerCase();
+    if (key === '7') {
+      event.preventDefault();
+      openTab('reader');
+      renderReader();
+      // The address is how a tab is remembered across a reload, so opening one from the
+      // keyboard has to say so there too, not just in the panel.
+      if (location.hash !== '#reader') history.replaceState(null, '', '#reader');
+      toast('Reader — sections, definitions and the lecture moment each one came from.');
+      return;
+    }
+    if (key === 'r') {
+      event.preventDefault();
+      openTab('review');
+      renderReview();
+      if (location.hash !== '#review') history.replaceState(null, '', '#review');
+      toast('Review — what is due, and what you have already answered.');
+    }
   });
   $('btnReaderBuild').onclick = renderReader;
   $('btnRenameCourse').onclick = renameCourse;
