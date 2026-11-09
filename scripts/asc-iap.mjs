@@ -1804,40 +1804,52 @@ async function ensureBundleId(identifier) {
 }
 
 async function ensureAppStoreProfile(bundleIdId, identifier, certificateId) {
-  const list = await call(
-    'GET',
-    '/v1/profiles?limit=200&fields[profiles]=name,profileType,profileState,uuid,expirationDate,profileContent'
-  );
-  const mine = (list?.data || []).filter(
-    (profile) =>
-      profile.relationships?.bundleId?.data?.id === bundleIdId &&
-      String(profile.attributes?.profileType || '') === 'IOS_APP_STORE'
-  );
-  const week = 7 * 24 * 60 * 60 * 1000;
-  const usable = mine.find(
-    (profile) =>
-      String(profile.attributes?.profileState || '') === 'ACTIVE' &&
-      new Date(profile.attributes?.expirationDate || 0).getTime() > Date.now() + week
-  );
-  if (usable) {
-    console.log(`  profile · reusing ${usable.attributes?.name} for ${identifier}`);
-    return usable;
+  // Any live profile for this bundle id will do: the team has one distribution
+  // certificate, so its contents cannot differ between profiles. Apple refuses a
+  // second profile with the same name, so creation is the fallback, not the norm.
+  const reuse = async () => {
+    const list = await call('GET', '/v1/profiles?limit=200');
+    const mine = (list?.data || []).filter(
+      (profile) =>
+        profile.relationships?.bundleId?.data?.id === bundleIdId &&
+        String(profile.attributes?.profileType || '') === 'IOS_APP_STORE'
+    );
+    return mine.find((profile) => String(profile.attributes?.profileState || 'ACTIVE') !== 'INVALID') || null;
+  };
+
+  const existing = await reuse();
+  if (existing) {
+    console.log(`  profile · reusing ${existing.attributes?.name} for ${identifier}`);
+    return existing;
   }
-  const created = await call('POST', '/v1/profiles', {
-    data: {
-      type: 'profiles',
-      attributes: {
-        name: `Sage App Store ${identifier}`,
-        profileType: 'IOS_APP_STORE',
+
+  try {
+    const created = await call('POST', '/v1/profiles', {
+      data: {
+        type: 'profiles',
+        attributes: {
+          name: `Sage App Store ${identifier}`,
+          profileType: 'IOS_APP_STORE',
+        },
+        relationships: {
+          bundleId: { data: { type: 'bundleIds', id: bundleIdId } },
+          certificates: { data: [{ type: 'certificates', id: certificateId }] },
+        },
       },
-      relationships: {
-        bundleId: { data: { type: 'bundleIds', id: bundleIdId } },
-        certificates: { data: [{ type: 'certificates', id: certificateId }] },
-      },
-    },
-  });
-  console.log(`  profile · created ${created.data.attributes?.name} for ${identifier}`);
-  return created.data;
+    });
+    console.log(`  profile · created ${created.data.attributes?.name} for ${identifier}`);
+    return created.data;
+  } catch (error) {
+    // A profile made seconds ago by another run is a race, not a failure.
+    if (error.status === 409 || /409/.test(String(error.message))) {
+      const raced = await reuse();
+      if (raced) {
+        console.log(`  profile · reusing ${raced.attributes?.name} for ${identifier} after a 409`);
+        return raced;
+      }
+    }
+    throw error;
+  }
 }
 
 /**
