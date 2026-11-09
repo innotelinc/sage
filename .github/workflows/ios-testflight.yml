@@ -190,9 +190,11 @@ jobs:
           fi
           echo "building with $CONTAINER"
           # Manual when the profiles exist, so Xcode signs with the distribution
-          # certificate already in the keychain and asks Apple for nothing.
-          if [ -n "$APP_PROFILE_UUID" ]; then SIGN_STYLE=Manual; else SIGN_STYLE=Automatic; fi
-          echo "signing style: $SIGN_STYLE · app ${APP_PROFILE_UUID:-none} · extension ${EXT_PROFILE_UUID:-none}"
+          # certificate already in the keychain and asks Apple for nothing. The file
+          # is the source of truth: every target has to be pinned, or automatic
+          # signing re-enters and mints a certificate for the one that is not.
+          SIGN_STYLE=$(node -e "try{const j=require('./.ios-signing.json');process.stdout.write(j.app&&j.extension?'Manual':'Automatic')}catch{process.stdout.write('Automatic')}")
+          echo "signing style: $SIGN_STYLE · $(cat .ios-signing.json 2>/dev/null | tr -d '\n ' || echo 'no profiles file')"
           xcodebuild \
             $CONTAINER \
             -scheme App \

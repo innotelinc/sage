@@ -55,8 +55,15 @@ app.source_build_phase.add_file_reference(audio)
 # asks the API for an App Store profile per bundle id and passes its UUID here, so the
 # archive signs with the single distribution certificate already in the keychain and
 # mints nothing. Without the UUIDs — a local run — it falls back to automatic.
-app_profile = ENV['APP_PROFILE_UUID'].to_s
-ext_profile = ENV['EXT_PROFILE_UUID'].to_s
+# The UUIDs arrive in a small file as well as the environment: an env-file entry that
+# is appended without a leading newline is swallowed, and the archive then signs one
+# target manually and the other automatically.
+require 'json'
+signing_file = ENV['IOS_SIGNING_FILE'] || '.ios-signing.json'
+recorded = File.exist?(signing_file) ? (JSON.parse(File.read(signing_file)) rescue {}) : {}
+app_profile = (ENV['APP_PROFILE_UUID'] || recorded['app']).to_s
+ext_profile = (ENV['EXT_PROFILE_UUID'] || recorded['extension']).to_s
+puts "profiles from #{signing_file}: app #{app_profile.empty? ? 'none' : app_profile}, extension #{ext_profile.empty? ? 'none' : ext_profile}"
 signing = lambda do |profile|
   if profile.empty?
     { 'CODE_SIGN_STYLE' => 'Automatic', 'DEVELOPMENT_TEAM' => team }

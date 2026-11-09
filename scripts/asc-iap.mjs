@@ -1774,15 +1774,19 @@ async function handleProfiles(mode) {
     exported[identifier === BUNDLE ? 'APP_PROFILE_UUID' : 'EXT_PROFILE_UUID'] = uuid;
     console.log(`  profiles · ${identifier} · ${profile.attributes?.name} · ${uuid}`);
   }
+  // A file, not $GITHUB_ENV: the env file is shared with every other step and a
+  // missing newline on the last entry silently swallows the first variable — which
+  // is exactly how build 66 signed the app automatically and the extension manually.
+  const file = process.env.IOS_SIGNING_FILE || '.ios-signing.json';
+  const record = { app: exported.APP_PROFILE_UUID || '', extension: exported.EXT_PROFILE_UUID || '' };
+  await writeFile(file, `${JSON.stringify(record, null, 2)}\n`);
   const lines = Object.entries(exported)
     .map(([name, value]) => `${name}=${value}`)
     .join('\n');
   if (process.env.GITHUB_ENV) {
-    await appendFile(process.env.GITHUB_ENV, `${lines}\n`);
-    console.log('  profiles · exported for the archive step');
-  } else {
-    console.log(lines);
+    await appendFile(process.env.GITHUB_ENV, `\n${lines}\n`);
   }
+  console.log(`  profiles · wrote ${file} · app ${record.app || 'none'} · extension ${record.extension || 'none'}`);
 }
 
 async function ensureBundleId(identifier) {
