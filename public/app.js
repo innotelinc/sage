@@ -5192,6 +5192,9 @@ function bind() {
     event.preventDefault();
     openTab('reader');
     renderReader();
+    // The address is how a tab is remembered across a reload, so opening one from the
+    // keyboard has to say so there too, not just in the panel.
+    if (location.hash !== '#reader') history.replaceState(null, '', '#reader');
     toast('Reader — sections, definitions and the lecture moment each one came from.');
   });
   $('btnReaderBuild').onclick = renderReader;
