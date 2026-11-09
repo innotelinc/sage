@@ -713,14 +713,27 @@ async function checkAttachedBuild(app) {
     ? (versions.included || []).find((item) => item.type === 'builds' && item.id === attachedId)
     : null;
 
-  // No fields[] here: Apple answers 400 PARAMETER_ERROR.ILLEGAL when a sparse fieldset
-  // is combined with include on this endpoint.
-  const list = await call('GET', `/v1/apps/${app}/builds?limit=50&include=preReleaseVersion`);
-  const releases = new Map(
-    (list?.included || [])
-      .filter((item) => item.type === 'preReleaseVersions')
-      .map((item) => [item.id, item.attributes?.version])
+  // The builds endpoint refuses include outright (400 PARAMETER_ERROR.ILLEGAL), so the
+  // build → version-string mapping comes from preReleaseVersions, which does support it.
+  const list = await call(
+    'GET',
+    `/v1/apps/${app}/builds?limit=50&fields[builds]=version,processingState,expired`
   );
+  const releases = new Map();
+  try {
+    const groups = await call(
+      'GET',
+      `/v1/preReleaseVersions?filter[app]=${app}&filter[platform]=IOS&limit=50&include=builds`
+    );
+    for (const group of groups?.data || []) {
+      for (const ref of group.relationships?.builds?.data || []) {
+        releases.set(ref.id, group.attributes?.version);
+      }
+    }
+  } catch {
+    // Unknown mapping is not a reason to fail the check; the newest valid build is
+    // then compared directly, which is right whenever the app has one version string.
+  }
   // A 1.1 upload is not a candidate for a 1.0 version: the store refuses that pair, so
   // comparing across version strings would fail the check for something it cannot fix.
   const valid = (list?.data || [])
@@ -728,7 +741,7 @@ async function checkAttachedBuild(app) {
     .map((build) => ({
       id: build.id,
       version: Number(build.attributes?.version),
-      release: releases.get(build.relationships?.preReleaseVersion?.data?.id),
+      release: releases.get(build.id),
     }))
     .filter(
       (build) => Number.isFinite(build.version) && (!build.release || build.release === label)
