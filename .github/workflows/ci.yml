@@ -59,3 +59,19 @@ jobs:
       # regression before a release tag.
       - name: The golden set does not regress
         run: node scripts/golden.mjs
+
+  reader:
+    name: The reader keeps its anchors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # 6.0 is logic, not presentation: an anchor naming a document the course does
+      # not hold, or an edit that overwrites the capture it sits beside, has to fail
+      # here rather than on the page.
+      - name: Anchors, sections and edits
+        run: node scripts/test-reader.mjs
+      - name: The session products still price correctly
+        run: node scripts/test-iap.mjs
