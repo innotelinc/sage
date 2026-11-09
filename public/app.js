@@ -1121,14 +1121,22 @@ function adoptDeviceAudio(tracks) {
   cap.listenOn = true;
   cap.heardSound = false;
   cap.listenWait = false;
+  cap.sourceLost = false;
+  cap.quietSince = 0;
   const retry = $('btnListenRetry');
   if (retry) retry.hidden = true;
   dropAudio();
   cap.audioStart = cap.audioStart || Date.now();
-  tracks[0].addEventListener('ended', () => {
-    if (!cap.listenOn) return;
-    stopListening();
-    toast('The other app stopped playing, so listening ended.');
+  // A system-audio share can lose one track and hand over another when the audio app
+  // restarts, and it can hand over a fresh track on the same stream. Follow it rather
+  // than ending the run, and stay armed when the whole stream dies so a returning
+  // track is taken up on sight instead of needing a tap.
+  cap.deviceStream.getAudioTracks().forEach((track) => {
+    track.addEventListener('ended', onDeviceTrackEnded);
+  });
+  cap.deviceStream.addEventListener('addtrack', () => {
+    const live = cap.deviceStream ? cap.deviceStream.getAudioTracks().filter((t) => t.readyState === 'live') : [];
+    if (cap.listenOn && live.length) adoptDeviceAudio(live);
   });
   startRecorder();
   watchForSound();
@@ -1161,9 +1169,14 @@ function watchForSound() {
     return;
   }
   const buffer = new Float32Array(analyser.fftSize);
+  // The monitor stays for the whole run: sound arriving, stopping at the end of a
+  // chapter and arriving again is one session, and only the first of those is a
+  // decision the person made. Silence past QUIET_GRACE stops the requests; the next
+  // sound starts them again without a tap.
   cap.soundWatch = setInterval(() => {
-    if (!cap.deviceStream) {
+    if (!cap.listenOn || !cap.deviceStream) {
       clearInterval(cap.soundWatch);
+      cap.soundWatch = null;
       return;
     }
     analyser.getFloatTimeDomainData(buffer);
@@ -1172,16 +1185,78 @@ function watchForSound() {
       const value = Math.abs(sample);
       if (value > peak) peak = value;
     }
-    if (peak < 0.012 || cap.heardSound) return;
-    cap.heardSound = true;
-    clearInterval(cap.soundWatch);
-    cap.soundWatch = null;
-    setListenState('reading the other app');
-    if (!cap.noteTimer) {
-      cap.noteTimer = setInterval(flushTranscript, Math.max(8, state.settings.noteIntervalSec) * 1000);
+    if (peak >= AUDIBLE_PEAK) {
+      cap.quietSince = 0;
+      if (cap.heardSound) return;
+      // The recorder has been running throughout, so its next chunk carries the
+      // first words after the gap as well: nothing is lost by having waited.
+      cap.heardSound = true;
+      cap.listenWait = false;
+      const retry = $('btnListenRetry');
+      if (retry) retry.hidden = true;
+      setListenState('reading the other app');
+      ensureNoteTimer();
+      if (!cap.heardOnce) {
+        cap.heardOnce = true;
+        toast('Heard it — reading that source now.');
+      } else {
+        toast('The sound is back — reading it again.');
+      }
+      return;
     }
-    toast('Heard it — reading that source now.');
+    if (!cap.heardSound) return;
+    cap.quietSince = cap.quietSince || Date.now();
+    if (Date.now() - cap.quietSince < QUIET_GRACE) return;
+    cap.heardSound = false;
+    cap.quietSince = 0;
+    setListenState('waiting for the sound to come back');
   }, 400);
+}
+
+// How loud a window has to be before it counts as the source playing rather than
+// room noise. A share's silent track sits far below this.
+const AUDIBLE_PEAK = 0.012;
+// A chapter break is not the end of the book: this long below the threshold, then
+// waiting, is what keeps an idle stream from spending a request every twelve seconds.
+const QUIET_GRACE = 15000;
+
+function ensureNoteTimer() {
+  if (!cap.noteTimer) {
+    cap.noteTimer = setInterval(flushTranscript, Math.max(8, state.settings.noteIntervalSec) * 1000);
+  }
+}
+
+/* The stream outlived the track: follow whatever audio is still live. */
+function onDeviceTrackEnded() {
+  if (!cap.listenOn) return;
+  const live = (cap.deviceStream?.getAudioTracks?.() || []).filter((track) => track.readyState === 'live');
+  if (live.length) {
+    adoptDeviceAudio(live);
+    return;
+  }
+  markSourceLost();
+}
+
+/*
+ * Nothing to read, but nothing to tear down either. The run stays on so the next
+ * track — or the next sound on the same one — is taken up by itself; the button is
+ * there for the case where the share itself is gone and only a new request can help.
+ */
+function markSourceLost() {
+  if (!cap.listenOn || cap.sourceLost) return;
+  cap.sourceLost = true;
+  cap.heardSound = false;
+  clearTimeout(cap.recTimer);
+  try {
+    if (cap.recorder?.state === 'recording') cap.recorder.stop();
+  } catch {
+    /* ignore */
+  }
+  cap.recorder = null;
+  setListenState('the source stopped');
+  const retry = $('btnListenRetry');
+  if (retry) retry.hidden = false;
+  toast('The other app stopped. Listening is still on — SAGE takes the sound up again when it returns.', 'error');
 }
 
 /* Waiting is a state, not a failure: the button that opens the share again is the way out. */
@@ -1297,6 +1372,9 @@ function stopListening() {
   cap.soundWatch = null;
   cap.heardSound = false;
   cap.listenWait = false;
+  cap.sourceLost = false;
+  cap.quietSince = 0;
+  cap.heardOnce = false;
   try {
     cap.soundContext?.close?.();
   } catch {
@@ -5322,13 +5400,16 @@ function bind() {
   // the button again: on return, restart the recorder, or say the source is gone.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || !cap.listenOn) return;
-    const track = cap.deviceStream?.getAudioTracks?.()[0];
-    if (cap.deviceStream && (!track || track.readyState === 'ended')) {
-      stopListening();
-      awaitNoteSound('The audio source stopped while SAGE was in the background.');
+    if (!cap.deviceStream) return;
+    const live = (cap.deviceStream.getAudioTracks?.() || []).filter((track) => track.readyState === 'live');
+    if (live.length) {
+      // The track survived the background trip, or came back with one: adopt it
+      // without asking, which is what makes leaving the app harmless.
+      if (cap.sourceLost) adoptDeviceAudio(live);
+      else if (cap.recorder?.state !== 'recording') startRecorder();
       return;
     }
-    if (cap.deviceStream && cap.recorder?.state !== 'recording') startRecorder();
+    markSourceLost();
   });
   setListenMode(cap.listenMode, { quiet: true });
   $('courseRename')?.addEventListener('keydown', (event) => {

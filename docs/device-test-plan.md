@@ -81,10 +81,22 @@ names the email and the address.
    (the `audio` background mode and the audio-session plugin are what this proves).
 3. **Watch** on the iPhone: iOS has no in-app screen capture, so the app offers the
    broadcast route. Start it, switch to another app, and confirm notes still arrive.
-4. Play audio in another app, then start Listen: the other app's audio does not stop.
+4. **Audiobook, the order that works**: switch Listen to `audiobook`, press it, answer the
+   share with the whole screen and **share audio**, then open the book and press play. The note
+   reads `reading the other app` within a second or two. Nothing is transcribed while the share
+   is silent, so pressing it early costs nothing.
+5. Pause the book for half a minute: the note goes to `waiting for the sound to come back` and
+   the transcript resumes by itself on the next chapter — no button.
+6. Kill the audio app and reopen it: SAGE follows the new track on the same share. If the share
+   itself died, `Start listening again` is the way back, and the run stays armed until then.
+7. Play audio in another app, then start Listen (lecture): the other app's audio does not stop.
 
-**Pass:** notes arrive with the screen locked and the app backgrounded, and audio from
-another app survives the microphone opening.
+**Pass:** notes arrive with the screen locked and the app backgrounded; the audiobook run
+starts before playback, waits through silence, and resumes on sound without a tap.
+
+Why iOS cannot simply hand SAGE another app's audio — and what a native bridge would look like
+if it could — is `docs/ios-audio-capture.md`. Item 4 is the only audiobook path on iPhone until
+that bridge exists.
 
 ## 5 · What to record for App Review
 
