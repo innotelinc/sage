@@ -1771,8 +1771,12 @@ async function handleProfiles(mode) {
       continue;
     }
     await writeFile(join(directory, `${uuid}.mobileprovision`), Buffer.from(content, 'base64'));
-    exported[identifier === BUNDLE ? 'APP_PROFILE_UUID' : 'EXT_PROFILE_UUID'] = uuid;
-    console.log(`  profiles · ${identifier} · ${profile.attributes?.name} · ${uuid}`);
+    // Keyed on the name, not on a comparison with APPLE_BUNDLE_ID: when that env
+    // var is absent both ids map to the same key, the last one wins, and the app
+    // target is left on automatic signing while the extension is pinned.
+    const slot = /\.broadcast$/.test(identifier) ? 'EXT_PROFILE_UUID' : 'APP_PROFILE_UUID';
+    exported[slot] = uuid;
+    console.log(`  profiles · ${identifier} · ${profile.attributes?.name} · ${slot} · ${uuid}`);
   }
   // A file, not $GITHUB_ENV: the env file is shared with every other step and a
   // missing newline on the last entry silently swallows the first variable — which
