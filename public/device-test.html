@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b0f19" />
+    <title>Capture test · Sage</title>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+      .probe-wrap { max-width: 820px; margin: 0 auto; padding: 20px 16px 64px; }
+      .probe-head { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
+      .probe-head a { color: var(--text); font-weight: 650; text-decoration: none; letter-spacing: 0.02em; }
+      .probe-lead { font-size: 13.5px; color: var(--muted); line-height: 1.65; margin: 0 0 16px; max-width: 68ch; }
+      .probe-lead b { color: var(--text); font-weight: 600; }
+      .probe-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+      .probe-actions .btn[disabled] { opacity: 0.55; }
+      .probe-facts { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px; color: var(--muted); margin-bottom: 18px; }
+      table.probe { width: 100%; border-collapse: collapse; font-size: 13px; }
+      table.probe th {
+        text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--muted); font-weight: 600; padding: 0 10px 8px 0; border-bottom: 1px solid var(--line);
+      }
+      table.probe td { padding: 12px 10px 12px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+      table.probe td:first-child { min-width: 42%; }
+      .state {
+        display: inline-block; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
+        padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted);
+        white-space: nowrap;
+      }
+      .state.allowed { color: #6ee7b7; border-color: rgba(110, 231, 183, 0.45); background: rgba(110, 231, 183, 0.1); }
+      .state.refused, .state.failed { color: #fca5a5; border-color: rgba(252, 165, 165, 0.4); background: rgba(252, 165, 165, 0.08); }
+      .state.unsupported, .state.no-device, .state.bad-constraints { color: #fcd34d; border-color: rgba(252, 211, 77, 0.4); background: rgba(252, 211, 77, 0.08); }
+      .state.cancelled, .state.untested { color: var(--muted); }
+      textarea#report {
+        width: 100%; min-height: 190px; resize: vertical; margin-top: 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; line-height: 1.6;
+        background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+        border-radius: var(--radius); padding: 12px 14px;
+      }
+      .probe-notes { margin: 22px 0 0; padding-left: 20px; font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+      .probe-notes b { color: var(--text); font-weight: 600; }
+      .probe-notes code { background: var(--panel-2); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="probe-wrap">
+      <div class="probe-head">
+        <span class="dot ok"></span>
+        <a href="/">SAGE</a>
+        <span class="tag">capture test</span>
+      </div>
+
+      <p class="probe-lead">
+        This page asks this device one question: <b>which of Listen’s two sources can it actually
+        open?</b> Press a button and answer the sheet. Each test reads about four seconds of sound,
+        measures it, encodes a two-second clip with the same recorder the app uses, then stops
+        everything and keeps nothing. No audio is uploaded.
+      </p>
+
+      <div class="probe-actions">
+        <button class="btn primary" id="runAll">Test both</button>
+        <button class="btn ghost" id="runLecture">Test the microphone</button>
+        <button class="btn ghost" id="runAudiobook">Test another app’s audio</button>
+      </div>
+      <div class="probe-facts" id="permissions">microphone permission: checking…</div>
+
+      <table class="probe">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Result</th>
+            <th>What happened</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+
+      <textarea id="report" readonly aria-label="Capture report"></textarea>
+      <div class="probe-actions" style="margin-top: 10px">
+        <button class="btn ghost small" id="copy">Copy the report</button>
+      </div>
+
+      <ol class="probe-notes">
+        <li>
+          <b>Lecture</b> needs a microphone. A green result with <code>peak=0</code> is the shell
+          agreeing and the room being silent, which is not a failure.
+        </li>
+        <li>
+          <b>Audiobook</b> needs <code>getDisplayMedia</code> with an audio track. Browsers grant it
+          from a share sheet: pick the tab or screen that is playing, and tick “share audio”.
+          A shell that returns video with no audio says so rather than passing silently.
+        </li>
+        <li>
+          <b>Refused</b> means the container said no — in the iOS app that is the WebView, not the
+          phone, so open this same page in Chrome on that phone to tell the two apart.
+        </li>
+        <li>
+          <b>Rejected the options</b> means the method exists and the arguments do not: the page
+          retries once with <code>{ video, audio }</code> alone and reports both answers.
+        </li>
+        <li>
+          The report at the bottom is plain text, so it can be pasted into an issue or a message
+          without the screenshot.
+        </li>
+      </ol>
+    </div>
+    <script type="module" src="/device-test.js"></script>
+  </body>
+</html>

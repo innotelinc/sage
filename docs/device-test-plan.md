@@ -97,3 +97,20 @@ One continuous take, no edits, under three minutes:
 
 Attach it in App Review → Messages straight after submitting, and say in the message which
 build it shows.
+
+## 0 · Run the capture test before anything else
+
+`https://sage.innotel.tech/device-test.html` — open it on the phone that will be tested, in
+the app's WebView and again in Chrome, and press **Test both**. Each source gets a verdict:
+
+- **allowed** — an audio track opened and two seconds encoded; `peak=0` with an allowed
+  microphone is a silent room, not a failure.
+- **refused** — the WebView said no. Rerun in Chrome on the same phone: if Chrome is allowed
+  and the shell is not, the difference is the container, and that is the finding to record.
+- **rejected the options** — the method exists but `systemAudio`/`audio` did not; the page
+  retries with `{ video, audio }` and prints both answers.
+- **unsupported** — no such method in this engine at all.
+
+Copy the report into `docs/` next to the device notes. It is the evidence that a Listen or
+Watch path is unavailable on a build because of the shell, rather than because of the code
+that ships.

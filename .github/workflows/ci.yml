@@ -79,3 +79,7 @@ jobs:
       # missing, so a forged, expired or replayed code has to fail here.
       - name: Session codes are signed, and refusable
         run: node scripts/test-grants.mjs
+      # The device page is how a shell gets told apart from a phone, so what it says
+      # about a refusal and a rejected option has to stay right.
+      - name: The capture test names what the shell did
+        run: node scripts/test-device-page.mjs
