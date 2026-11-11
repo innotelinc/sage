@@ -398,11 +398,11 @@
           <section class="panel" id="tab-read" role="tabpanel" aria-labelledby="nav-read" tabindex="-1">
             <div class="page-head">
               <h1>Read &amp; extract</h1>
-              <p class="page-sub">Drop in slides, screenshots, a phone screen recording, or paste a chapter. Video is sampled into frames.</p>
+              <p class="page-sub">Drop in a PDF, a Word file, slides, screenshots, a phone screen recording, or paste a chapter. Video is sampled into frames.</p>
             </div>
             <label class="file-btn block">
-              <input type="file" id="readFiles" accept="image/*,video/*,.txt,.md,.csv,.vtt,.srt" multiple hidden />
-              <span id="readFilesLabel">＋ files, photos, screen recording</span>
+              <input type="file" id="readFiles" accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.csv,.vtt,.srt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden />
+              <span id="readFilesLabel">＋ PDF, Word, photos, screen recording</span>
             </label>
             <div class="thumbs" id="readThumbs"></div>
             <p class="mini muted foundation-hint" id="readFoundationHint"></p>

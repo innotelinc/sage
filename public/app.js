@@ -3467,6 +3467,18 @@ async function writeEssay() {
 /* ── read tab ──────────────────────────────────────────────── */
 const readFiles = [];
 let autoProcessRead = false;
+
+/** A PDF or a Word file is compressed binary: read here it would arrive as noise,
+    so it goes through the same server-side unpacking the course material uses. */
+function isDocumentFile(file) {
+  if (/\.(pdf|doc|docx)$/i.test(String(file.name || ''))) return true;
+  return [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ].includes(String(file.type || '').toLowerCase());
+}
+
 async function onReadFiles(event) {
   const files = [...event.target.files];
   for (const file of files.slice(0, 6)) {
@@ -3475,13 +3487,31 @@ async function onReadFiles(event) {
     } else if (file.type.startsWith('video/')) {
       const frames = await sampleVideo(file, 6);
       frames.slice(0, 4).forEach((preview, i) => readFiles.push({ preview, name: `${file.name} · frame ${i + 1}` }));
+    } else if (isDocumentFile(file)) {
+      $('readFilesLabel').textContent = `reading ${file.name}…`;
+      try {
+        const form = new FormData();
+        form.append('file', file, file.name);
+        const res = await api('/api/sources', { form });
+        const doc = (res.docs || [])[0];
+        if (!doc) throw new Error('nothing came back for that file');
+        if (doc.error) throw new Error(doc.error);
+        if (!doc.text || !doc.text.trim()) {
+          toast(`${file.name}: ${doc.note || 'no text found — photograph the pages instead.'}`, 'error');
+          continue;
+        }
+        readFiles.push({ preview: '', name: file.name, text: doc.text.slice(0, 20000), note: doc.note || '' });
+        if (doc.note) toast(`${file.name}: ${doc.note}`);
+      } catch (error) {
+        toast(`${file.name}: ${error.message}`, 'error');
+      }
     } else {
       const text = (await file.text()).slice(0, 20000);
       readFiles.push({ preview: '', name: file.name, text });
     }
   }
   renderThumbs($('readThumbs'), readFiles.filter((f) => f.preview));
-  $('readFilesLabel').textContent = readFiles.length ? `${readFiles.length} thing(s) loaded` : '＋ files, photos, screen recording';
+  $('readFilesLabel').textContent = readFiles.length ? `${readFiles.length} thing(s) loaded` : '＋ PDF, Word, photos, screen recording';
   event.target.value = '';
   // An Apple screen recording was imported through the Watch button: read it
   // straight away instead of making the user find the second button.
