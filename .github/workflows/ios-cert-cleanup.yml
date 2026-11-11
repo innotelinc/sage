@@ -73,9 +73,13 @@ jobs:
 
           key_id = os.environ['ASC_KEY_ID']
           issuer = os.environ['ASC_ISSUER_ID']
-          dry_run = os.environ.get('DRY_RUN', 'true').lower() == 'true'
-          keep = max(0, int(os.environ.get('KEEP', '1')))
-          wanted = {t.strip().upper() for t in os.environ.get('TYPES', '').split(',') if t.strip()}
+          # A scheduled run has no workflow_dispatch inputs, so all three arrive as
+          # empty strings: fall back to the same defaults the inputs declare instead
+          # of raising on int('') or silently reading dry_run=False.
+          dry_run = (os.environ.get('DRY_RUN') or 'true').strip().lower() in ('true', '1', 'yes')
+          keep = max(0, int((os.environ.get('KEEP') or '1').strip()))
+          types = os.environ.get('TYPES') or 'IOS_DISTRIBUTION,IOS_DEVELOPMENT,DEVELOPMENT'
+          wanted = {t.strip().upper() for t in types.split(',') if t.strip()}
 
           with open(os.path.expanduser(f'~/.appstoreconnect/private_keys/AuthKey_{key_id}.p8')) as fh:
               key = fh.read()
