@@ -90,6 +90,10 @@ threshold, and posts each five-second window to `/api/broadcast/audio`, which tu
 note on the same session the frames use. What is not yet proven is what only a phone can
 decide — whether the microphone buffers keep arriving with the app in the background.
 
+The page now uses it: a WebView has no `getDisplayMedia`, so Listen → audiobook opens the
+broadcast sheet and drains the chunks as a transcript (`startBroadcastAudio` in
+`public/app.js`) instead of telling an iPhone owner to find another browser.
+
 ### c · Import the file (exact, but only for files the person owns)
 
 A document picker or share-sheet hand-off, then transcribe the file directly. Exact text, no

@@ -737,6 +737,9 @@ const cap = {
   broadcastPoll: null,
   broadcastSeen: false,
   broadcastDevice: null,
+  // An audiobook on the iPhone is read through the broadcast extension rather than
+  // a share, so the poll that drains it is playing the part the recorder plays here.
+  broadcastAudio: false,
   cameraStream: null,
   screenVideo: null,
   cameraVideo: null,
@@ -1063,7 +1066,9 @@ function setListenMode(mode, options = {}) {
   if (note) {
     note.textContent =
       next === 'audiobook'
-        ? 'Press it first, then open the app and start the audio. Nothing is kept as a recording.'
+        ? NATIVE_BROADCAST
+          ? 'Press it, pick Sage in the broadcast sheet, then open the audiobook. It keeps reading while the book is in front, and nothing is kept as a recording.'
+          : 'Press it first, then open the app and start the audio. Nothing is kept as a recording.'
         : 'Lecture: the microphone. Watch adds the screen and the sound that comes with it.';
   }
   if (changed && cap.listenOn && !options.quiet) {
@@ -1083,7 +1088,12 @@ function setListenMode(mode, options = {}) {
 async function startDeviceAudio() {
   if (cap.listenOn) return stopListening();
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    toast('This shell cannot hear another app. Use the lecture microphone, or open SAGE in Chrome or Edge to read audiobook audio.', 'error');
+    // No share exists in a WebView, but this build carries a ReplayKit broadcast
+    // extension that already captures the microphone and posts five-second chunks
+    // to Sage. Telling an iPhone owner to install another browser was the wrong
+    // answer to the button they pressed: hand the recording to the extension.
+    if (NATIVE_BROADCAST?.start) return startBroadcastAudio();
+    toast('This build has no way to hear another app. Use the lecture microphone.', 'error');
     return;
   }
   let stream;
@@ -1112,6 +1122,46 @@ async function startDeviceAudio() {
   // start the audiobook takes the audiobook to the background, so the sound has to
   // begin after this run is already open and reading.
   toast('Listening. Now open the app and start the audio — SAGE reads the first sound it hears.');
+}
+
+/*
+ * Audiobook listening on the iPhone.
+ *
+ * iOS hands no app another app's output, so a share is not a possibility here and
+ * pretending otherwise dead-ended on a message about other browsers. The broadcast
+ * extension can keep recording while the book is in front, and it already posts the
+ * microphone to the session the app opens — so this opens that session and starts
+ * the sheet. The book is then heard through the air, the chunks come back as text,
+ * and the app reads them as it would any other source.
+ */
+async function startBroadcastAudio() {
+  let device;
+  try {
+    device = (await NATIVE_BROADCAST.device())?.device || '';
+    if (!device) throw new Error('this build cannot identify the device');
+    // The session is the credential: the extension carries no access code, and this
+    // is the only place the two sides can meet.
+    await api('/api/broadcast/session', { body: { device } });
+    await NATIVE_BROADCAST.start();
+  } catch (error) {
+    toast(`Could not open the broadcast: ${error?.message || error}`, 'error');
+    return;
+  }
+  cap.broadcastDevice = device;
+  cap.broadcastAudio = true;
+  cap.listenOn = true;
+  cap.keepRecordings = false;
+  cap.heardSound = false;
+  cap.listenWait = false;
+  cap.sourceLost = false;
+  cap.audioStart = Date.now();
+  cap.broadcastSeen = false;
+  clearInterval(cap.broadcastPoll);
+  cap.broadcastPoll = setInterval(drainBroadcast, 6000);
+  ensureNoteTimer();
+  setListenState('waiting for sound');
+  updateStatus();
+  toast('Pick Sage in the sheet and start the broadcast, then open the audiobook. It keeps reading while the book is in front.');
 }
 
 /* One adoption path for "the sound is now this stream", shared by reconnects. */
@@ -1275,7 +1325,9 @@ function setListenState(text) {
   note.textContent = text
     ? `${text} — ${cap.listenMode === 'audiobook' ? 'the other app’s audio' : 'the microphone'}.`
     : cap.listenMode === 'audiobook'
-      ? 'Press it first, then open the app and start the audio. Nothing is kept as a recording.'
+      ? NATIVE_BROADCAST
+        ? 'Press it, pick Sage in the broadcast sheet, then open the audiobook. It keeps reading while the book is in front, and nothing is kept as a recording.'
+        : 'Press it first, then open the app and start the audio. Nothing is kept as a recording.'
       : 'Lecture: the microphone. Watch adds the screen and the sound that comes with it.';
 }
 
@@ -1369,6 +1421,17 @@ async function startListening() {
 
 function stopListening() {
   cap.listenOn = false;
+  if (cap.broadcastAudio) {
+    cap.broadcastAudio = false;
+    clearInterval(cap.broadcastPoll);
+    cap.broadcastPoll = null;
+    // The extension keeps posting under its device until the session is closed, so
+    // closing it is what stops those chunks becoming notes nobody asked for.
+    if (cap.broadcastDevice && !cap.watchOn) {
+      api(`/api/broadcast/session?device=${encodeURIComponent(cap.broadcastDevice)}`, { method: 'DELETE' }).catch(() => {});
+      cap.broadcastDevice = null;
+    }
+  }
   clearInterval(cap.soundWatch);
   cap.soundWatch = null;
   cap.heardSound = false;
@@ -1405,6 +1468,9 @@ function stopListening() {
   cap.captureStream = null;
   cap.keepRecordings = true;
   cap.watchAudio = false;
+  // The note describes a state that has just ended; put back the line that says how
+  // to start again rather than leaving "waiting for sound" under a stopped button.
+  setListenState('');
   showInterim('');
   updateStatus();
 }
@@ -1541,15 +1607,33 @@ async function drainBroadcast() {
   } catch {
     return;
   }
-  for (const note of out?.notes || []) addNote(note.text, 'broadcast');
+  for (const note of out?.notes || []) {
+    // A broadcast watching the screen is describing a picture, so its text is a note;
+    // an audiobook is speech, and speech belongs in the transcript it would occupy
+    // if the microphone had heard it.
+    if (cap.broadcastAudio) {
+      pushTranscript(note.text, { source: 'broadcast' });
+      // The label said it was waiting until the first chunk came back with words;
+      // a transcript filling up under a line that claims to be waiting is a lie.
+      if (!cap.heardSound) {
+        cap.heardSound = true;
+        setListenState('reading it');
+      }
+    } else addNote(note.text, 'broadcast');
+  }
   if (Number.isFinite(out?.frames) && out.frames > cap.frames) cap.frames = out.frames;
   if (out?.running) cap.broadcastSeen = true;
   else if (cap.broadcastSeen) {
     // Nothing has arrived for the whole live window: the broadcast was stopped
-    // from Control Center, so the page should stop claiming to watch.
+    // from Control Center, so the page should stop claiming to listen or watch.
     cap.broadcastSeen = false;
-    stopWatch();
-    toast('The screen broadcast stopped.');
+    if (cap.broadcastAudio) {
+      stopListening();
+      toast('The broadcast stopped — audiobook listening is off.', 'error');
+    } else {
+      stopWatch();
+      toast('The screen broadcast stopped.');
+    }
     return;
   }
   updateStatus();
@@ -2781,7 +2865,9 @@ async function toggleStudyMode() {
   // button open the Aim viewfinder instead — a different feature, aimed at a board,
   // with no picture of the slides at all. Watch is the thing that matches the label,
   // and when it cannot start it says so rather than quietly aiming.
-  if (!cap.watchOn && !cap.cameraOn) await toggleWatch();
+  // An audiobook run is already a broadcast: starting Watch as well would open a
+  // second sheet for the same recording.
+  if (!cap.watchOn && !cap.cameraOn && !cap.broadcastAudio) await toggleWatch();
   stopStudyTimer();
   studyTimer = setInterval(studyTick, 20000);
   toast(
