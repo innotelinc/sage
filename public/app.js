@@ -4846,7 +4846,13 @@ async function testConnection() {
 function openTab(name) {
   state.ui = { ...(state.ui || {}), tab: name };
   persist();
-  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  // `aria-selected` is what a screen reader announces; the class alone left it
+  // saying "Live" whatever tab was actually open.
+  document.querySelectorAll('.tab').forEach((t) => {
+    const on = t.dataset.tab === name;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', String(on));
+  });
   document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${name}`));
   // A tab is a button that opens a panel: pressing it should land in the panel,
   // not leave focus on the rail for the next Tab to walk from.
@@ -5465,7 +5471,10 @@ function bind() {
   $('tabs').addEventListener('click', (event) => {
     const tab = event.target.closest('.tab');
     if (!tab) return;
-    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.tab').forEach((t) => {
+      t.classList.toggle('active', t === tab);
+      t.setAttribute('aria-selected', String(t === tab));
+    });
     document.querySelectorAll('.panel').forEach((panel) => {
       panel.classList.toggle('active', panel.id === `tab-${tab.dataset.tab}`);
     });
