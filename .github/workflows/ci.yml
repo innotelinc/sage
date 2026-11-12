@@ -25,6 +25,20 @@ jobs:
       - run: cp .env.example .env
       - run: docker compose -f docker-compose.yml config -q
 
+  scratch:
+    name: The root holds no scratch files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # A `.tmp-` copy of another project, or a screenshot from a test run, is the
+      # file an unrelated `git add -A` commits by accident. The same check is the
+      # pre-commit hook, so it is seen before it ever reaches here.
+      - name: No scratch files in the repository root
+        run: node scripts/check-scratch.mjs
+
   syntax:
     name: Server parses
     runs-on: ubuntu-latest

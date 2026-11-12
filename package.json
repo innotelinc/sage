@@ -8,6 +8,8 @@
   "author": "Innotel Labs (https://innotel.us)",
   "scripts": {
     "dev": "node server.mjs",
+    "hooks": "git config core.hooksPath .githooks",
+    "check:scratch": "node scripts/check-scratch.mjs",
     "build:landing": "node scripts/stamp-roadmap.mjs",
     "start": "node server.mjs",
     "desktop": "electron .",

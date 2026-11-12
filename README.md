@@ -63,6 +63,7 @@ interface follows the shared **Unity** theme, and the whole thing runs on plain 
 ```bash
 cp .env.example .env      # add your gateway key
 npm run dev               # http://localhost:8787
+npm run hooks             # refuse a commit that carries scratch files in the root
 ```
 
 No install step: no dependencies, Node 20+. Set `AI_BASE_URL` for any OpenAI-compatible provider.
