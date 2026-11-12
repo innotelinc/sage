@@ -5510,7 +5510,17 @@ function bind() {
       toast('Reader — sections, definitions and the lecture moment each one came from.');
       return;
     }
+    // R is the reader, which is the key the hand goes to for it; Review moves to V,
+    // where the letter is still the first thing in the word and nothing else wants it.
     if (key === 'r') {
+      event.preventDefault();
+      openTab('reader');
+      renderReader();
+      if (location.hash !== '#reader') history.replaceState(null, '', '#reader');
+      toast('Reader — sections, definitions and the lecture moment each one came from.');
+      return;
+    }
+    if (key === 'v') {
       event.preventDefault();
       openTab('review');
       renderReview();

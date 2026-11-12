@@ -220,8 +220,9 @@ const typingIn = (el) =>
   !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
 
 /* The digits follow the rail, except that the reader takes 7 — that is the key people
-   reach for, and Review is left to R, which is where a letter belongs. A tenth tab has
-   no digit left, so Search takes the 0. */
+   reach for — and the reader is also R, the letter it is named for. Review is left to
+   V, which is the next letter in the word. The rail has more tabs than digits, so
+   Search takes the 0 and Review has only its letter. */
 const NUMBERED_TABS = ['live', 'answer', 'quiz', 'exam', 'essay', 'read', 'reader', 'foundation', 'memory', 'search'];
 
 document.addEventListener('keydown', (event) => {
