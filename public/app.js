@@ -897,6 +897,7 @@ function updateStatus() {
   $('btnScreen').classList.toggle('on', cap.watchOn);
   $('btnCamera').classList.toggle('on', cap.cameraOn);
   $('ttsToggle').checked = state.settings.tts;
+  syncWatchButtons();
   persist();
 }
 
@@ -2786,7 +2787,7 @@ async function toggleStudyMode() {
   toast(
     cap.watchOn
       ? 'Study mode on — listening and watching. It answers questions as they appear.'
-      : 'Study mode is listening. Screen watching needs the broadcast started first, then press Watch.',
+      : 'Study mode is listening. For the picture, press Watch: screen, or Watch: camera for the board.',
     cap.watchOn ? undefined : 'error'
   );
 }
@@ -2805,6 +2806,53 @@ function stopStudyMode() {
   stopWatch();
   stopCamera();
   toast('Study mode off.');
+}
+
+/* Watch, chosen from the study bar: the screen/video, or the camera. Study mode
+   used to start the screen share and leave it there, so a lecture with no screen —
+   a board, a printed handout — had no way in without leaving study mode. Only one
+   source runs at a time: both write cap.frame, so two of them would build a note
+   from two different pictures. */
+function syncWatchButtons() {
+  const screen = $('btnStudyWatch');
+  if (screen) {
+    screen.textContent = cap.watchOn ? 'Watch: screen · on' : 'Watch: screen';
+    screen.classList.toggle('on', cap.watchOn);
+  }
+  const camera = $('btnStudyCamera');
+  if (camera) {
+    camera.textContent = cap.cameraOn ? 'Watch: camera · on' : 'Watch: camera';
+    camera.classList.toggle('on', cap.cameraOn);
+  }
+  const note = $('watchNote');
+  if (note) {
+    note.textContent = cap.watchOn
+      ? 'Watching the screen. Press it again to stop watching.'
+      : cap.cameraOn
+        ? 'Aiming the camera. Press it again to put it away.'
+        : 'Watch the slides on screen, or point the camera at the board. One at a time.';
+  }
+}
+
+async function chooseStudyWatch(kind) {
+  if (kind === 'camera') {
+    if (cap.cameraOn) {
+      stopCamera();
+      toast('Camera off.');
+      return;
+    }
+    if (cap.watchOn) stopWatch();
+    await toggleCamera();
+  } else {
+    if (cap.watchOn) {
+      stopWatch();
+      toast('Stopped watching the screen.');
+      return;
+    }
+    if (cap.cameraOn) stopCamera();
+    await toggleWatch();
+  }
+  syncWatchButtons();
 }
 
 async function studyTick() {
@@ -5482,6 +5530,8 @@ function bind() {
   });
   $('btnListenMode').onclick = () =>
     setListenMode(cap.listenMode === 'lecture' ? 'audiobook' : 'lecture');
+  $('btnStudyWatch')?.addEventListener('click', () => chooseStudyWatch('screen'));
+  $('btnStudyCamera')?.addEventListener('click', () => chooseStudyWatch('camera'));
   $('btnListenRetry').onclick = () => {
     cap.listenWait = false;
     stopListening();
