@@ -1140,8 +1140,9 @@ async function startBroadcastAudio() {
     device = (await NATIVE_BROADCAST.device())?.device || '';
     if (!device) throw new Error('this build cannot identify the device');
     // The session is the credential: the extension carries no access code, and this
-    // is the only place the two sides can meet.
-    await api('/api/broadcast/session', { body: { device } });
+    // is the only place the two sides can meet. `audioOnly` is what stops it sending
+    // screenshots of a book that is only being listened to.
+    await api('/api/broadcast/session', { body: { device, audioOnly: true } });
     await NATIVE_BROADCAST.start();
   } catch (error) {
     toast(`Could not open the broadcast: ${error?.message || error}`, 'error');
@@ -1584,7 +1585,7 @@ async function startBroadcastWatch() {
     }
     // The server is the only place the extension and the app can meet: there is no
     // shared container, and the extension carries no access code.
-    await api('/api/broadcast/session', { body: { device: cap.broadcastDevice } });
+    await api('/api/broadcast/session', { body: { device: cap.broadcastDevice, audioOnly: false } });
     await NATIVE_BROADCAST.start();
   } catch (error) {
     toast(`Could not open the broadcast sheet: ${error?.message || error}`, 'error');

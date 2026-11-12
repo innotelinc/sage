@@ -30,6 +30,7 @@ import UIKit
 final class SampleHandler: RPBroadcastSampleHandler {
     private static let frameEndpoint = URL(string: "https://sage.inotell.tech/api/broadcast/frame")!
     private static let audioEndpoint = URL(string: "https://sage.inotell.tech/api/broadcast/audio")!
+    private static let modeEndpoint = URL(string: "https://sage.inotell.tech/api/broadcast/mode")!
     private static let minimumGap: TimeInterval = 2
     private static let maxWidth: CGFloat = 900
     /// Five seconds of 16 kHz mono is ~160 KB before base64, comfortably inside
@@ -46,6 +47,11 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     private var lastSent = Date.distantPast
     private var inFlight = false
+    /// An audiobook session is sound only. The app says so when it opens the session;
+    /// this is the extension's copy of that answer, so an audiobook run never spends
+    /// an upload (or a model call) on a screenshot nobody asked for.
+    private var audioOnly = false
+    private var modeCheckedAt = Date.distantPast
 
     private var audio = Data()
     private var audioPeak: Float = 0
@@ -67,6 +73,12 @@ final class SampleHandler: RPBroadcastSampleHandler {
         UIDevice.current.identifierForVendor?.uuidString ?? "unknown-device"
     }
 
+    override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
+        // The app opens the session before the sheet is presented, so the answer is
+        // already there when the broadcast begins — no frame has to be spent on it.
+        refreshMode()
+    }
+
     override func broadcastFinished() {
         // Whatever was captured before the person stopped the broadcast is still
         // worth sending; nothing after this is.
@@ -77,6 +89,10 @@ final class SampleHandler: RPBroadcastSampleHandler {
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
         switch sampleBufferType {
         case .video:
+            guard !audioOnly else { return }
+            // The mode can change without the broadcast ending (the app closes the
+            // session and opens another), so it is re-read rather than trusted.
+            refreshMode()
             handleVideo(sampleBuffer)
         case .audioMic:
             handleAudio(sampleBuffer)
@@ -87,6 +103,31 @@ final class SampleHandler: RPBroadcastSampleHandler {
         @unknown default:
             break
         }
+    }
+
+    // MARK: - Mode
+
+    /// Asks the server whether this session wants pictures. Once a minute is enough:
+    /// a wrong answer costs at most a minute of frames, and the session is the only
+    /// thing that can change it.
+    private func refreshMode() {
+        guard Date().timeIntervalSince(modeCheckedAt) >= 60 else { return }
+        modeCheckedAt = Date()
+        var components = URLComponents(url: Self.modeEndpoint, resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "device", value: device)]
+        guard let url = components?.url else { return }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        session.dataTask(with: request) { [weak self] data, _, _ in
+            // No answer means no change: a network blip must not silently turn an
+            // audiobook run into a screen recording, or the other way round.
+            guard let self,
+                  let data,
+                  let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let answer = body["audioOnly"] as? Bool
+            else { return }
+            self.audioOnly = answer
+        }.resume()
     }
 
     // MARK: - Video

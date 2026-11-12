@@ -34,25 +34,38 @@ function purge() {
 
 function describe(device) {
   const session = SESSIONS.get(device);
-  if (!session) return { device, open: false, running: false, frames: 0, lastFrameAt: 0, expiry: 0 };
+  if (!session) return { device, open: false, running: false, audioOnly: false, frames: 0, lastFrameAt: 0, expiry: 0 };
   return {
     device,
     open: Boolean(session.open),
     running: Boolean(session.open) && Date.now() - session.lastFrameAt < LIVE_WINDOW_MS,
+    audioOnly: Boolean(session.audioOnly),
     frames: session.frames,
     lastFrameAt: session.lastFrameAt,
     expiry: session.at + SESSION_TTL_MS,
   };
 }
 
-export function openSession(device) {
+/**
+ * A session opened for an audiobook wants the microphone and nothing else. The
+ * extension asks this before it encodes anything, so the answer has to survive
+ * until the app closes the session.
+ */
+export function openSession(device, options = {}) {
   if (!device) return null;
   purge();
   const session = SESSIONS.get(device) || { notes: [], frames: 0, lastFrameAt: 0, at: 0, open: false };
   session.open = true;
+  session.audioOnly = Boolean(options.audioOnly);
   session.at = Date.now();
   SESSIONS.set(device, session);
   return describe(device);
+}
+
+/** True while this device's open session asked for sound alone. */
+export function isAudioOnly(device) {
+  const session = device ? SESSIONS.get(device) : null;
+  return Boolean(session?.open && session.audioOnly);
 }
 
 export function closeSession(device) {

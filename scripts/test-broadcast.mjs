@@ -6,7 +6,7 @@
  * drains the notes. These are the rules that make that safe to leave running.
  */
 import assert from 'node:assert/strict';
-import { openSession, closeSession, accepts, recordFrame, readNotes } from '../src/broadcast.mjs';
+import { openSession, closeSession, accepts, isAudioOnly, recordFrame, readNotes } from '../src/broadcast.mjs';
 
 let passed = 0;
 function ok(name, fn) {
@@ -66,6 +66,26 @@ ok('one device cannot read another device its notes', () => {
 
 ok('an empty device is not a session', () => {
   assert.equal(openSession(''), null);
+});
+
+ok('a session opened for sound alone says so, so no frame is encoded for it', () => {
+  const state = openSession('device-audio', { audioOnly: true });
+  assert.equal(state.audioOnly, true);
+  assert.equal(isAudioOnly('device-audio'), true);
+  assert.equal(accepts('device-audio'), true, 'audio chunks still need the session');
+});
+
+ok('a screen session is not mistaken for an audiobook one', () => {
+  openSession('device-screen');
+  assert.equal(openSession('device-screen').audioOnly, false);
+  assert.equal(isAudioOnly('device-screen'), false);
+});
+
+ok('reopening the same device clears the sound-only flag', () => {
+  openSession('device-audio');
+  assert.equal(isAudioOnly('device-audio'), false);
+  closeSession('device-audio');
+  assert.equal(isAudioOnly('device-audio'), false, 'a closed session wants nothing');
 });
 
 console.log(`\n  ${passed} checks passed`);

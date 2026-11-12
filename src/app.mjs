@@ -7,7 +7,7 @@ import { handleRelay } from './relay.mjs';
 import { handleWorkspace } from './workspace.mjs';
 import { handleLiveSession } from './livesession.mjs';
 import { handleShare } from './share.mjs';
-import { openSession, closeSession, accepts, recordFrame, readNotes } from './broadcast.mjs';
+import { openSession, closeSession, accepts, isAudioOnly, recordFrame, readNotes } from './broadcast.mjs';
 import { handleBroadcastAudio } from './broadcast-audio.mjs';
 import { handleStore } from './store.mjs';
 import { handleIap } from './iap.mjs';
@@ -171,6 +171,12 @@ async function handleBroadcastFrame(request, cfg) {
   if (!device) return json({ error: 'no_device', message: 'A device identifier is required.' }, 400);
   if (!accepts(device)) {
     return json({ error: 'no_session', message: 'Open a broadcast session from the app first.' }, 409);
+  }
+  // An audiobook session is sound only. The extension stops sending pictures once
+  // it learns that, but a frame already in flight is dropped here rather than
+  // spending a model call on a screenshot nobody asked for.
+  if (isAudioOnly(device)) {
+    return json({ ok: true, skipped: true, reason: 'audio-only', noted: false });
   }
   if (!isDataImage(body.image)) {
     return json({ error: 'bad_frame', message: 'image must be an image data URL.' }, 400);
@@ -676,6 +682,15 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
     return handleBroadcastFrame(request, cfg);
   }
 
+  // What the extension is allowed to send. It carries no access code, so this is
+  // answered on the strength of the open session like its frames are: the app said
+  // "sound only" when it opened the session, and this is how the extension hears it.
+  if (url.pathname === '/api/broadcast/mode' && request.method === 'GET') {
+    const target = String(url.searchParams.get('device') || '').trim().slice(0, 64);
+    if (!target) return json({ error: 'no_device', message: 'A device identifier is required.' }, 400);
+    return json({ device: target, open: accepts(target), audioOnly: isAudioOnly(target) });
+  }
+
   // The extension's microphone arrives the same way its frames do: the session the
   // app opened is the credential, and the text lands in the notes it already drains.
   // Nothing is stored — a chunk becomes a note or a counted drop.
@@ -724,7 +739,7 @@ export async function handleRequest(request, env = {}, runtime = environmentOnly
     const asked = await request.json().catch(() => ({}));
     const target = String(url.searchParams.get('device') || asked?.device || '').trim().slice(0, 64);
     if (!target) return json({ error: 'no_device', message: 'A device identifier is required.' }, 400);
-    if (request.method === 'POST') return json(openSession(target));
+    if (request.method === 'POST') return json(openSession(target, { audioOnly: asked?.audioOnly === true }));
     if (request.method === 'DELETE') return json(closeSession(target));
     return json({ error: 'method_not_allowed' }, 405);
   }
