@@ -72,3 +72,6 @@ new build is needed for it.
 
 Until then, sessions can be handed out with `scripts/grant-session.mjs` — see
 `deploy/ios/README.md`, "Granting a session without the store".
+
+Where the agreement is signed, the order Apple reveals tax and banking in, and what to check
+on the phone and in App Store Connect once it reads Active: `docs/paid-apps-agreement.md`.

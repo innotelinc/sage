@@ -143,7 +143,8 @@ product, and the **signed transaction** it returns is checked here against Apple
 key is minted — no App Store Server API key is involved, and the product comes from Apple's signed payload
 rather than from the request. That needs three consumables in App Store Connect and `IAP_MINT_URL` on the
 server (see `deploy/ios/README.md`); until then the phone says so instead of offering a purchase it cannot
-complete.
+complete. Where the agreement that unlocks this is signed, and what to check once it is Active, is
+`docs/paid-apps-agreement.md`.
 
 The browser never talks to a billing origin directly — CORS forbids it and the plan list would be a second
 place to keep in step — so both calls are proxied by the server. `MAGNATE_URL` points it at a different store,
