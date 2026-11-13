@@ -349,16 +349,8 @@ async function reportProductStatus(app, iap) {
     }
     const versions = (await optional(`/v2/inAppPurchases/${found.id}/versions?limit=50`))?.data || [];
     const latest = versions.map((item) => String(item.attributes?.state || 'unknown')).join(', ') || 'no version';
-    // The relationship carries no rows and an `include` page stops at ten, so the
-    // territories are counted from their own endpoint — storefronts are a fact the
-    // app shows, and a page-sized ten would be a wrong one.
     const availability = await optional(`/v2/inAppPurchases/${found.id}/inAppPurchaseAvailability`).catch(() => null);
-    const territoryRows = availability?.data
-      ? await optional(
-          `/v2/inAppPurchases/${found.id}/inAppPurchaseAvailability/availableTerritories?limit=200`
-        ).catch(() => null)
-      : null;
-    const territories = territoryRows?.data?.length;
+    const territories = availability?.data?.relationships?.availableTerritories?.data?.length;
     const newTerritories = availability?.data?.attributes?.availableInNewTerritories;
     // A schedule with a base price and no automatic prices is priced in one storefront
     // only: a phone whose Apple Account is elsewhere is answered with no product at all.
@@ -377,18 +369,23 @@ async function reportProductStatus(app, iap) {
     const priced = schedule?.data
       ? `priced · ${manual ?? '?'} manual${base ? ` (base ${base})` : ''}, ${automatic ?? '?'} automatic`
       : 'priced · NO PRICE SCHEDULE';
+    // The availability relationship carries no rows on its own and an `include` page
+    // stops at ten, but the price schedule already lists one row per storefront: that
+    // total is the storefront count the app shows.
+    const priceRows =
+      typeof manual === 'number' && typeof automatic === 'number' ? manual + automatic : null;
     report.products.push({
       productId: plan.productId,
       state: String(found.attributes?.state || 'unknown'),
       version: latest,
       onSale: Boolean(availability?.data),
-      territories: typeof territories === 'number' ? territories : null,
+      territories: priceRows ?? (typeof territories === 'number' ? territories : null),
       priced: Boolean(schedule?.data),
     });
     console.log(
       `  ${plan.productId.padEnd(38)} ${String(found.attributes?.state || 'unknown')} · version ${latest} · ` +
         (availability?.data
-          ? `on sale in ${territories ?? 'an unknown number of'} territories${newTerritories ? ', new ones included' : ''}`
+          ? `on sale in ${priceRows ?? territories ?? 'an unknown number of'} territories${newTerritories ? ', new ones included' : ''}`
           : 'NOT ON SALE in any territory') +
         ` · ${priced}`
     );
