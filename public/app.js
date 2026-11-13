@@ -4160,7 +4160,7 @@ function renderIapDiag() {
           ? `${offSale.join(', ')} not on sale in any storefront`
           : uniform
             ? `on sale in ${counts[0]} storefronts`
-            : 'storefront coverage varies') +
+            : 'on sale, storefront count not returned') +
         ` · ${account.submission ? `submission ${account.submission.state}` : 'no open submission'}` +
         (account.checkedAt ? ` · checked ${String(account.checkedAt).slice(0, 10)}` : ''),
     );

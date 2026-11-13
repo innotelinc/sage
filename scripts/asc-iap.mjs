@@ -349,8 +349,13 @@ async function reportProductStatus(app, iap) {
     }
     const versions = (await optional(`/v2/inAppPurchases/${found.id}/versions?limit=50`))?.data || [];
     const latest = versions.map((item) => String(item.attributes?.state || 'unknown')).join(', ') || 'no version';
-    const availability = await optional(`/v2/inAppPurchases/${found.id}/inAppPurchaseAvailability`).catch(() => null);
-    const territories = availability?.data?.relationships?.availableTerritories?.data?.length;
+    // Without `include` the relationship carries no rows and the count reads as unknown,
+    // which is no use in a panel: the territories are asked for with the availability.
+    const availability = await optional(
+      `/v2/inAppPurchases/${found.id}/inAppPurchaseAvailability?include=availableTerritories`
+    ).catch(() => null);
+    const listed = (availability?.included || []).filter((item) => item.type === 'territories').length;
+    const territories = availability?.data?.relationships?.availableTerritories?.data?.length ?? (listed || undefined);
     const newTerritories = availability?.data?.attributes?.availableInNewTerritories;
     // A schedule with a base price and no automatic prices is priced in one storefront
     // only: a phone whose Apple Account is elsewhere is answered with no product at all.
