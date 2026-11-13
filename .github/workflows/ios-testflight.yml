@@ -94,6 +94,10 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
           APPLE_BUNDLE_ID: us.inotell.sage
+          # The app is named here rather than looked up by bundle id: the lookup came
+          # back empty once from this runner, and an empty answer costs the panel its
+          # account rows.
+          ASC_APP_ID: '6829329963'
           IAP_STATUS: 'true'
           IAP_STATUS_JSON: public/iap-status.json
         run: node scripts/asc-iap.mjs
