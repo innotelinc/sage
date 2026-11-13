@@ -3202,6 +3202,12 @@ function splitQuestions(raw) {
 
 function syncQuizCount() {
   $('quizFileCount').textContent = quizFiles.length ? `${quizFiles.length} attached` : '';
+  $('btnClearQuizFiles').hidden = !quizFiles.length;
+}
+function clearQuizFiles() {
+  quizFiles.length = 0;
+  renderThumbs($('quizThumbs'), quizFiles, syncQuizCount);
+  syncQuizCount();
 }
 async function onQuizFiles(event) {
   for (const file of [...event.target.files].slice(0, 4)) {
@@ -5774,6 +5780,7 @@ function bind() {
   $('btnScreenClose').onclick = () => $('screenDialog').close();
   $('btnCloseSettings').onclick = () => $('settingsDialog').close();
   $('btnClearAnswerFiles').onclick = clearAnswerFiles;
+  $('btnClearQuizFiles').onclick = clearQuizFiles;
 
   $('btnListen').onclick = startListening;
   $('btnScreen').onclick = toggleWatch;
