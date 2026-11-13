@@ -78,7 +78,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
-          APPLE_BUNDLE_ID: us.inotell.sage
+          APPLE_BUNDLE_ID: us.innotel.sage
           PROFILE_BUNDLES: us.innotel.sage,us.innotel.sage.broadcast
           PROFILES: ensure
         run: node scripts/asc-iap.mjs
@@ -93,7 +93,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
-          APPLE_BUNDLE_ID: us.inotell.sage
+          APPLE_BUNDLE_ID: us.innotel.sage
           # The app is named here rather than looked up by bundle id: the lookup came
           # back empty once from this runner, and an empty answer costs the panel its
           # account rows.
