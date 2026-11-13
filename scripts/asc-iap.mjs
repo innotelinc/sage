@@ -281,8 +281,16 @@ async function resolveAppId() {
 }
 
 async function existingProducts(app) {
-  const list = await call('GET', `/v1/apps/${app}/inAppPurchasesV2?limit=200`);
-  return new Map((list?.data || []).map((item) => [item.attributes?.productId, item]));
+  // Apple answered an empty page for this list once, on the macOS build runner, while
+  // the same request from a Linux runner returned three products: an empty answer is
+  // asked again before it is believed, because the app shows what comes back.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const list = await call('GET', `/v1/apps/${app}/inAppPurchasesV2?limit=200`);
+    const map = new Map((list?.data || []).map((item) => [item.attributes?.productId, item]));
+    if (map.size) return map;
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  return new Map();
 }
 
 /**
@@ -330,6 +338,7 @@ async function reportProductStatus(app, iap) {
   // StoreKit key lives on the runner and the phone cannot ask Apple itself.
   const report = { checkedAt: new Date().toISOString(), bundle: BUNDLE, products: [], submission: null };
   console.log('\nSession products, as the store holds them:');
+  console.log(`  listing · the API answered with ${iap.size} product${iap.size === 1 ? '' : 's'}`);
   if (!iap.size) console.log('  none — no in-app purchase is attached to this app');
   for (const plan of PLANS) {
     const found = iap.get(plan.productId);
