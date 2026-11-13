@@ -329,7 +329,16 @@ function bindShell() {
   $('netRetry')?.addEventListener('click', () => probe());
   $('btnQuickStudy')?.addEventListener('click', () => $('btnStudy')?.click());
 
-  $('tabs')?.addEventListener('click', () => setTimeout(syncTabUi, 0));
+  $('tabs')?.addEventListener('click', (event) => {
+    // Picking a task from the drawer is a request to be taken to it. Leaving the
+    // drawer and its scrim over the panel it just opened hides the thing that was
+    // asked for, which is what it did on a phone until now.
+    setDrawer(false);
+    const tab = event.target.closest?.('.tab');
+    // Focus follows the section, not the rail that is no longer on screen.
+    if (tab) document.getElementById(`tab-${tab.dataset.tab}`)?.focus({ preventScroll: true });
+    setTimeout(syncTabUi, 0);
+  });
   window.addEventListener('hashchange', () => {
     const name = location.hash.replace('#', '');
     if (TABS.some((t) => t.id === name) && activeTabButton()?.dataset.tab !== name) openTab(name);
