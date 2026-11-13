@@ -4075,6 +4075,7 @@ async function loadStore() {
     store.applePrices = {};
     store.iapAsked = [];
     store.iapError = '';
+    store.iapPhone = null;
     if (store.iap && NATIVE_STORE) {
       const ids = store.iap.products.map((product) => product.productId);
       store.iapAsked = ids;
@@ -4085,6 +4086,12 @@ async function loadStore() {
       if (!priced && !store.iapError) store.iapError = 'The plugin answered with nothing at all.';
       for (const product of priced?.products || []) {
         if (product?.productId && product?.price) store.applePrices[product.productId] = product.price;
+      }
+      // What the phone itself can say about selling: whether this Apple ID may pay at
+      // all, and which storefront it is signed into. A build whose plugin predates
+      // the call answers nothing, and the panel says so rather than guessing.
+      if (typeof NATIVE_STORE.diagnostics === 'function') {
+        store.iapPhone = await NATIVE_STORE.diagnostics().catch(() => null);
       }
     }
     if (!store.plans.some((plan) => plan.slug === store.slug)) store.slug = store.plans[0]?.slug || '';
@@ -4107,37 +4114,41 @@ function renderIapDiag() {
     host.textContent = '';
     return;
   }
+  const offered = store.iap?.products?.length || 0;
   const asked = store.iapAsked || [];
   const answered = Object.entries(store.applePrices || {});
-  let line;
-  if (!store.iap) {
-    line = 'The server is not offering App Store sessions right now, so StoreKit was asked for no products.';
-  } else if (!NATIVE_STORE) {
-    line = 'The App Store plugin did not load in this build, so no product could be requested.';
-  } else if (!asked.length) {
-    line = 'The server listed no product ids, so there was nothing to ask the App Store for.';
-  } else if (!answered.length) {
-    line =
-      'StoreKit was asked for ' +
-      asked.length +
-      ' product' +
-      (asked.length === 1 ? '' : 's') +
-      ' (' +
-      asked.join(', ') +
-      ') and returned none, so there is nothing to price or charge.' +
-      (store.iapError ? ' ' + store.iapError : '');
-  } else {
-    line =
-      'StoreKit returned ' +
-      answered.length +
-      ' of ' +
-      asked.length +
-      ': ' +
-      answered.map(([id, price]) => id + ' ' + price).join(', ') +
-      '.';
+  const phone = store.iapPhone || null;
+  const rows = [
+    store.iap
+      ? `server · ${offered} product${offered === 1 ? '' : 's'} offered`
+      : 'server · nothing offered, so StoreKit was asked for nothing',
+  ];
+  if (!NATIVE_STORE) {
+    rows.push('plugin · the App Store plugin did not load in this build');
+  } else if (asked.length) {
+    rows.push(
+      `StoreKit · answered ${answered.length} of ${asked.length}` +
+        (answered.length ? ` (${answered.map(([id, price]) => `${id} ${price}`).join(', ')})` : '') +
+        (store.iapError ? ` — ${store.iapError}` : ''),
+    );
+  }
+  rows.push(
+    phone
+      ? `payments · ${phone.canMakePayments ? 'allowed' : 'this Apple ID may not pay'} · storefront ${phone.storefront || 'unknown'}`
+      : 'payments · not reported by this build',
+  );
+  const ready = Boolean(
+    store.iap && NATIVE_STORE && asked.length && answered.length === asked.length && phone?.canMakePayments !== false,
+  );
+  if (!ready) {
+    rows.push(
+      answered.length
+        ? 'Selling stops here: the store cannot charge for a product it did not return.'
+        : 'When StoreKit returns nothing, Apple is declining to sell: the Paid Apps Agreement is not active for this account, the products are not approved yet, or this Apple ID is in a storefront that does not carry them.',
+    );
   }
   host.hidden = false;
-  host.textContent = line;
+  host.textContent = ['Selling · ' + (ready ? 'ready — the App Store will charge' : 'blocked'), ...rows].join('\n');
 }
 
 function renderStore() {

@@ -16,7 +16,23 @@ public class SageStorePlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "products", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "buy", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "diagnostics", returnType: CAPPluginReturnPromise),
     ]
+
+    /// Whether this phone could be charged at all, and where it is signed in.
+    ///
+    /// A product StoreKit refuses to return and an Apple ID that may not pay look
+    /// identical from the page — an empty list and a dead button — so the two facts
+    /// the device can state are reported rather than inferred.
+    @objc func diagnostics(_ call: CAPPluginCall) {
+        Task {
+            let storefront = await Storefront.current
+            call.resolve([
+                "canMakePayments": AppStore.canMakePayments(),
+                "storefront": storefront?.countryCode ?? "",
+            ])
+        }
+    }
 
     /// Prices come from the store, not from the page: App Store Connect is the
     /// price list the person is charged against.

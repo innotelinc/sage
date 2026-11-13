@@ -400,6 +400,9 @@ h4 { font-size: 13px; }
 .muted { color: var(--muted); }
 .mini { font-size: 12px; }
 
+/* The StoreKit panel is a short report, one line per fact, not a sentence to reflow. */
+.iap-diag { white-space: pre-line; }
+
 /* ── cards ─────────────────────────────────────────────────────── */
 .card,
 .col,
