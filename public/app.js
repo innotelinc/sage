@@ -3058,7 +3058,13 @@ async function shrinkImage(file, maxWidth = 1400) {
   const url = await readAsDataUrl(file);
   const image = new Image();
   image.src = url;
-  await image.decode().catch(() => {});
+  // decode() settles or rejects quickly in a browser, but a WebView can leave it
+  // pending forever: the dimensions are known before it resolves, so a timeout here
+  // is what keeps an attached photo from going nowhere.
+  await Promise.race([
+    image.decode().catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, 1500)),
+  ]);
   if (!image.width) return url;
   return toJpeg(image, maxWidth, 0.75) || url;
 }
@@ -3096,7 +3102,7 @@ async function sampleVideo(file, count = 6) {
   return frames.filter(Boolean);
 }
 
-function renderThumbs(container, items) {
+function renderThumbs(container, items, after = null) {
   container.innerHTML = '';
   items.forEach((item, index) => {
     const div = document.createElement('div');
@@ -3110,8 +3116,12 @@ function renderThumbs(container, items) {
   container.onclick = (event) => {
     const button = event.target.closest('[data-remove]');
     if (!button) return;
-    items.splice(Number(button.dataset.remove), 1);
-    renderThumbs(container, items);
+    const [removed] = items.splice(Number(button.dataset.remove), 1);
+    renderThumbs(container, items, after);
+    // The ✕ is the delete button, so it has to leave the count and the clear button
+    // saying what is actually attached — and, for a filtered list, remove the item
+    // from the list it was filtered out of.
+    after?.(removed, items);
   };
 }
 
@@ -3134,11 +3144,14 @@ async function collectFiles(fileList, { max = 6 } = {}) {
 
 /* ── answer tab ────────────────────────────────────────────── */
 const answerFiles = [];
+function syncAnswerCount() {
+  $('answerFileCount').textContent = answerFiles.length ? `${answerFiles.length} attached` : '';
+  $('btnClearAnswerFiles').hidden = !answerFiles.length;
+}
 function clearAnswerFiles() {
   answerFiles.length = 0;
-  renderThumbs($('answerThumbs'), answerFiles);
-  $('answerFileCount').textContent = '';
-  $('btnClearAnswerFiles').hidden = true;
+  renderThumbs($('answerThumbs'), answerFiles, syncAnswerCount);
+  syncAnswerCount();
 }
 async function onAnswerFiles(event) {
   const files = [...event.target.files];
@@ -3146,9 +3159,8 @@ async function onAnswerFiles(event) {
     const preview = await shrinkImage(file, 1100);
     answerFiles.push({ preview });
   }
-  renderThumbs($('answerThumbs'), answerFiles);
-  $('answerFileCount').textContent = answerFiles.length ? `${answerFiles.length} attached` : '';
-  $('btnClearAnswerFiles').hidden = !answerFiles.length;
+  renderThumbs($('answerThumbs'), answerFiles, syncAnswerCount);
+  syncAnswerCount();
   event.target.value = '';
 }
 
@@ -3188,12 +3200,15 @@ function splitQuestions(raw) {
   return blocks;
 }
 
+function syncQuizCount() {
+  $('quizFileCount').textContent = quizFiles.length ? `${quizFiles.length} attached` : '';
+}
 async function onQuizFiles(event) {
   for (const file of [...event.target.files].slice(0, 4)) {
     quizFiles.push({ preview: await shrinkImage(file, 1400) });
   }
-  renderThumbs($('quizThumbs'), quizFiles);
-  $('quizFileCount').textContent = quizFiles.length ? `${quizFiles.length} attached` : '';
+  renderThumbs($('quizThumbs'), quizFiles, syncQuizCount);
+  syncQuizCount();
   event.target.value = '';
 }
 
@@ -3406,11 +3421,14 @@ async function submitPaper(auto = false) {
 const essayFiles = [];
 let understandEdited = false;
 
+function syncEssayCount() {
+  $('essayFileCount').textContent = essayFiles.length ? `${essayFiles.length} attached` : '';
+  $('btnClearEssayFiles').hidden = !essayFiles.length;
+}
 function clearEssayFiles() {
   essayFiles.length = 0;
-  renderThumbs($('essayThumbs'), essayFiles);
-  $('essayFileCount').textContent = '';
-  $('btnClearEssayFiles').hidden = true;
+  renderThumbs($('essayThumbs'), essayFiles, syncEssayCount);
+  syncEssayCount();
 }
 
 function updateUnderstandCount() {
@@ -3528,9 +3546,8 @@ async function onEssayFiles(event) {
       }
     }
   }
-  renderThumbs($('essayThumbs'), essayFiles);
-  $('essayFileCount').textContent = essayFiles.length ? `${essayFiles.length} attached` : '';
-  $('btnClearEssayFiles').hidden = !essayFiles.length;
+  renderThumbs($('essayThumbs'), essayFiles, syncEssayCount);
+  syncEssayCount();
   event.target.value = '';
   // The upload is the brief: it is read straight away so the question and the
   // rubric arrive filled in, not as a photograph to retype.
@@ -3603,6 +3620,12 @@ async function writeEssay() {
 const readFiles = [];
 let autoProcessRead = false;
 
+function syncReadLabel() {
+  $('readFilesLabel').textContent = readFiles.length
+    ? `${readFiles.length} thing(s) loaded`
+    : '＋ PDF, Word, photos, screen recording';
+}
+
 /** A PDF or a Word file is compressed binary: read here it would arrive as noise,
     so it goes through the same server-side unpacking the course material uses. */
 function isDocumentFile(file) {
@@ -3645,8 +3668,14 @@ async function onReadFiles(event) {
       readFiles.push({ preview: '', name: file.name, text });
     }
   }
-  renderThumbs($('readThumbs'), readFiles.filter((f) => f.preview));
-  $('readFilesLabel').textContent = readFiles.length ? `${readFiles.length} thing(s) loaded` : '＋ PDF, Word, photos, screen recording';
+  // The thumbnails are a filtered view, so deleting one has to take the file out of
+  // readFiles rather than out of the copy that was drawn.
+  renderThumbs($('readThumbs'), readFiles.filter((f) => f.preview), (removed) => {
+    const at = readFiles.indexOf(removed);
+    if (at >= 0) readFiles.splice(at, 1);
+    syncReadLabel();
+  });
+  syncReadLabel();
   event.target.value = '';
   // An Apple screen recording was imported through the Watch button: read it
   // straight away instead of making the user find the second button.

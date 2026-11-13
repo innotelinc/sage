@@ -331,6 +331,26 @@ function bindShell() {
   $('netRetry')?.addEventListener('click', () => probe());
   $('btnQuickStudy')?.addEventListener('click', () => $('btnStudy')?.click());
 
+  // Arrow keys walk the rail, which is what a tablist is expected to do. Focus moves
+  // and the section opens on Enter or Space, so browsing the rail in the drawer does
+  // not close it on the way to the tab the person actually wants.
+  $('tabs')?.addEventListener('keydown', (event) => {
+    const walk = ['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Home', 'End'];
+    if (!walk.includes(event.key)) return;
+    const items = [...$('tabs').querySelectorAll('.tab')];
+    const current = items.indexOf(document.activeElement);
+    if (current === -1 || !items.length) return;
+    event.preventDefault();
+    let next = current;
+    if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = items.length - 1;
+    else {
+      const step = event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1;
+      next = (current + step + items.length) % items.length;
+    }
+    items[next].focus({ preventScroll: true });
+  });
+
   $('tabs')?.addEventListener('click', (event) => {
     // Picking a task from the drawer is a request to be taken to it. Leaving the
     // drawer and its scrim over the panel it just opened hides the thing that was
