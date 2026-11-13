@@ -107,7 +107,9 @@ function setDrawer(open) {
   document.body.classList.toggle('nav-open', open);
   $('scrim')?.toggleAttribute('hidden', !open);
   $('btnSidebar')?.setAttribute('aria-expanded', String(open));
-  if (open) document.querySelector('.tab')?.focus({ preventScroll: true });
+  // The drawer opens on the tab that is already open: a keyboard or screen-reader
+  // user is moving from where they are, not from the top of the rail.
+  if (open) activeTabButton()?.focus({ preventScroll: true });
 }
 
 function closeDrawer() {
