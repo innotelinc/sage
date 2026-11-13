@@ -15,7 +15,7 @@
  */
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const API = 'https://api.appstoreconnect.apple.com';
 const BUNDLE = (process.env.APPLE_BUNDLE_ID || 'us.innotel.sage').trim();
@@ -326,11 +326,15 @@ async function countPrices(schedule, kind) {
  * each product's state, the state of its version, and whether it is on sale anywhere.
  */
 async function reportProductStatus(app, iap) {
+  // The same facts as JSON when a path is given, so the app can show them: the
+  // StoreKit key lives on the runner and the phone cannot ask Apple itself.
+  const report = { checkedAt: new Date().toISOString(), bundle: BUNDLE, products: [], submission: null };
   console.log('\nSession products, as the store holds them:');
   if (!iap.size) console.log('  none — no in-app purchase is attached to this app');
   for (const plan of PLANS) {
     const found = iap.get(plan.productId);
     if (!found) {
+      report.products.push({ productId: plan.productId, state: 'MISSING', onSale: false });
       console.log(`  ${plan.productId} · MISSING — the id the app asks for does not exist on this app`);
       continue;
     }
@@ -356,6 +360,14 @@ async function reportProductStatus(app, iap) {
     const priced = schedule?.data
       ? `priced · ${manual ?? '?'} manual${base ? ` (base ${base})` : ''}, ${automatic ?? '?'} automatic`
       : 'priced · NO PRICE SCHEDULE';
+    report.products.push({
+      productId: plan.productId,
+      state: String(found.attributes?.state || 'unknown'),
+      version: latest,
+      onSale: Boolean(availability?.data),
+      territories: typeof territories === 'number' ? territories : null,
+      priced: Boolean(schedule?.data),
+    });
     console.log(
       `  ${plan.productId.padEnd(38)} ${String(found.attributes?.state || 'unknown')} · version ${latest} · ` +
         (availability?.data
@@ -368,11 +380,18 @@ async function reportProductStatus(app, iap) {
   const open = drafts.find((item) =>
     ['READY_FOR_REVIEW', 'WAITING_FOR_REVIEW', 'IN_REVIEW'].includes(String(item.attributes?.state || ''))
   );
+  report.submission = open ? { id: open.id, state: String(open.attributes?.state || 'unknown') } : null;
   console.log(
     open
       ? `  submission · ${open.id} · ${open.attributes?.state}`
       : '  submission · none open — the products are not attached to a version Apple will review'
   );
+  const file = (process.env.IAP_STATUS_JSON || '').trim();
+  if (file) {
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify(report, null, 2) + '\n');
+    console.log(`  wrote · ${file}`);
+  }
 }
 
 async function ensureProduct(app, iap, plan) {

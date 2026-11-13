@@ -7,5 +7,6 @@ node_modules/
 threads/
 data/
 dist/
+/public/iap-status.json
 node_modules//android/capacitor.config.json
 .ios-signing.json

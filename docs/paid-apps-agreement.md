@@ -41,6 +41,10 @@ when it changes. No new build and no server change is needed for StoreKit to sta
 - **On the phone, build 84 or newer** — **Settings → Session** should now read
   `Selling · ready — the App Store will charge`, then `StoreKit · answered 3 of 3` with three
   prices, then `payments · allowed · storefront US` (the storefront of the signed-in Apple ID).
+  Below those, the `account ·` rows show what the store itself holds — each product's state,
+  its storefront coverage, and the open submission — from a snapshot the iOS build writes into
+  the bundle, so no App Store Connect key sits on the server. A build whose snapshot job failed
+  says `no store snapshot in this build` instead of showing older state.
 - **A sandbox purchase** — in TestFlight, buy the trial session; it should complete, mint a key
   and install it without leaving the app. A cancel or failure is reported in `buyStatus`
   under the button.

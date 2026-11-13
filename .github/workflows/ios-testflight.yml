@@ -83,6 +83,21 @@ jobs:
           PROFILES: ensure
         run: node scripts/asc-iap.mjs
 
+      # The phone can say what StoreKit answered; only the API can say why, and the key
+      # for that lives here. The snapshot this writes is bundled into the app, so
+      # Settings shows the store's own state without a key on the server. A failure
+      # here costs the panel its account rows, not the build.
+      - name: Ask the App Store what it holds
+        continue-on-error: true
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          APPLE_BUNDLE_ID: us.inotell.sage
+          IAP_STATUS: 'true'
+          IAP_STATUS_JSON: public/iap-status.json
+        run: node scripts/asc-iap.mjs
+
       - name: Configure project
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

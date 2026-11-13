@@ -4076,6 +4076,7 @@ async function loadStore() {
     store.iapAsked = [];
     store.iapError = '';
     store.iapPhone = null;
+    store.iapAccount = null;
     if (store.iap && NATIVE_STORE) {
       const ids = store.iap.products.map((product) => product.productId);
       store.iapAsked = ids;
@@ -4093,6 +4094,15 @@ async function loadStore() {
       if (typeof NATIVE_STORE.diagnostics === 'function') {
         store.iapPhone = await NATIVE_STORE.diagnostics().catch(() => null);
       }
+    }
+    // The store's own account state — each product's state, its storefronts and the
+    // open submission — is an App Store Connect fact, and that key stays in CI. The
+    // build writes a snapshot into the bundle, which is what is read here; a build
+    // without one says so instead of implying nothing is wrong.
+    if (IOS_APP) {
+      store.iapAccount = await fetch('/iap-status.json', { cache: 'no-store' })
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null);
     }
     if (!store.plans.some((plan) => plan.slug === store.slug)) store.slug = store.plans[0]?.slug || '';
   } catch {
@@ -4137,6 +4147,26 @@ function renderIapDiag() {
       ? `payments · ${phone.canMakePayments ? 'allowed' : 'this Apple ID may not pay'} · storefront ${phone.storefront || 'unknown'}`
       : 'payments · not reported by this build',
   );
+  const account = store.iapAccount;
+  if (Array.isArray(account?.products) && account.products.length) {
+    const short = (id) => String(id || '').split('.').pop();
+    rows.push('account · ' + account.products.map((p) => `${short(p.productId)} ${p.state || 'unknown'}`).join(' · '));
+    const counts = account.products.map((p) => p.territories).filter((n) => typeof n === 'number');
+    const uniform = counts.length === account.products.length && counts.every((n) => n === counts[0]);
+    const offSale = account.products.filter((p) => p.onSale === false).map((p) => short(p.productId));
+    rows.push(
+      'account · ' +
+        (offSale.length
+          ? `${offSale.join(', ')} not on sale in any storefront`
+          : uniform
+            ? `on sale in ${counts[0]} storefronts`
+            : 'storefront coverage varies') +
+        ` · ${account.submission ? `submission ${account.submission.state}` : 'no open submission'}` +
+        (account.checkedAt ? ` · checked ${String(account.checkedAt).slice(0, 10)}` : ''),
+    );
+  } else if (store.iap) {
+    rows.push('account · no store snapshot in this build, so the account side is not shown');
+  }
   const ready = Boolean(
     store.iap && NATIVE_STORE && asked.length && answered.length === asked.length && phone?.canMakePayments !== false,
   );
