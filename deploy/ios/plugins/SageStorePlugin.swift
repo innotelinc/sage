@@ -28,7 +28,7 @@ public class SageStorePlugin: CAPPlugin, CAPBridgedPlugin {
         Task {
             let storefront = await Storefront.current
             call.resolve([
-                "canMakePayments": AppStore.canMakePayments(),
+                "canMakePayments": AppStore.canMakePayments,
                 "storefront": storefront?.countryCode ?? "",
             ])
         }
