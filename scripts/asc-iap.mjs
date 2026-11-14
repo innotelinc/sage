@@ -708,19 +708,32 @@ async function report(app) {
 }
 
 
-/** The newest build Apple will accept. */
-async function newestBuild(app) {
-  // The same list asked for with `limit=50` came back without today's builds while
-  // TestFlight's own read of it (`limit=200`) had them: the shorter page is the one
-  // that misled the attach step, so the wider page is used here.
+/**
+ * Every build Apple will accept, newest first.
+ *
+ * One read for both callers: asked with `limit=50` this list came back without today's
+ * builds while TestFlight's own `limit=200` read had them, which left the attach step
+ * re-attaching an older build and the release check naming a number that did not exist.
+ */
+async function validBuilds(app) {
   const list = await call(
     'GET',
     `/v1/apps/${app}/builds?limit=200&fields[builds]=version,processingState,expired,uploadedDate`
   );
-  const builds = (list?.data || [])
-    .map((build) => ({ id: build.id, version: Number(build.attributes?.version), state: build.attributes?.processingState, expired: Boolean(build.attributes?.expired) }))
+  return (list?.data || [])
+    .map((build) => ({
+      id: build.id,
+      version: Number(build.attributes?.version),
+      state: build.attributes?.processingState,
+      expired: Boolean(build.attributes?.expired),
+    }))
     .filter((build) => build.state === 'VALID' && !build.expired && Number.isFinite(build.version))
     .sort((a, b) => b.version - a.version);
+}
+
+/** The newest build Apple will accept. */
+async function newestBuild(app) {
+  const builds = await validBuilds(app);
   console.log(`  valid builds: ${builds.map((build) => build.version).join(', ') || 'none'}`);
   return builds[0] || null;
 }
@@ -758,15 +771,12 @@ async function checkAttachedBuild(app) {
 
   // The builds endpoint refuses include outright (400 PARAMETER_ERROR.ILLEGAL), so the
   // build → version-string mapping comes from preReleaseVersions, which does support it.
-  const list = await call(
-    'GET',
-    `/v1/apps/${app}/builds?limit=50&fields[builds]=version,processingState,expired`
-  );
+  const all = await validBuilds(app);
   const releases = new Map();
   try {
     const groups = await call(
       'GET',
-      `/v1/preReleaseVersions?filter[app]=${app}&filter[platform]=IOS&limit=50&include=builds`
+      `/v1/preReleaseVersions?filter[app]=${app}&filter[platform]=IOS&limit=200&include=builds`
     );
     for (const group of groups?.data || []) {
       for (const ref of group.relationships?.builds?.data || []) {
@@ -779,17 +789,9 @@ async function checkAttachedBuild(app) {
   }
   // A 1.1 upload is not a candidate for a 1.0 version: the store refuses that pair, so
   // comparing across version strings would fail the check for something it cannot fix.
-  const valid = (list?.data || [])
-    .filter((build) => build.attributes?.processingState === 'VALID' && !build.attributes?.expired)
-    .map((build) => ({
-      id: build.id,
-      version: Number(build.attributes?.version),
-      release: releases.get(build.id),
-    }))
-    .filter(
-      (build) => Number.isFinite(build.version) && (!build.release || build.release === label)
-    )
-    .sort((a, b) => b.version - a.version);
+  const valid = all
+    .map((build) => ({ ...build, release: releases.get(build.id) }))
+    .filter((build) => !build.release || build.release === label);
 
   const newest = valid[0];
   const held = Number(attached?.attributes?.version);
