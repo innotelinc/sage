@@ -17,7 +17,70 @@ public class SageStorePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "products", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "buy", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "diagnostics", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "unfinished", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "finish", returnType: CAPPluginReturnPromise),
     ]
+
+    private var updateTask: Task<Void, Never>?
+
+    /// StoreKit 2 hands a purchase the sheets never returned here: Ask to Buy approved
+    /// later, or a payment made on another device. The listener has to exist for the
+    /// life of the app, so it starts with the plugin and stops with it.
+    override public func load() {
+        updateTask = Task { [weak self] in
+            for await update in Transaction.updates {
+                guard case .verified(let transaction) = update else { continue }
+                self?.notifyListeners(
+                    "purchaseUpdate",
+                    data: Self.describe(transaction, signed: update.jwsRepresentation)
+                )
+            }
+        }
+    }
+
+    deinit { updateTask?.cancel() }
+
+    /// The shape the page already understands: an id, the product, and Apple's own
+    /// signature over the transaction — never the page's word for any of it.
+    private static func describe(_ transaction: Transaction, signed: String) -> [String: Any] {
+        [
+            "transactionId": String(transaction.id),
+            "productId": transaction.productID,
+            "signedTransaction": signed,
+            "json": transaction.jsonRepresentation.base64EncodedString(),
+        ]
+    }
+
+    /// What a consumable still owes: a purchase that was paid for but never finished,
+    /// because the app was killed or the server was unreachable at the time.
+    @objc func unfinished(_ call: CAPPluginCall) {
+        Task {
+            var rows: [[String: Any]] = []
+            for await update in Transaction.unfinished {
+                guard case .verified(let transaction) = update else { continue }
+                rows.append(Self.describe(transaction, signed: update.jwsRepresentation))
+            }
+            call.resolve(["transactions": rows])
+        }
+    }
+
+    /// Only the page knows when the server has minted the key, so only the page asks for
+    /// this. An unfinished consumable is delivered again on every launch until it is.
+    @objc func finish(_ call: CAPPluginCall) {
+        guard let id = call.getString("transactionId"), let wanted = UInt64(id) else {
+            call.reject("transactionId is required")
+            return
+        }
+        Task {
+            for await update in Transaction.unfinished {
+                guard case .verified(let transaction) = update, transaction.id == wanted else { continue }
+                await transaction.finish()
+                call.resolve(["finished": true])
+                return
+            }
+            call.resolve(["finished": false])
+        }
+    }
 
     /// Whether this phone could be charged at all, and where it is signed in.
     ///
@@ -86,13 +149,9 @@ public class SageStorePlugin: CAPPlugin, CAPBridgedPlugin {
                         return
                     }
                     // A consumable is finished once the server has acknowledged it;
-                    // finishing here would lose a paid session if the mint failed.
-                    call.resolve([
-                        "transactionId": String(transaction.id),
-                        "productId": transaction.productID,
-                        "signedTransaction": signed,
-                        "json": transaction.jsonRepresentation.base64EncodedString(),
-                    ])
+                    // finishing here would lose a paid session if the mint failed, so
+                    // the page calls `finish` after the key exists.
+                    call.resolve(Self.describe(transaction, signed: signed))
                 case .userCancelled:
                     call.reject("Purchase cancelled.")
                 case .pending:

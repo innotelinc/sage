@@ -4348,10 +4348,57 @@ async function buyWithApple(plan) {
         : installed.message;
     }
     if (!installed.ok) throw new Error(installed.message);
+    // StoreKit 2 keeps a consumable unfinished until someone finishes it, and an
+    // unfinished one is handed back on every launch. The key exists now, so it ends here.
+    await NATIVE_STORE.finish?.({ transactionId: bought.transactionId }).catch(() => {});
   } catch (error) {
     if (status) status.textContent = error.message;
   } finally {
     busy(button, false);
+  }
+}
+
+/* A purchase the sheets never returned: Ask to Buy approved later, or a payment made on
+   another device. StoreKit 2 delivers those through Transaction.updates, and every
+   unfinished consumable is also read on launch — both end with the server minting the
+   key first and `finish` second, which is the order a consumable requires. */
+const settledPurchases = new Set();
+async function settlePurchase(tx) {
+  if (!tx?.transactionId || !tx.signedTransaction) return;
+  if (settledPurchases.has(tx.transactionId)) return;
+  settledPurchases.add(tx.transactionId);
+  const email = String($('setReceiptEmail')?.value || '').trim();
+  try {
+    const data = await api('/api/iap/purchase', {
+      body: { signedTransaction: tx.signedTransaction, email },
+    });
+    const installed = await applySessionKey(data, { silent: true });
+    if (!installed.ok) throw new Error(installed.message);
+    toast('Paid · ' + (data.planName || 'session') + ' key installed.');
+  } catch (error) {
+    const message = String(error?.message || '');
+    // Already redeemed means a key was minted before this screen saw the transaction:
+    // that is finished too, or it would keep arriving with nothing left to give.
+    if (!/already/i.test(message)) {
+      settledPurchases.delete(tx.transactionId);
+      toast(`The App Store charged for a session but no key was installed: ${message}`, 'error');
+      return;
+    }
+  }
+  await NATIVE_STORE?.finish?.({ transactionId: tx.transactionId }).catch(() => {});
+}
+
+function listenForPurchases() {
+  if (!NATIVE_STORE) return;
+  if (typeof NATIVE_STORE.addListener === 'function') {
+    NATIVE_STORE.addListener('purchaseUpdate', (tx) => {
+      settlePurchase(tx);
+    });
+  }
+  if (typeof NATIVE_STORE.unfinished === 'function') {
+    NATIVE_STORE.unfinished()
+      .then(({ transactions }) => (transactions || []).forEach((tx) => settlePurchase(tx)))
+      .catch(() => {});
   }
 }
 
@@ -6060,6 +6107,7 @@ syncWorkspace();
 // Come back to the tab the user left, not to whatever boot defaults to.
 if (state.ui?.tab && state.ui.tab !== 'live') openTab(state.ui.tab);
 checkHealth();
+listenForPurchases();
 loadVoices();
 if ('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged = loadVoices;
 

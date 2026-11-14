@@ -6,7 +6,7 @@
  * stopped months earlier. A document now always goes to the network, and the cache is
  * only a fallback for the app itself while the copy in it is young.
  */
-const CACHE = 'sage-shell-v43';
+const CACHE = 'sage-shell-v44';
 const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/shell.js', '/profile.js', '/icon.svg', '/manifest.webmanifest', '/search.js', '/understand.js', '/review.js', '/handoff.js', '/library.js', '/a11y.js'];
 
 /** A copy older than this is not served: an app shell from last month is a bug report. */
