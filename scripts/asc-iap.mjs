@@ -710,7 +710,13 @@ async function report(app) {
 
 /** The newest build Apple will accept. */
 async function newestBuild(app) {
-  const list = await call('GET', `/v1/apps/${app}/builds?limit=50&fields[builds]=version,processingState,expired`);
+  // The same list asked for with `limit=50` came back without today's builds while
+  // TestFlight's own read of it (`limit=200`) had them: the shorter page is the one
+  // that misled the attach step, so the wider page is used here.
+  const list = await call(
+    'GET',
+    `/v1/apps/${app}/builds?limit=200&fields[builds]=version,processingState,expired,uploadedDate`
+  );
   const builds = (list?.data || [])
     .map((build) => ({ id: build.id, version: Number(build.attributes?.version), state: build.attributes?.processingState, expired: Boolean(build.attributes?.expired) }))
     .filter((build) => build.state === 'VALID' && !build.expired && Number.isFinite(build.version))
