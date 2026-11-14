@@ -4077,6 +4077,7 @@ async function loadStore() {
     store.iapError = '';
     store.iapPhone = null;
     store.iapAccount = null;
+    store.iapPending = [];
     if (store.iap && NATIVE_STORE) {
       const ids = store.iap.products.map((product) => product.productId);
       store.iapAsked = ids;
@@ -4103,6 +4104,13 @@ async function loadStore() {
       store.iapAccount = await fetch('/iap-status.json', { cache: 'no-store' })
         .then((res) => (res.ok ? res.json() : null))
         .catch(() => null);
+    }
+    // A consumable Apple still holds is money already taken: it is listed in the panel
+    // and asked for again here, because opening Settings is as good a moment as launch.
+    if (IOS_APP && typeof NATIVE_STORE?.unfinished === 'function') {
+      const owed = await NATIVE_STORE.unfinished().catch(() => null);
+      store.iapPending = Array.isArray(owed?.transactions) ? owed.transactions : [];
+      for (const tx of store.iapPending) settlePurchase(tx);
     }
     if (!store.plans.some((plan) => plan.slug === store.slug)) store.slug = store.plans[0]?.slug || '';
   } catch {
@@ -4147,6 +4155,15 @@ function renderIapDiag() {
       ? `payments · ${phone.canMakePayments ? 'allowed' : 'this Apple ID may not pay'} · storefront ${phone.storefront || 'unknown'}`
       : 'payments · not reported by this build',
   );
+  const pending = store.iapPending || [];
+  if (pending.length) {
+    const listed = pending
+      .map((tx) => [tx.transactionId, String(tx.productId || '').split('.').pop()].filter(Boolean).join(' · '))
+      .join(', ');
+    rows.push(
+      `awaiting · ${pending.length} paid App Store purchase${pending.length === 1 ? '' : 's'} with no key yet (${listed}) — retried on launch and on this screen`,
+    );
+  }
   const account = store.iapAccount;
   if (Array.isArray(account?.products) && account.products.length) {
     const short = (id) => String(id || '').split('.').pop();
