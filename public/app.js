@@ -4039,6 +4039,22 @@ async function micCheck() {
    app at #claim=<code>, which installs the key with no copying. */
 const store = { plans: [], slug: '', page: '', minutes: 15, iap: null, applePrices: {}, iapAsked: [], iapError: '' };
 
+/* Purchases are off while the Paid Applications Agreement is unsigned: StoreKit answers an
+   empty product list without it, so the buy button could only ever report "no product"
+   and take nobody's money. Nothing is being given away that was not already free — this
+   deployment runs with its own gateway key and /api/health reports authRequired:false — so
+   a session today costs nothing. Set this to true once the agreement is signed and the
+   products are live to bring the App Store path back. */
+const PURCHASES_ENABLED = false;
+
+/** Hide the store panel while purchases are off, and say why nobody is being asked to pay. */
+function purchasesOff() {
+  if (PURCHASES_ENABLED) return false;
+  const block = $('storeBlock');
+  if (block) block.hidden = true;
+  return true;
+}
+
 function chosenPlan() {
   return store.plans.find((plan) => plan.slug === store.slug) || store.plans[0] || null;
 }
@@ -4061,6 +4077,9 @@ function planPrice(plan) {
 }
 
 async function loadStore() {
+  // No product list, no price fetch and no StoreKit call: an unsigned agreement makes all
+  // three answer nothing, and asking anyway is what puts a dead button on the screen.
+  if (purchasesOff()) return;
   try {
     const data = await api('/api/store');
     store.plans = Array.isArray(data.plans) ? data.plans : [];
@@ -4199,6 +4218,7 @@ function renderIapDiag() {
 }
 
 function renderStore() {
+  if (purchasesOff()) return;
   const host = $('storePlans');
   if (!host) return;
   host.innerHTML = '';
@@ -4265,6 +4285,10 @@ let setupStoreAsked = false;
 function syncSetupBuy() {
   const button = $('btnSetupBuy');
   if (!button) return;
+  if (!PURCHASES_ENABLED) {
+    button.hidden = true;
+    return;
+  }
   const sellable = Boolean(store.iap && (NATIVE_STORE || !IOS_APP));
   button.hidden = !sellable;
   button.textContent = NATIVE_STORE ? 'Buy with the App Store' : 'Buy a session';
