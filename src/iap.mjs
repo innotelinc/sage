@@ -132,14 +132,31 @@ export function productList(env = {}) {
   ];
 }
 
-export function iapConfig(env = {}) {
+/**
+ * In-app purchase is switched off while the Paid Applications Agreement is unsigned.
+ *
+ * StoreKit answers an empty product list without that agreement, so a buyer gets
+ * "no product returned" and no money moves — and the app has since stopped offering a
+ * purchase at all (PURCHASES_ENABLED in public/app.js). This is the server half of the
+ * same switch: the config route must not advertise products or a buy button the app no
+ * longer shows. Set both back to true once the agreement is signed and the products are
+ * live, or the two halves disagree about whether anything is for sale.
+ */
+export const PURCHASES_ENABLED = false;
+
+export function iapConfig(env = {}, options = {}) {
+  // The switch is a parameter as well as a constant: the tests exercise the selling
+  // path with it on, and the default is what production runs.
+  const on = options.purchasesEnabled ?? PURCHASES_ENABLED;
   return {
     // The button only appears when a verified purchase can actually become a key.
-    enabled: Boolean(String(env.IAP_MINT_URL || '').trim()),
+    enabled: on && Boolean(String(env.IAP_MINT_URL || '').trim()),
     // Verification needs no credentials: the App Store signs the transaction and the
     // signature is checked against a pinned root.
     verify: true,
-    products: productList(env),
+    // Naming the products while nothing is for sale is what made the last build look
+    // half-configured: the ids are only offered when a purchase could complete.
+    products: on ? productList(env) : [],
   };
 }
 
@@ -377,8 +394,9 @@ async function handleGrant(request, env, json) {
 }
 
 export async function handleIap(request, url, env, json, context = {}) {
+  const options = { purchasesEnabled: context.purchasesEnabled ?? PURCHASES_ENABLED };
   if (url.pathname === '/api/iap/config' && request.method === 'GET') {
-    return json(iapConfig(env));
+    return json(iapConfig(env, options));
   }
   // A session granted by the operator instead of bought. The paid agreement can be
   // missing from an account for weeks; that must not stop the product working.
@@ -386,10 +404,17 @@ export async function handleIap(request, url, env, json, context = {}) {
   if (url.pathname !== '/api/iap/purchase') return json({ error: 'not_found' }, 404);
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
-  const config = iapConfig(env);
+  const config = iapConfig(env, options);
   if (!config.enabled) {
     return json(
-      { error: 'iap_disabled', message: 'In-app purchase is not enabled on this server; buy from the store page instead.' },
+      {
+        error: 'iap_disabled',
+        // Nothing points at a store page any more: while the switch is off a session is
+        // included, so a caller that still tries to buy is told that, not sent shopping.
+        message: PURCHASES_ENABLED
+          ? 'In-app purchase is not enabled on this server; buy from the store page instead.'
+          : 'In-app purchase is switched off: sessions are included, so there is nothing to buy.',
+      },
       501,
     );
   }

@@ -230,7 +230,9 @@ const env = {
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-async function purchase(signed, target = env, { email = 'admin@innotel.us', ip = '' } = {}) {
+/* The selling path is what this file tests, so the purchase helper turns the switch on;
+   the checks below prove the shipped default is off. */
+async function purchase(signed, target = env, { email = 'admin@innotel.us', ip = '', purchasesEnabled = true } = {}) {
   const url = new URL('http://localhost:8787/api/iap/purchase');
   const request = new Request(url, {
     method: 'POST',
@@ -238,14 +240,42 @@ async function purchase(signed, target = env, { email = 'admin@innotel.us', ip =
     body: JSON.stringify({ signedTransaction: signed, email }),
   });
   // The address is the second half of the trial rule, and only the server knows it.
-  const response = await handleIap(request, url, target, json, { ip });
+  const response = await handleIap(request, url, target, json, { ip, purchasesEnabled });
   return { status: response.status, body: await response.json() };
 }
 
-await check('purchase is disabled until a mint endpoint exists', async () => {
-  expect(iapConfig({}).enabled === false, 'the button would appear with nowhere to mint');
-  expect(iapConfig(env).enabled === true, 'a configured server still says disabled');
-  expect(iapConfig({}).products.length === 3, 'the three consumables are not offered');
+await check('a free build advertises nothing for sale', async () => {
+  // The shipped default: the app offers no purchase, so neither does this server, even
+  // when it is perfectly capable of minting a key.
+  expect(iapConfig(env).enabled === false, 'a configured server still advertises purchases');
+  expect(iapConfig(env).products.length === 0, 'product ids are still advertised');
+  const response = await handleIap(
+    new Request(new URL('http://localhost:8787/api/iap/config')),
+    new URL('http://localhost:8787/api/iap/config'),
+    env,
+    json,
+  );
+  const body = await response.json();
+  expect(body.enabled === false && body.products.length === 0, 'the route still sells something');
+});
+
+await check('with purchases on, a mint endpoint is still required', async () => {
+  const on = { purchasesEnabled: true };
+  expect(iapConfig({}, on).enabled === false, 'the button would appear with nowhere to mint');
+  expect(iapConfig(env, on).enabled === true, 'a configured server still says disabled');
+  expect(iapConfig({}, on).products.length === 3, 'the three consumables are not offered');
+});
+
+await check('a purchase is refused while purchasing is off', async () => {
+  const before = minted.length;
+  const result = await purchase(jws(transaction({ transactionId: '2000000000000001' })), env, {
+    email: 'free-build@innotel.us',
+    ip: '203.0.113.11',
+    purchasesEnabled: false,
+  });
+  expect(result.status === 501, `answered ${result.status} instead of refusing`);
+  expect(result.body.error === 'iap_disabled', 'the refusal was not the switch');
+  expect(minted.length === before, 'a refused purchase reached the mint service');
 });
 
 await check('a verified purchase becomes a session key', async () => {
