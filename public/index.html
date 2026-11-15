@@ -156,8 +156,7 @@
               <p>
                 Open <strong>Settings → Gateway</strong> and paste an OmniRoute key from
                 <code>gateway.innotel.us</code>. Only keys the gateway accepts will be stored.
-                A session is the other way in: pay in the App Store and the session installs itself
-                when Apple confirms it.
+                You do not need to: sessions are included in this build, so there is nothing to buy.
               </p>
               <div class="dialog-actions">
                 <input id="setupCode" type="text" autocomplete="off" spellcheck="false"
@@ -692,6 +691,17 @@
 
         <fieldset class="admin-block">
           <legend>Session</legend>
+          <p class="mini muted">
+            Sessions are included in this build: there is nothing to buy, no receipt to keep and no key to
+            paste. Sage connects to its gateway for you.
+          </p>
+        </fieldset>
+
+        <!-- The store panel below is kept for the day the Paid Applications Agreement is
+             signed. Until then app.js hides it: StoreKit returns no products without the
+             agreement, and a buy button that cannot sell is worse than no button. -->
+        <fieldset class="admin-block" id="storeBlock" hidden>
+          <legend>Buy a session</legend>
           <p class="mini muted" id="storeNote">
             A session is a timed key: pay once, then use the gateway as much as you like until the window closes.
           </p>
