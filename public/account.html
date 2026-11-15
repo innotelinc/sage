@@ -71,6 +71,29 @@
   </style>
 </head>
 <body>
+  <script>
+    // The App Store build is IAP-only: a session is bought through StoreKit, so there is no
+    // account to create and no password to type. Apple requires an account deletion flow
+    // wherever sign-up exists (5.1.1(v)) and this app has none, so the account page is
+    // stripped from the iOS bundle by .github/workflows/ios-testflight.yml. This guard is
+    // the second layer: if the file is ever served from a native origin anyway, it explains
+    // what replaced it instead of offering a form that cannot lead anywhere.
+    (function () {
+      const native =
+        /^(capacitor|ionic):$/.test(location.protocol) ||
+        Boolean(window.__SAGE_NATIVE__) ||
+        Boolean(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+      if (!native) return;
+      document.addEventListener('DOMContentLoaded', function () {
+        document.body.innerHTML =
+          '<section class="panel">' +
+          '<h2>Accounts are not available in the app</h2>' +
+          '<p class="muted">In the iPhone app a session is bought through the App Store: open <strong>Settings → Session</strong> and pick a plan. Nothing else is needed.</p>' +
+          '<p class="muted"><a href="/">Back to SAGE</a></p>' +
+          '</section>';
+      });
+    })();
+  </script>
   <header>
     <a class="brand" href="/">
       <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 4c0 6.6-5.4 12-12 12 6.6 0 12 5.4 12 12 0-6.6 5.4-12 12-12-6.6 0-12-5.4-12-12z" fill="currentColor" opacity=".9"/></svg>

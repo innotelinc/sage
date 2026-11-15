@@ -130,6 +130,20 @@ jobs:
           node -e 'console.log("plugin classes: " + JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).packageClassList.join(","))' "$CONF"
           echo "generated layout:"; ls -1 ios/App
 
+      - name: Exclude the account page from the App Store bundle
+        run: |
+          # The App Store build is IAP-only. Apple requires an in-app account deletion flow
+          # wherever account creation exists (5.1.1(v)), and this app has none — so the
+          # account page is removed from the bundle rather than shipped present but
+          # unreachable. public/account.html also refuses to render on a native origin.
+          BUNDLE=$(find ios -maxdepth 4 -type d -name public -path '*App/App/*' | head -1)
+          test -n "$BUNDLE" || { echo "the synced web bundle was not found"; exit 1; }
+          echo "bundle: $BUNDLE"
+          rm -f "$BUNDLE/account.html"
+          test ! -e "$BUNDLE/account.html" || { echo "account.html is still in the bundle"; exit 1; }
+          test -f "$BUNDLE/index.html" || { echo "index.html is missing from the bundle"; exit 1; }
+          echo "account page excluded; $(ls -1 "$BUNDLE" | wc -l | tr -d ' ') files ship"
+
       - name: Install app icon
         run: |
           # The Xcode project is generated fresh in this job, so it starts with whatever
@@ -238,6 +252,14 @@ jobs:
           test "$ICONS" -ge 1 || { echo "no AppIcon resources were compiled into the app"; exit 1; }
           test -f "$APP/Assets.car"
           ls -1 "$APP" | grep -i '^AppIcon'
+
+      - name: Verify the app cannot create an account
+        run: |
+          # Belt and braces: the removal happens before the build, this proves it survived
+          # into the archive that is uploaded to TestFlight and App Review.
+          APP=build/Sage.xcarchive/Products/Applications/App.app
+          if [ -e "$APP/public/account.html" ]; then echo "account.html shipped in the archive"; exit 1; fi
+          echo "no account page in the archive"
 
       - name: Verify the extension is inside the app
         run: |
