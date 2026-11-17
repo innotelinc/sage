@@ -1,9 +1,9 @@
 <div align="center">
 
 [![Latest release](https://img.shields.io/github/v/release/innotelinc/sage?color=18181b)](https://github.com/innotelinc/sage/releases)
-[![Website](https://img.shields.io/badge/site-innotelinc.github.io%2Fsage-6366f1)](https://innotelinc.github.io/sage)
+[![Website](https://img.shields.io/badge/site-innotelinc.github.io%2Fsage-38bdf8)](https://innotelinc.github.io/sage)
 [![Pages](https://github.com/innotelinc/sage/actions/workflows/pages.yml/badge.svg)](https://innotelinc.github.io/sage/)
-[![Theme: Unity](https://img.shields.io/badge/theme-Unity-6366f1)](https://github.com/innotelinc/innotel-platform-stack/blob/main/standards/unity/README.md)
+[![Theme: Unity](https://img.shields.io/badge/theme-Unity-38bdf8)](https://github.com/innotelinc/innotel-platform-stack/blob/main/standards/unity/README.md)
 
 [![CI](https://github.com/innotelinc/sage/actions/workflows/ci.yml/badge.svg)](https://github.com/innotelinc/sage/actions/workflows/ci.yml)
 [![Conformity](https://github.com/innotelinc/sage/actions/workflows/conform.yml/badge.svg)](https://github.com/innotelinc/sage/actions/workflows/conform.yml)
