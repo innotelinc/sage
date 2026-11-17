@@ -22,6 +22,25 @@ Two things about that command are not incidental:
   `Emulation.setEmulatedMedia` for `prefers-color-scheme: dark` before the first
   navigation. Without it every capture comes back in the light theme.
 
+A capture of an app nobody has used is a capture of its setup card, which is not what
+a listing should sell. Two optional variables populate the session first:
+
+```sh
+node scripts/mock-model.mjs &                       # OpenAI-compatible, canned answers
+AI_BASE_URL=http://127.0.0.1:9099/v1 AI_API_KEY=mock SESSION_GRANT_SECRET=devsecret   PORT=8799 node server.mjs &
+SESSION_GRANT_SECRET=devsecret node scripts/grant-session.mjs --plan sage-session-standard   --email studio@sage.local --days 30
+
+export SAGE_SESSION_CODE="$(cat the-code-it-printed)"
+SAGE_URL=http://127.0.0.1:8799/ SAGE_POPULATE=1 node scripts/store-shots.mjs
+```
+
+`SAGE_SESSION_CODE` is redeemed through the first-run card, and `SAGE_POPULATE` drives
+the app the way a student would: names the course, answers a physics question, solves a
+two-question quiz, writes an essay, extracts notes from a reading, teaches it four
+durable memories and runs one Evolve pass — all answered by the mock model. The
+workspace lives in that profile's `localStorage`, so one population covers every slot
+in the run.
+
 It writes ten states per slot, cropped to the exact pixel sizes the console wants:
 
 | Directory | Size | Slot |
@@ -47,6 +66,14 @@ App Store Connect requires.
 
 `deploy/ios/store-header/header-universal.png` is a separate 5244 × 2950 asset used
 by `scripts/asc-iap.mjs` through the API; it is not produced by this script.
+
+## These files are uploaded by hand
+
+Nothing in CI sends any of this to App Store Connect. The screenshots, the header and
+the search-results art are attached in the console by hand (or through
+`scripts/asc-iap.mjs` for the universal header asset only), which means a
+regenerated set has no effect on the listing until someone uploads it. Running
+`make-store-art.mjs` writes the files; publishing them is a separate, deliberate act.
 
 ## Palette
 

@@ -10,3 +10,6 @@ dist/
 /public/iap-status.json
 node_modules//android/capacitor.config.json
 .ios-signing.json
+
+# headless browser profile the screenshot script creates and deletes
+.tmp-shots-profile/
