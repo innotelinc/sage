@@ -560,6 +560,9 @@ h4 { font-size: 13px; }
 }
 .btn.primary:hover { filter: brightness(1.07); }
 .btn.ghost { background: transparent; }
+/* A ghost primary keeps the emphasis but has no filled background, so the ink made
+   for the gradient would disappear on it; the brand colour carries it instead. */
+.btn.ghost.primary { background: transparent; color: var(--brand); }
 .btn.ghost:hover { background: var(--surface-2); }
 .btn.danger, .btn.ghost.danger { color: var(--danger); }
 .btn.ghost.danger:hover { background: var(--danger-soft); }

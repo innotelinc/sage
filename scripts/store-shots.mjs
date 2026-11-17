@@ -169,6 +169,13 @@ try {
       mobile: profile.mobile,
     });
 
+    // The listing is the dark surface, and so is the header art beside it. A headless
+    // browser reports prefers-color-scheme: light, which the app honours, so without
+    // this line every capture comes back in the light theme.
+    await send('Emulation.setEmulatedMedia', {
+      features: [{ name: 'prefers-color-scheme', value: 'dark' }],
+    });
+
     const loaded = once('Page.loadEventFired');
     await send('Page.navigate', { url: URL_TO_LOAD });
     await loaded;
