@@ -88,7 +88,6 @@ const STATES = [
 // model (`node scripts/mock-model.mjs`) answering real coursework.
 const SESSION_CODE = (process.env.SAGE_SESSION_CODE || '').trim();
 const POPULATE = process.env.SAGE_POPULATE === '1';
-let populated = false;
 
 const withInput = (id, value) => `
   const field = document.getElementById('${id}');
@@ -281,10 +280,26 @@ try {
     });
 
     // An empty app photographs as a setup screen, which is not what a listing should
-    // sell. With SAGE_SESSION_CODE the granted session is redeemed and, with
-    // SAGE_POPULATE, the mock model answers real coursework first, so the tabs show
-    // the product working. The workspace lives in this profile's localStorage, so one
-    // population covers every slot in the run.
+    // sell, but half of what a populated session shows — an answer, a quiz result —
+    // lives in the page rather than in storage, so each slot is populated from a
+    // cleared workspace: every slot then shows the same session instead of the first
+    // slot showing results and the rest showing empty composers.
+    if (POPULATE) {
+      await send('Runtime.evaluate', { expression: '(() => { try { localStorage.clear(); } catch {} return true; })()' });
+      const fresh = once('Page.loadEventFired');
+      await send('Page.navigate', { url: URL_TO_LOAD });
+      await fresh;
+      await sleep(1200);
+      await send('Runtime.evaluate', {
+        expression: `(() => {
+          const style = document.createElement('style');
+          style.textContent = '#toast { display: none !important; }';
+          document.head.appendChild(style);
+          return true;
+        })()`,
+      });
+    }
+
     if (SESSION_CODE) {
       await send('Runtime.evaluate', {
         expression: `(() => {
@@ -299,8 +314,7 @@ try {
       await sleep(2000);
     }
 
-    if (POPULATE && !populated) {
-      populated = true;
+    if (POPULATE) {
       for (const step of SEED_STEPS) {
         await send('Runtime.evaluate', { expression: `(() => { ${step.run} return true; })()` });
         await sleep(step.wait || 2500);
