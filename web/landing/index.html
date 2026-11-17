@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#07080b" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#080b12" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
   <title>About SAGE — Course-Taking Agent</title>
   <meta name="description" content="About SAGE: it listens to the lecture, watches the slides, reads the material, evaluates what matters, answers quizzes and writes essays in your voice — self-hosted, gateway-backed, installable on a phone.">
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://innotelinc.github.io/sage/">
   <link rel="canonical" href="https://innotelinc.github.io/sage/">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b0d10'/%3E%3Cpath d='M16 6c0 5.5-4.5 10-10 10 5.5 0 10 4.5 10 10 0-5.5 4.5-10 10-10-5.5 0-10-4.5-10-10z' fill='%236366f1'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23080b12'/%3E%3Cpath d='M16 6c0 5.5-4.5 10-10 10 5.5 0 10 4.5 10 10 0-5.5 4.5-10 10-10-5.5 0-10-4.5-10-10z' fill='%2338bdf8'/%3E%3C/svg%3E">
   <script>
     // Same theme key as the app shell (sage.shell.v1), so /about never disagrees
     // with the surface the reader just came from.
@@ -29,11 +29,11 @@
        resolve, so it carries its own copy of the same values. */
     :root {
       color-scheme: dark;
-      --bg: #07080b; --bg-elev: #0d0f14; --surface: #13161d; --surface-2: #191d26; --surface-3: #212630;
+      --bg: #080b12; --bg-elev: #0b1019; --surface: #111823; --surface-2: #16202d; --surface-3: #1c2836;
       --line: rgba(255, 255, 255, .08); --line-strong: rgba(255, 255, 255, .16);
       --text: #f0f2f7; --text-2: #c2c9d6; --muted: #838d9f; --faint: #5a6373;
-      --brand: #6366f1; --brand-2: #8b5cf6; --brand-ink: #fff; --brand-soft: rgba(99, 102, 241, .14);
-      --live: #2f9e6b; --live-bright: #34d399; --info: #38bdf8; --danger: #f87171;
+      --brand: #38bdf8; --brand-2: #6ee7b7; --brand-ink: #04121c; --brand-soft: rgba(56, 189, 248, .14);
+      --live: #2f9e6b; --live-bright: #34d399; --info: #7dd3fc; --danger: #f87171;
       --r1: 4px; --r2: 6px; --r3: 8px; --r4: 12px; --r5: 16px; --r-full: 999px;
       --shadow-2: 0 8px 24px rgba(0, 0, 0, .32);
       --font: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -45,7 +45,7 @@
       --bg: #f6f7fb; --bg-elev: #fff; --surface: #fff; --surface-2: #f3f5fa; --surface-3: #e9edf4;
       --line: rgba(16, 24, 40, .1); --line-strong: rgba(16, 24, 40, .2);
       --text: #101828; --text-2: #344054; --muted: #667085; --faint: #98a2b3;
-      --brand: #4f46e5; --brand-2: #7c3aed; --brand-soft: rgba(79, 70, 229, .1);
+      --brand: #0369a1; --brand-2: #0f766e; --brand-ink: #fff; --brand-soft: rgba(3, 105, 161, .1);
       --live: #218358; --live-bright: #1a7f55; --info: #0b7bb5;
       --shadow-2: 0 8px 24px rgba(16, 24, 40, .1);
     }
@@ -60,6 +60,31 @@
     a:hover { color: var(--brand-2); }
     code, pre { font-family: var(--mono); }
     .wrap { max-width: 1040px; margin: 0 auto; padding: 0 22px; }
+
+
+    /* The store listing's own header: the app icon, its name, the status line. */
+    .store-head { display: flex; align-items: center; gap: 16px; margin: 0 0 22px; }
+    .store-icon {
+      width: 88px; height: 88px; border-radius: 20px; flex: none;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .08);
+    }
+    .store-id { min-width: 0; flex: 1; }
+    .store-name { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -.01em; color: var(--text); }
+    .store-tag { margin: 2px 0 6px; font-size: 14px; color: var(--text-2); }
+    .store-meta { margin: 0; font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px; }
+    .store-meta .sep { opacity: .5; }
+    .store-get {
+      flex: none; padding: 8px 20px; border-radius: var(--r-full);
+      background: var(--brand); color: var(--brand-ink);
+      font-size: 13.5px; font-weight: 700; letter-spacing: .04em;
+    }
+    .store-get:hover { color: var(--brand-ink); filter: brightness(1.08); }
+    @media (max-width: 620px) {
+      .store-head { flex-wrap: wrap; gap: 12px; }
+      .store-icon { width: 72px; height: 72px; border-radius: 17px; order: 1; }
+      .store-id { order: 1; flex: 1 1 60%; }
+      .store-get { order: 2; flex: 1 1 100%; text-align: center; }
+    }
 
     /* ── topbar ─────────────────────────────────────────────────── */
     .topbar {
@@ -221,6 +246,15 @@
 
 <header class="hero">
   <div class="wrap hero-inner">
+    <div class="store-head">
+      <img class="store-icon" src="app-icon.png" width="88" height="88" alt="SAGE app icon — a mint-to-sky star on navy">
+      <div class="store-id">
+        <p class="store-name">SAGE</p>
+        <p class="store-tag">The class, taken for you — in your own voice</p>
+        <p class="store-meta"><span>Free to self-host</span><span class="sep">·</span><span>iPhone build with Apple for review</span><span class="sep">·</span><span>web at sage.innotel.tech</span></p>
+      </div>
+      <a class="store-get" href="https://sage.innotel.tech/account">Open</a>
+    </div>
     <span class="kicker">About &middot; course-taking agent &middot; a product of Innotel Labs</span>
     <h1>The class, taken for you.<br><span class="dim">In your own voice.</span></h1>
     <p class="lead">

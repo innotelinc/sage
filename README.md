@@ -6,6 +6,7 @@
 [![Theme: Unity](https://img.shields.io/badge/theme-Unity-6366f1)](https://github.com/innotelinc/innotel-platform-stack/blob/main/standards/unity/README.md)
 
 [![CI](https://github.com/innotelinc/sage/actions/workflows/ci.yml/badge.svg)](https://github.com/innotelinc/sage/actions/workflows/ci.yml)
+[![Conformity](https://github.com/innotelinc/sage/actions/workflows/conform.yml/badge.svg)](https://github.com/innotelinc/sage/actions/workflows/conform.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 # 🎓 SAGE — Course-Taking Agent
@@ -47,6 +48,28 @@ interface follows the shared **Unity** theme, and the whole thing runs on plain 
 > **Releases:** [github.com/innotelinc/sage/releases](https://github.com/innotelinc/sage/releases)
 
 ---
+
+## About me
+
+I am **Darnel Hunter**, and I build the Innotel platform behind these products:
+identity, storage, billing, media, mail and the edge that fronts them. SAGE is one
+of the products on top of it — the one that listens to a lecture and answers as a
+capable student, with the session, the memory and the operator panel built rather
+than assumed.
+
+I write software the way I would want to inherit it: the standard in one place, the
+theme shared instead of reinvented, the deployment reproducible, and the docs
+honest about what a check did and did not verify. This repository follows that
+pattern — the estate README shape, the
+[Unity theme](https://github.com/innotelinc/innotel-platform-stack/blob/main/standards/unity/README.md),
+the attribution guards, a Pages landing page, and one process with no dependencies.
+
+- Website: **[sage.innotel.tech](https://sage.innotel.tech)** — the agent itself
+- This page: [innotelinc.github.io/sage](https://innotelinc.github.io/sage/)
+- Source: [github.com/innotelinc/sage](https://github.com/innotelinc/sage)
+- Support: [support@innotel.us](mailto:support@innotel.us)
+- iPhone: the native build is finished and submitted to Apple; there is no App
+  Store listing to link yet, and the page says so rather than promising one.
 
 ## What it does
 
