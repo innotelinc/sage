@@ -38,7 +38,10 @@ const SLOTS = [
 const PIECES = [
   {
     file: 'header',
-    capture: '01-live.png',
+    // The solved quiz: two questions in, the first answered with its reasoning and a
+    // confidence figure. A listing's first image shows the product producing results,
+    // not its control panel.
+    capture: '03-quiz.png',
     eyebrow: 'COURSE-TAKING AGENT',
     headline: ['The class,', 'taken for you.'],
     deck: ['It listens, watches and reads the lecture,', 'then answers in your own voice.'],

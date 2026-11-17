@@ -105,6 +105,14 @@ app.build_configurations.each do |config|
   config.build_settings.merge!(signing.call(app_profile))
 end
 
+# Apple reads "available on iPad" from the binary: a target whose family is 1 alone
+# installs on an iPhone and nowhere else, and the console then has no iPad slot to fill.
+# The extension already ships both families; the app declares the same on every
+# configuration, because the archive is Release while a local run is Debug.
+app.build_configurations.each do |config|
+  config.build_settings['TARGETED_DEVICE_FAMILY'] = '1,2'
+end
+
 app.add_dependency(extension)
 embed = app.new_copy_files_build_phase('Embed App Extensions')
 embed.dst_subfolder_spec = '13' # PlugIns

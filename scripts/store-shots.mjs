@@ -50,7 +50,13 @@ const STATES = [
     run: `${tab('answer')} (() => { const el = document.getElementById('answerResult'); if (el) { const jump = () => { el.style.scrollMarginTop = '120px'; el.scrollIntoView({ block: 'start', behavior: 'instant' }); };
         jump(); setTimeout(jump, 350); } })();`,
   },
-  { file: '03-quiz.png', label: 'Quiz', run: tab('quiz') },
+  {
+    file: '03-quiz.png',
+    label: 'Quiz',
+    // Framed on the solved questions rather than the pasted ones: the answers and their
+    // reasoning are the product, and this capture is also the header art.
+    run: `${tab('quiz')} (() => { const el = document.getElementById('quizResults'); if (el) { const jump = () => { el.style.scrollMarginTop = '150px'; el.scrollIntoView({ block: 'start', behavior: 'instant' }); }; jump(); setTimeout(jump, 350); } })();`,
+  },
   { file: '04-essay.png', label: 'Essay', run: tab('essay') },
   { file: '05-read.png', label: 'Read', run: tab('read') },
   {

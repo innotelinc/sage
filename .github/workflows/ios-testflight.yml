@@ -176,6 +176,16 @@ jobs:
           # from the app it ships inside, so this is written here and handed to
           # the extension below rather than left to two defaults.
           set_key CFBundleShortVersionString "$IOS_MARKETING_VERSION"
+          # A build Apple installs on an iPad needs the ~ipad orientation list as well as
+          # the device family, or the binary still reports iPhone only. All four keep
+          # Slide Over and Split View working, so no UIRequiresFullScreen here.
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations~ipad" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad array" "$PLIST"
+          ipad_index=0
+          for orientation in UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight; do
+            /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad:$ipad_index string $orientation" "$PLIST"
+            ipad_index=$((ipad_index + 1))
+          done
 
       - name: Add the screen-broadcast extension
         env:
@@ -284,6 +294,27 @@ jobs:
           test "$APP_VER" = "$EXT_VER" || { echo "ITMS-90473: extension version $EXT_VER differs from app $APP_VER"; exit 1; }
           test "$APP_BUILD" = "$EXT_BUILD" || { echo "ITMS-90473: extension build $EXT_BUILD differs from app $APP_BUILD"; exit 1; }
           /usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier"             "$APP/PlugIns/SageBroadcast.appex/Info.plist"
+
+      - name: Verify iPad support
+        run: |
+          APP=build/Sage.xcarchive/Products/Applications/App.app
+          PLIST="$APP/Info.plist"
+          # Apple decides device support from the binary, not from the console: a family
+          # of 1 alone, or a family of 1,2 with no ~ipad orientations, ships as an iPhone
+          # app and leaves the listing with no iPad slot at all.
+          FAMILIES=$(/usr/libexec/PlistBuddy -c "Print :UIDeviceFamily" "$PLIST" 2>/dev/null | tr -d '\n ' || true)
+          echo "device families: $FAMILIES"
+          case "$FAMILIES" in *1*) ;; *) echo "::error::the app does not declare the iPhone family"; exit 1 ;; esac
+          case "$FAMILIES" in *2*) ;; *) echo "::error::the app does not declare the iPad family"; exit 1 ;; esac
+          ORIENTATIONS=$(/usr/libexec/PlistBuddy -c "Print :UISupportedInterfaceOrientations~ipad" "$PLIST" 2>/dev/null | grep -c UIInterfaceOrientation || true)
+          echo "iPad orientations: $ORIENTATIONS"
+          test "$ORIENTATIONS" -ge 2 || { echo "::error::the iPad orientation list is missing"; exit 1; }
+          # An embedded extension that is iPhone-only is rejected as a mismatch, so it is
+          # pinned to the same two families in add-broadcast-target.rb.
+          EXT_FAMILIES=$(/usr/libexec/PlistBuddy -c "Print :UIDeviceFamily" "$APP/PlugIns/SageBroadcast.appex/Info.plist" 2>/dev/null | tr -d '\n ' || true)
+          echo "extension families: $EXT_FAMILIES"
+          case "$EXT_FAMILIES" in *2*) ;; *) echo "::error::the broadcast extension is iPhone-only"; exit 1 ;; esac
+          echo "the archive installs on iPhone and iPad"
 
       - name: Export .ipa
         env:

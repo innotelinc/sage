@@ -64,6 +64,17 @@ copy rather than from a fraction of the height, because the iPad slot is almost
 twice as wide as the phone but barely taller. Output is RGB with no alpha, which
 App Store Connect requires.
 
+The header is composed from the solved quiz (`03-quiz.png`): two questions pasted in,
+the first answered with its reasoning and a confidence figure. The search-results card
+is the answered question (`02-answer.png`). Both show the product producing results;
+neither is a control panel.
+
+The app ships to iPhone and iPad from the same build. `TARGETED_DEVICE_FAMILY` is
+`1,2` on the app and the broadcast extension in `deploy/ios/add-broadcast-target.rb`,
+the `~ipad` orientation list is written into `Info.plist` by `ios-testflight.yml`, and
+that workflow fails if the archive comes back iPhone-only — which is why the iPad
+screenshots above are a required slot rather than an optional one.
+
 `deploy/ios/store-header/header-universal.png` is a separate 5244 × 2950 asset used
 by `scripts/asc-iap.mjs` through the API; it is not produced by this script.
 
