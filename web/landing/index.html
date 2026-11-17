@@ -80,10 +80,12 @@
     }
     .store-get:hover { color: var(--brand-ink); filter: brightness(1.08); }
     @media (max-width: 620px) {
-      .store-head { flex-wrap: wrap; gap: 12px; }
-      .store-icon { width: 72px; height: 72px; border-radius: 17px; order: 1; }
-      .store-id { order: 1; flex: 1 1 60%; }
-      .store-get { order: 2; flex: 1 1 100%; text-align: center; }
+      .store-head { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 12px 14px; }
+      .store-icon { width: 72px; height: 72px; border-radius: 17px; }
+      .store-id { min-width: 0; }
+      .store-get { grid-column: 1 / -1; text-align: center; padding: 10px 20px; }
+      .store-meta { flex-direction: column; gap: 1px; }
+      .store-meta .sep { display: none; }
     }
 
     /* ── topbar ─────────────────────────────────────────────────── */
@@ -178,6 +180,8 @@
     .no { color: var(--faint); background: var(--surface-3); }
 
     .split { display: grid; grid-template-columns: 1.05fr .95fr; gap: 32px; align-items: start; }
+    /* A long command line scrolls inside its card; it must not widen the page. */
+    .split > * { min-width: 0; }
     .split h2 { margin-top: 0; }
     .list { list-style: none; padding: 0; margin: 0; }
     .list li { position: relative; padding: 9px 0 9px 24px; color: var(--text-2); border-bottom: 1px solid var(--line); font-size: 14.5px; }
