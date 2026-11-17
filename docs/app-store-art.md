@@ -47,9 +47,15 @@ It writes ten states per slot, cropped to the exact pixel sizes the console want
 | --- | --- | --- |
 | `deploy/ios/store-phone` | 1206 × 2622 | iPhone 6.3 inch |
 | `deploy/ios/store-ipad` | 2064 × 2752 | iPad 13 inch |
+| `deploy/ios/store-ipad-landscape` | 2752 × 2064 | iPad 13 inch, landscape — layout check, not a listing slot |
 | `deploy/ios/store-duo` | 2007 × 2853 | iPhone Duo inner display |
 
 `SAGE_PROFILES=store-phone` limits a run to one slot while iterating.
+
+The landscape set is not a slot the console asks for. It exists because the build
+declares all four iPad orientations, so the tablet can be rotated the moment it is
+installed: the run photographs the same ten screens turned on their side and shows
+the sidebar and the two-column Live view still fitting at 1376 points wide.
 
 ## Header and search-results art — `scripts/make-store-art.mjs`
 

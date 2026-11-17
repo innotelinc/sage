@@ -33,6 +33,10 @@ const PROFILES = [
   // 669x951 at 3 is 2007x2853 — the Duo's 7.6 inch inner display, the surface the app
   // actually runs on when the phone is open.
   { dir: 'deploy/ios/store-duo', width: 669, height: 951, scale: 3, mobile: true, label: 'iPhone Duo' },
+  // The same 13 inch iPad turned on its side: 1376x1032 at 2 is 2752x2064, and it is the
+  // orientation the ~ipad list in Info.plist now allows. Not an App Store slot of its
+  // own, but the set proves the layout holds when the tablet is rotated.
+  { dir: 'deploy/ios/store-ipad-landscape', width: 1376, height: 1032, scale: 2, mobile: false, label: 'iPad 13 · landscape' },
 ];
 
 const CLOSE_DIALOGS = `document.querySelectorAll('dialog[open]').forEach((d) => d.close());`;
