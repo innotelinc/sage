@@ -125,7 +125,7 @@ wrong — read the count line first.
 | Bundle id | `us.inotel.mintmark` |
 | Live version | 1.0 (build 8) — approved 16 Nov, on sale |
 | Version 1.1 | `d405a608-72fb-4808-ac33-84b9a6b41fd8`, `PREPARE_FOR_SUBMISSION` |
-| Build on 1.1 | **9** — a newer valid build, **13**, was uploaded today 09:17 and is not attached |
+| Build on 1.1 | **13** (`eddcd795-…`), attached 18 Nov in place of build 9 |
 | iPad screenshot set | `b0fb98a7-…`, six images, all `COMPLETE` at 2064×2752 |
 | iPhone sets | inherited from 1.0, six images each, art first |
 
@@ -177,20 +177,21 @@ key and server" lets you point the app at another origin. Each device is limited
 to 25 appraisals a day.
 ```
 
-### To submit — three API writes, no workflow for this yet
+### To submit — one step left
 
-The repository has no submission script for Mintmark (only `mobile/scripts/asc-compliance.mjs`
-and the screenshot/archive jobs), so this is App Store Connect by hand or two API calls:
+The build and the What's New are done. `.github/workflows/asc-attach-build.yml` (added
+18 Nov, dispatch-only, with no submit path) runs `mobile/scripts/asc-version.mjs`: run
+44346920335 attached build **13** in place of 9 and wrote the 443-character block above,
+and the read-back run 44347385852 reports `attached build: 13`, `en-US whatsNew 443
+chars`, version still `PREPARE_FOR_SUBMISSION`. Re-running
+`gh workflow run asc-attach-build.yml -R innotelinc/mintmark` is idempotent, and the
+script checks `processingState` first, so a build Apple has not finished processing
+fails loudly instead of as a bare 409.
 
-1. `PATCH /v1/appStoreVersions/d405a608-…` with
-   `relationships.build = {type: 'builds', id: <build 13>}`.
-2. `PATCH /v1/appStoreVersionLocalizations/<en-US>` with the What's New block above.
-3. `POST /v1/reviewSubmissionItems` for the version, then
+What remains is only the review submission, still by hand or two API calls:
+
+1. `POST /v1/reviewSubmissionItems` for the version, then
    `PATCH /v1/reviewSubmissions/<id>` with `submitted: true`.
-
-After step 1 the version must be re-read: the attach is refused while a version holds
-another build and Apple is still reconciling the new one, so a 409 there means retry,
-not that build 13 is bad.
 
 The empty draft `39c1d92d-b8fd-4026-83e4-3e7b8ea677d6` from 1.0 can be ignored;
 `DELETE` on `reviewSubmissions` is refused (403) in every state and only the web UI
@@ -284,6 +285,13 @@ a reader app, but expect the reviewer to exercise it.
 3. **Review contact.** The record carries `admissions@atheniq.institute`. App Review
    replies to that address and expects an answer within a day; if it is a shared or
    unmonitored inbox, point it at the address the other two apps use.
+
+A read-only status run (44346884742, `-f status=true`) now reports every field the API
+can see as `ok`: description, keywords, both URLs, copyright, name, subtitle, privacy
+policy, category, age rating, content rights, build 3, export compliance, the three
+screenshot sets at 4 images each, review contact and an 11-row price schedule. App
+Privacy is the one line it cannot settle — `appDataUsages` is not exposed, so it stays
+`?` whatever the answer is. Nothing else is flagged.
 
 ### To submit
 
