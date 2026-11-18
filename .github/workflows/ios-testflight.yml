@@ -353,6 +353,9 @@ jobs:
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
           APPLE_BUNDLE_ID: us.innotel.sage
           IOS_MARKETING_VERSION: ${{ inputs.marketing_version || '1.1' }}
+          # The build number this run stamps, so the answer lands on the new build and
+          # not on the last one Apple already listed under the same version.
+          IOS_BUILD_NUMBER: ${{ github.run_number }}
           COMPLIANCE: '1'
         run: node scripts/asc-iap.mjs
 

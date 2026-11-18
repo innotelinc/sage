@@ -46,6 +46,8 @@ const PROFILES = String(process.env.PROFILES || '').trim().toLowerCase();
 const TESTFLIGHT = String(process.env.TESTFLIGHT || '').trim().toLowerCase();
 /** Answers the build's export-compliance question, which otherwise blocks testers. */
 const COMPLIANCE = /^(1|true|yes)$/i.test(String(process.env.COMPLIANCE || ''));
+/** The CFBundleVersion this run stamped, so the answer lands on this build, not the last. */
+const IOS_BUILD_NUMBER = String(process.env.IOS_BUILD_NUMBER || '').trim();
 const CREATIVE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_CREATIVE || ''));
 const HEADER_ASSET = (process.env.APP_STORE_HEADER || 'deploy/ios/store-header/header-universal.png').trim();
 const CREATIVE_TYPES = ['PRODUCT_PAGE_HEADER_ASSET', 'APP_STORE_SEARCH_RESULTS_ASSET'];
@@ -755,6 +757,7 @@ async function newestBuild(app) {
  */
 async function answerCompliance(app) {
   const wanted = String(process.env.IOS_MARKETING_VERSION || '').trim();
+  const wantedBuild = IOS_BUILD_NUMBER;
   const deadline = Date.now() + 20 * 60 * 1000;
   let target = null;
   while (!target && Date.now() < deadline) {
@@ -770,14 +773,19 @@ async function answerCompliance(app) {
       answered: row.attributes?.usesNonExemptEncryption,
       version: pre.get(row.relationships?.preReleaseVersion?.data?.id),
     }));
-    target = wanted ? rows.find((row) => row.version === wanted) : rows[0];
+    const matching = (row) =>
+      (!wanted || row.version === wanted) && (!wantedBuild || String(row.number) === wantedBuild);
+    target = wanted || wantedBuild ? rows.find(matching) : rows[0];
     if (!target) {
-      console.log(`  no build under ${wanted || 'any version'} yet; waiting 20s`);
+      const label = `${wanted || 'any version'}${wantedBuild ? ` build ${wantedBuild}` : ''}`;
+      console.log(`  no build ${label} yet; waiting 20s`);
       await new Promise((resolve) => setTimeout(resolve, 20000));
     }
   }
   if (!target) {
-    console.error(`  no build appeared under ${wanted || 'any version'} in 20 minutes`);
+    console.error(
+      `  no build appeared under ${wanted || 'any version'}${wantedBuild ? ` build ${wantedBuild}` : ''} in 20 minutes`
+    );
     return false;
   }
   console.log(`  build ${target.number} (${target.version}) is ${target.state}, compliance=${target.answered}`);
