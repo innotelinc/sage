@@ -18,7 +18,7 @@ does, and it is deliberately the only place `publish` / `submit` appears.
 | Version state | `DEVELOPER_REJECTED` (withdrawn today) | `PREPARE_FOR_SUBMISSION` | `PREPARE_FOR_SUBMISSION` |
 | Draft submission | `d8ce2362-…` · 4 items (version + 3 products) | `d405a608-…` | none yet — made by the submit call |
 | Store state before this | 1.0 approved? **no** — in review until today | **live** at build 8 | never submitted |
-| What is left | nothing but the submit | attach 13, write What's New | screenshots, App Privacy, a demo account |
+| What is left | nothing but the submit | attach 13, write What's New | App Privacy, a demo account |
 | Runner | `.github/workflows/asc-iap.yml` | console / API by hand | `.github/workflows/ios-submission.yml` |
 
 Two facts decide most of the work:
@@ -253,12 +253,17 @@ a reader app, but expect the reviewer to exercise it.
 
 ### Blockers, in order
 
-1. **Screenshots.** The app declares tablet support, so App Store Connect wants all
-   three sizes before a version can go to review: 6.9-inch (1320×2868), 6.3-inch
-   (1206×2622) and 13-inch iPad. The draft run only reported `screenshots: en-US
-   APP_IPHONE_67`, and the three most recent capture runs were cancelled or failed
-   **inside the Capture step** (44271497751 cancelled after ~1h03, 44264185404 failed
-   after ~49m). Treat the sets as incomplete. Fix:
+1. ~~**Screenshots.**~~ **Cleared.** The app declares tablet support, so App Store
+   Connect wants all three sizes before a version can go to review: 6.9-inch
+   (1320×2868), 6.3-inch (1206×2622) and 13-inch iPad. Until today the draft only
+   reported `screenshots: en-US APP_IPHONE_67` because the previous three capture runs
+   were cancelled or failed **inside the Capture step** (44271497751 cancelled after
+   ~1h03, 44264185404 failed after ~49m). Run 44285840658 cleared all three — it built
+   Release, booted a 6.9-inch iPhone, a 13-inch iPad and a 6.3-inch iPhone, captured
+   4 images per slot, and uploaded them. The read-back run 44296997741 reports
+   `APP_IPHONE_67`, `APP_IPHONE_61` and `APP_IPAD_PRO_3GEN_129` each `4 complete, 0
+   still processing, 0 failed` — "every known slot is on the draft". No re-run is
+   needed; use the pair below only if Apple rejects an image later:
 
    ```
    gh workflow run ios-screenshots.yml -R innotelinc/atheniq -f upload=true
@@ -307,7 +312,8 @@ privacy questionnaire.
 ## 5 · Order of operations
 
 1. **AthenIQ first**, because it is the only one that needs work that a rerun cannot
-   fix: capture the screenshot sets, publish App Privacy, create the demo accounts.
+   fix: publish App Privacy and create the demo accounts. Its screenshot sets are now
+   all three complete.
 2. **Mintmark second**: attach build 13, write What's New, submit. Its screenshots and
    privacy are already in place, so it is the cheap one.
 3. **Sage last**: nothing to change. Submit only after deciding the trial/consumable
