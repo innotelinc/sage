@@ -2017,8 +2017,6 @@ async function ensureAppStoreProfile(bundleIdId, identifier, certificateId) {
  *   TESTFLIGHT=list        every build, its version string, state and upload date
  *   TESTFLIGHT=expire-old  every 1.1 build, and every 1.0 build but the one the
  *                          App Store version holds and anything newer than it
- *   TESTFLIGHT=unexpire    puts back builds that were expired while newer than the
- *                          one the version holds
  */
 async function testFlightBuilds(app) {
   const details = await call(
@@ -2068,29 +2066,6 @@ async function handleTestFlight(app) {
     console.log(
       `  ${row.expired ? 'expired' : row.state.toLowerCase()} · ${row.release} (${row.version}) · ${row.uploaded || 'no date'}`
     );
-  }
-  if (['unexpire', 'restore'].includes(TESTFLIGHT)) {
-    const attached = await attachedBuildId(app);
-    const held = rows.find((row) => row.id === attached);
-    const back = held
-      ? rows.filter((row) => row.expired && row.release === held.release && row.version > held.version)
-      : [];
-    if (!back.length) {
-      console.log('  testflight · nothing to put back');
-      return;
-    }
-    for (const row of back) {
-      try {
-        await call('PATCH', `/v1/builds/${row.id}`, {
-          data: { type: 'builds', id: row.id, attributes: { expired: false } },
-        });
-        console.log(`  restored · ${row.release} (${row.version})`);
-      } catch (error) {
-        console.log(`  FAILED · ${row.release} (${row.version}) · ${error.message}`);
-        process.exitCode = 1;
-      }
-    }
-    return;
   }
   if (!['expire-old', 'expire', 'prune'].includes(TESTFLIGHT)) return;
 
