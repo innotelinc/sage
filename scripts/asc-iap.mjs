@@ -2016,7 +2016,9 @@ async function ensureAppStoreProfile(bundleIdId, identifier, certificateId) {
  *
  *   TESTFLIGHT=list        every build, its version string, state and upload date
  *   TESTFLIGHT=expire-old  every 1.1 build, and every 1.0 build but the one the
- *                          App Store version holds
+ *                          App Store version holds and anything newer than it
+ *   TESTFLIGHT=unexpire    puts back builds that were expired while newer than the
+ *                          one the version holds
  */
 async function testFlightBuilds(app) {
   const details = await call(
@@ -2067,6 +2069,29 @@ async function handleTestFlight(app) {
       `  ${row.expired ? 'expired' : row.state.toLowerCase()} · ${row.release} (${row.version}) · ${row.uploaded || 'no date'}`
     );
   }
+  if (['unexpire', 'restore'].includes(TESTFLIGHT)) {
+    const attached = await attachedBuildId(app);
+    const held = rows.find((row) => row.id === attached);
+    const back = held
+      ? rows.filter((row) => row.expired && row.release === held.release && row.version > held.version)
+      : [];
+    if (!back.length) {
+      console.log('  testflight · nothing to put back');
+      return;
+    }
+    for (const row of back) {
+      try {
+        await call('PATCH', `/v1/builds/${row.id}`, {
+          data: { type: 'builds', id: row.id, attributes: { expired: false } },
+        });
+        console.log(`  restored · ${row.release} (${row.version})`);
+      } catch (error) {
+        console.log(`  FAILED · ${row.release} (${row.version}) · ${error.message}`);
+        process.exitCode = 1;
+      }
+    }
+    return;
+  }
   if (!['expire-old', 'expire', 'prune'].includes(TESTFLIGHT)) return;
 
   const keep = (await attachedBuildId(app)) || rows.find((row) => row.release === '1.0' && !row.expired)?.id || '';
@@ -2077,10 +2102,20 @@ async function handleTestFlight(app) {
     return;
   }
   console.log(`  testflight · keeping ${kept?.release} (${kept?.version})`);
+  // The newest build of the kept version survives too. Keeping only what the version
+  // holds expired build 100 minutes after it was uploaded, because the attach that would
+  // have made it current had not run yet.
+  const newestForKept = kept
+    ? rows.filter((row) => row.release === kept.release).sort((a, b) => b.version - a.version)[0]
+    : null;
+  if (newestForKept && newestForKept.id !== keep) {
+    console.log(`  testflight · also keeping ${newestForKept.release} (${newestForKept.version}), the newest upload`);
+  }
+  const spare = new Set([keep, newestForKept?.id].filter(Boolean));
   // The rule is the person's, not a guess at what looks recent: 1.1 is not going
-  // anywhere, and 1.0 keeps only the build its version holds.
+  // anywhere, and 1.0 keeps only those two builds.
   const doomed = rows.filter(
-    (row) => !row.expired && row.id !== keep && (row.release === '1.0' || row.release === '1.1')
+    (row) => !row.expired && !spare.has(row.id) && (row.release === '1.0' || row.release === '1.1')
   );
   if (!doomed.length) {
     console.log('  testflight · nothing to expire');
