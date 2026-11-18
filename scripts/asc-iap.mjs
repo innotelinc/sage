@@ -735,11 +735,53 @@ async function validBuilds(app) {
     .sort((a, b) => b.version - a.version);
 }
 
-/** The newest build Apple will accept. */
-async function newestBuild(app) {
-  const builds = await validBuilds(app);
-  console.log(`  valid builds: ${builds.map((build) => build.version).join(', ') || 'none'}`);
-  return builds[0] || null;
+/**
+ * Which prerelease version string each build belongs to, by build id.
+ *
+ * The builds endpoint refuses `include`, so this is the only way to know that build 100
+ * was uploaded as 1.1: attaching it to the 1.0 version answers 409
+ * ENTITY_ERROR.RELATIONSHIP.INVALID.INVALID_STATE, which is what a run picking the
+ * newest build regardless of its version looks like from the outside.
+ */
+async function buildReleases(app) {
+  const releases = new Map();
+  try {
+    const groups = await call(
+      'GET',
+      `/v1/preReleaseVersions?filter[app]=${app}&filter[platform]=IOS&limit=200&include=builds`
+    );
+    for (const group of groups?.data || []) {
+      for (const ref of group.relationships?.builds?.data || []) {
+        releases.set(ref.id, group.attributes?.version);
+      }
+    }
+  } catch {
+    // An unknown mapping is not a reason to fail: the caller treats a build with no
+    // release as a candidate, which is right whenever the app has one version string.
+  }
+  return releases;
+}
+
+/**
+ * The newest build Apple will accept for `label`.
+ *
+ * A build labelled for another version string is skipped rather than returned: the
+ * store refuses that pair, so attaching it fails after the work of uploading it.
+ */
+async function newestBuild(app, label) {
+  const [builds, releases] = await Promise.all([
+    validBuilds(app),
+    label ? buildReleases(app) : Promise.resolve(new Map()),
+  ]);
+  const mine = label
+    ? builds.filter((build) => {
+        const release = releases.get(build.id);
+        return !release || release === label;
+      })
+    : builds;
+  const scope = label ? ` for ${label}` : '';
+  console.log(`  valid builds${scope}: ${mine.map((build) => build.version).join(', ') || 'none'}`);
+  return mine[0] || null;
 }
 
 /**
@@ -840,21 +882,7 @@ async function checkAttachedBuild(app) {
   // The builds endpoint refuses include outright (400 PARAMETER_ERROR.ILLEGAL), so the
   // build → version-string mapping comes from preReleaseVersions, which does support it.
   const all = await validBuilds(app);
-  const releases = new Map();
-  try {
-    const groups = await call(
-      'GET',
-      `/v1/preReleaseVersions?filter[app]=${app}&filter[platform]=IOS&limit=200&include=builds`
-    );
-    for (const group of groups?.data || []) {
-      for (const ref of group.relationships?.builds?.data || []) {
-        releases.set(ref.id, group.attributes?.version);
-      }
-    }
-  } catch {
-    // Unknown mapping is not a reason to fail the check; the newest valid build is
-    // then compared directly, which is right whenever the app has one version string.
-  }
+  const releases = await buildReleases(app);
   // A 1.1 upload is not a candidate for a 1.0 version: the store refuses that pair, so
   // comparing across version strings would fail the check for something it cannot fix.
   const valid = all
@@ -896,7 +924,7 @@ async function attachVersion(app) {
     // A version holds on to the build it was first given, so a fresher upload
     // would never reach the App Store record unless it is swapped in. Only a build
     // Apple has finished validating can be attached, so this is worth re-running.
-    const newest = await newestBuild(app);
+    const newest = await newestBuild(app, version.attributes?.versionString);
     if (newest && newest.id !== version.relationships.build.data.id) {
       await call('PATCH', `/v1/appStoreVersions/${version.id}`, {
         data: {
@@ -910,7 +938,7 @@ async function attachVersion(app) {
       console.log(`  version ${version.attributes?.versionString} · build already attached`);
     }
   } else {
-    const build = await newestBuild(app);
+    const build = await newestBuild(app, version.attributes?.versionString);
     if (!build) throw new Error('no valid build to attach');
     await call('PATCH', `/v1/appStoreVersions/${version.id}`, {
       data: {
