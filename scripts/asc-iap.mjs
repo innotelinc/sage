@@ -44,6 +44,8 @@ const CERTS = String(process.env.CERTS || '').trim().toLowerCase();
 const PROFILES = String(process.env.PROFILES || '').trim().toLowerCase();
 /** TestFlight keeps every upload until it is expired; this is the way to prune it. */
 const TESTFLIGHT = String(process.env.TESTFLIGHT || '').trim().toLowerCase();
+/** Answers the build's export-compliance question, which otherwise blocks testers. */
+const COMPLIANCE = /^(1|true|yes)$/i.test(String(process.env.COMPLIANCE || ''));
 const CREATIVE = /^(1|true|yes)$/i.test(String(process.env.APP_STORE_CREATIVE || ''));
 const HEADER_ASSET = (process.env.APP_STORE_HEADER || 'deploy/ios/store-header/header-universal.png').trim();
 const CREATIVE_TYPES = ['PRODUCT_PAGE_HEADER_ASSET', 'APP_STORE_SEARCH_RESULTS_ASSET'];
@@ -736,6 +738,64 @@ async function newestBuild(app) {
   const builds = await validBuilds(app);
   console.log(`  valid builds: ${builds.map((build) => build.version).join(', ') || 'none'}`);
   return builds[0] || null;
+}
+
+/**
+ * Answers the export-compliance question for the build this run just uploaded.
+ *
+ * altool returns before Apple has ingested the build, so for a few minutes the newest
+ * build is still the previous one. This waits for a build under the version the run
+ * stamped, then answers "no non-exempt encryption" — the same answer every earlier Sage
+ * build carries, and one this app can stand behind: it ships no cipher of its own and
+ * uses only Apple's. Left unanswered, TestFlight lists the build as Missing Compliance
+ * and no tester can install it.
+ *
+ * It refuses to answer `true` or to overwrite an existing `true`: that would be a
+ * declaration about encryption this step cannot make on the app's behalf.
+ */
+async function answerCompliance(app) {
+  const wanted = String(process.env.IOS_MARKETING_VERSION || '').trim();
+  const deadline = Date.now() + 20 * 60 * 1000;
+  let target = null;
+  while (!target && Date.now() < deadline) {
+    const res = await call(
+      'GET',
+      `/v1/builds?filter[app]=${app}&limit=50&include=preReleaseVersion&sort=-uploadedDate&fields[builds]=version,processingState,usesNonExemptEncryption,preReleaseVersion`
+    );
+    const pre = new Map((res?.included || []).map((row) => [row.id, row.attributes?.version]));
+    const rows = (res?.data || []).map((row) => ({
+      id: row.id,
+      number: row.attributes?.version,
+      state: row.attributes?.processingState,
+      answered: row.attributes?.usesNonExemptEncryption,
+      version: pre.get(row.relationships?.preReleaseVersion?.data?.id),
+    }));
+    target = wanted ? rows.find((row) => row.version === wanted) : rows[0];
+    if (!target) {
+      console.log(`  no build under ${wanted || 'any version'} yet; waiting 20s`);
+      await new Promise((resolve) => setTimeout(resolve, 20000));
+    }
+  }
+  if (!target) {
+    console.error(`  no build appeared under ${wanted || 'any version'} in 20 minutes`);
+    return false;
+  }
+  console.log(`  build ${target.number} (${target.version}) is ${target.state}, compliance=${target.answered}`);
+  if (target.answered === true) {
+    console.error('  this build declares non-exempt encryption; not answering that here');
+    return false;
+  }
+  if (target.answered === false) {
+    console.log('  already answered · nothing to change');
+    return true;
+  }
+  await call('PATCH', `/v1/builds/${target.id}`, {
+    data: { type: 'builds', id: target.id, attributes: { usesNonExemptEncryption: false } },
+  });
+  const after = await call('GET', `/v1/builds/${target.id}?fields[builds]=version,usesNonExemptEncryption`);
+  const answered = after?.data?.attributes?.usesNonExemptEncryption;
+  console.log(`  answered · encryption=${answered}`);
+  return answered === false;
 }
 
 /**
@@ -2019,6 +2079,7 @@ const app = await resolveAppId().catch((error) => {
   process.exit(1);
 });
 console.log(`App ${BUNDLE} (${app}) · base territory ${TERRITORY}`);
+if (COMPLIANCE) process.exit((await answerCompliance(app)) ? 0 : 1);
 await report(app);
 if (TESTFLIGHT) {
   await handleTestFlight(app);
