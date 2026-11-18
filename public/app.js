@@ -76,6 +76,33 @@ const NATIVE_STORE = pluginOn('SageStore', 'ios');
 // whatever was playing, and leaving the app hands the session away: both end the
 // lecture capture. The native side sets it once and takes it back.
 const NATIVE_AUDIO = pluginOn('SageAudio', 'ios');
+// The About page is not in the bundle: `/about` is served out of the landing tree by
+// the web origin, so a WebView navigation to it lands on a path this app does not
+// carry. On iOS the link opens in an in-app browser instead, which loads the real page.
+const NATIVE_BROWSER = pluginOn('SageBrowser', 'ios');
+
+/**
+ * The About page lives on the web origin, and the bundle has no copy of it.
+ *
+ * In a browser this is an ordinary link and nothing here runs. In the app the
+ * navigation is stopped and the page is handed to Safari inside the app; without that
+ * the WebView was sent to a path that does not exist and the reader was left on a
+ * screen with no page and no way back.
+ */
+async function openAbout(event) {
+  if (!IS_NATIVE) return;
+  event.preventDefault();
+  const url = apiUrl('/about');
+  if (NATIVE_BROWSER?.open) {
+    try {
+      await NATIVE_BROWSER.open({ url });
+      return;
+    } catch {
+      /* fall through to saying where the page is */
+    }
+  }
+  toast(`The About page opens in the browser: ${url.replace(/^https?:\/\//, '')}`, 'error');
+}
 
 async function holdAudioSession() {
   if (!NATIVE_AUDIO?.begin) return;
@@ -5738,6 +5765,7 @@ function bind() {
   $('btnPaperSubmit').onclick = () => submitPaper(false);
 
   $('btnSettings').onclick = openSettings;
+  $('btnAbout')?.addEventListener('click', openAbout);
   $('btnRetryHealth').onclick = checkHealth;
   $('btnSetupBuy').onclick = buyFromSetup;
   $('btnSaveSettings').onclick = () => setTimeout(saveSettings, 0);

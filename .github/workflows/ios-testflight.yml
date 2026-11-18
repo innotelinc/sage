@@ -123,7 +123,7 @@ jobs:
             const file = process.argv[1];
             const config = JSON.parse(fs.readFileSync(file, "utf8"));
             const list = new Set(config.packageClassList || []);
-            for (const name of ["SageStorePlugin", "SageBroadcastPlugin", "SageAudioSessionPlugin"]) list.add(name);
+            for (const name of ["SageStorePlugin", "SageBroadcastPlugin", "SageAudioSessionPlugin", "SageBrowserPlugin"]) list.add(name);
             config.packageClassList = [...list];
             fs.writeFileSync(file, JSON.stringify(config, null, 2));
           ' "$CONF"
@@ -204,6 +204,9 @@ jobs:
           # The audio session keeps Listen alive with the app in the background,
           # and stops the microphone from interrupting an audiobook.
           cp deploy/ios/plugins/SageAudioSessionPlugin.swift ios/App/App/
+          # The About page lives on the web origin, so the app shows it in an in-app
+          # browser rather than navigating its own WebView off the bundle.
+          cp deploy/ios/plugins/SageBrowserPlugin.swift ios/App/App/
           ls -1 ios/App/SageBroadcast
           gem install xcodeproj --no-document > /dev/null
           ruby deploy/ios/add-broadcast-target.rb
@@ -282,7 +285,7 @@ jobs:
           # the iOS bridge publishes Plugins[jsName] from it and nothing else.
           BUNDLED_CONFIG="$APP/capacitor.config.json"
           test -f "$BUNDLED_CONFIG" || { echo "the Capacitor config did not reach the app bundle"; exit 1; }
-          for CLASS in SageStorePlugin SageBroadcastPlugin SageAudioSessionPlugin; do
+          for CLASS in SageStorePlugin SageBroadcastPlugin SageAudioSessionPlugin SageBrowserPlugin; do
             grep -q "$CLASS" "$BUNDLED_CONFIG" || { echo "$CLASS is not registered: the plugin would never load"; exit 1; }
           done
           echo "registered plugin classes: $(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).packageClassList.join(","))' "$BUNDLED_CONFIG")"
