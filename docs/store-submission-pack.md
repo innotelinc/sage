@@ -1,11 +1,16 @@
 # Store submission pack — Sage, Mintmark, AthenIQ
 
 Read from the App Store Connect records and the CI runs that write them, on
-18 November 2026. Every character count below was measured against the string that
+24 November 2026. Every character count below was measured against the string that
 would be sent, not estimated.
 
 Nothing here submits anything. The last line of each section is the one command that
 does, and it is deliberately the only place `publish` / `submit` appears.
+
+Both iOS apps have since gone in: Sage's 1.0 is queued as `WAITING_FOR_REVIEW`, and
+AthenIQ's first submission was rejected and has been resubmitted. The states below are
+what App Store Connect holds now, not the drafts this document was first written
+against.
 
 ## At a glance
 
@@ -14,22 +19,22 @@ does, and it is deliberately the only place `publish` / `submit` appears.
 | ASC app id | `6829329963` | `6834939837` | `6835960485` |
 | Bundle id | `us.inotell.sage` | `us.inotel.mintmark` | `institute.atheniq.app` |
 | Version | 1.0 | 1.1 | 1.0.0 |
-| Build | **101** attached | 9 attached, **13** valid and newer | **3** attached |
-| Version state | `DEVELOPER_REJECTED` (withdrawn today) | `PREPARE_FOR_SUBMISSION` | `PREPARE_FOR_SUBMISSION` |
-| Draft submission | `d8ce2362-…` · 4 items (version + 3 products) | `d405a608-…` | none yet — made by the submit call |
-| Store state before this | 1.0 approved? **no** — in review until today | **live** at build 8 | never submitted |
-| What is left | nothing but the submit | attach 13, write What's New | App Privacy, a demo account |
+| Build | **101** attached (newest valid) | **13** attached, in place of 9 | **3** attached |
+| Version state | `WAITING_FOR_REVIEW` | `PREPARE_FOR_SUBMISSION` | `WAITING_FOR_REVIEW` |
+| Submission | `WAITING_FOR_REVIEW` · 4 items (version + 3 products) | `d405a608-…` | `1a3f4ae7-4672-4aef-9155-8b6bc525620f` · submitted 24 Nov, 07:55 UTC |
+| Store state | 1.0 never approved — withdrawn 18 Nov, resubmitted | **live** at build 8; 1.1 not submitted | first submission rejected, resubmitted |
+| What is left | Apple's review, nothing on our side | the review submission — build 13 and the What's New are done | App Privacy, a demo account |
 | Runner | `.github/workflows/asc-iap.yml` | console / API by hand | `.github/workflows/ios-submission.yml` |
 
 Two facts decide most of the work:
 
-- **Sage** already passed a full submission review gate this morning: it sat in
-  `WAITING_FOR_REVIEW` with an expired build until it was withdrawn today. So
-  everything account-level (privacy published, age rating, pricing, products)
+- **Sage** passed a full submission gate before: it sat in `WAITING_FOR_REVIEW` with
+  an expired build, was withdrawn on 18 Nov, had build 101 attached, and is queued
+  again. Everything account-level (privacy published, age rating, pricing, products)
   is known-good; only the build changed.
-- **AthenIQ has never been to review**, so it has none of that history. Its
-  account-level answers are unverified, and the first submission is where a
-  missing App Privacy publication surfaces — as a refusal, not a warning.
+- **AthenIQ has now been to review once and was rejected.** Its account-level answers
+  are still unverified, and the rejection left an item in the submission marked
+  `REJECTED`, which pins the version until it is resolved.
 
 ---
 
@@ -41,10 +46,10 @@ Two facts decide most of the work:
 | --- | --- |
 | App Store Connect app | `6829329963` |
 | Bundle id | `us.inotell.sage` |
-| Version / build | 1.0 / **101**, attached and verified today |
-| Draft submission | `d8ce2362-6972-4245-9aff-741be67063b0`, `READY_FOR_REVIEW`, 4 items |
+| Version / build | 1.0 / **101**, the newest valid build, attached |
+| Submission | `WAITING_FOR_REVIEW`, 4 items |
 | Items | version 1.0 + `session.trial` + `session.standard` + `session.intensive` |
-| Version state | `DEVELOPER_REJECTED` — the state a withdrawn submission leaves behind, and one that still accepts the draft |
+| Version state | `WAITING_FOR_REVIEW` — the 18 Nov withdrawal is behind it |
 | Release type | after approval (automatic) |
 
 The listing, review contact, age rating and products are all written by
@@ -103,15 +108,20 @@ Ten states per slot, committed, uploaded by hand: `deploy/ios/store-phone`
 all four iPad orientations, so the iPad set is required, not optional
 (`docs/app-store-art.md`).
 
-### To submit
+### To submit — done
+
+Already submitted. The status run on 24 Nov (45351814854) reads
+`app version · 1.0 IOS · WAITING_FOR_REVIEW · build 101 (VALID)`, its submission
+`WAITING_FOR_REVIEW` with four `READY_FOR_REVIEW` items, and
+`release check · ok — the attached build is the newest valid one`.
 
 ```
 gh workflow run asc-iap.yml -f publish=true
 ```
 
-Expected log: `publish · draft d8ce2362… · 4 item(s)`, version `1.0`, then
-`submitted: true`. A refusal here means the draft lost an item, not that the build is
-wrong — read the count line first.
+That is still the command, and it only matters after a withdrawal (`-f withdraw=true`),
+which is how a different build gets in. A refusal there means the draft lost an item,
+not that the build is wrong — read the count line first.
 
 ---
 
@@ -208,8 +218,9 @@ can remove it.
 | App Store Connect app | `6835960485` |
 | Bundle id / team | `institute.atheniq.app` / `BH7WW2BR39` |
 | Version / build | 1.0.0 / **3** (uploaded 17 Nov 20:01 PT), attached `34dd0f07-…` |
-| Version state | `PREPARE_FOR_SUBMISSION` |
-| Last draft run | 44235531417, 18 Nov 04:11, success |
+| Version state | `WAITING_FOR_REVIEW` |
+| Submission | `1a3f4ae7-4672-4aef-9155-8b6bc525620f`, `WAITING_FOR_REVIEW`, submitted 24 Nov 07:55 UTC |
+| Last draft run | 45351659354, 24 Nov 07:55, success |
 | Source of truth | `console/mobile/store/submission.json` |
 
 The 04:11 run wrote, and read back: app record confirmed, version reused and renamed
@@ -286,24 +297,35 @@ a reader app, but expect the reviewer to exercise it.
    replies to that address and expects an answer within a day; if it is a shared or
    unmonitored inbox, point it at the address the other two apps use.
 
-A read-only status run (44346884742, `-f status=true`) now reports every field the API
-can see as `ok`: description, keywords, both URLs, copyright, name, subtitle, privacy
+A read-only status run (45351810831, `-f status=true`, 24 Nov) reports every field the
+API can see as `ok`: description, keywords, both URLs, copyright, name, subtitle, privacy
 policy, category, age rating, content rights, build 3, export compliance, the three
 screenshot sets at 4 images each, review contact and an 11-row price schedule. App
 Privacy is the one line it cannot settle — `appDataUsages` is not exposed, so it stays
 `?` whatever the answer is. Nothing else is flagged.
 
-### To submit
+### Submitted — and how a rejection is cleared
+
+Submitted on 24 Nov 07:55 UTC (run 45351659354). The version reads
+`1.0.0 (WAITING_FOR_REVIEW)` and `nothing is missing that the API can see`.
+
+The first attempt failed in a way worth knowing. The submission Apple had rejected was
+`UNRESOLVED_ISSUES`, with its version item still `REJECTED`. In that state Apple
+refused to submit the submission — `STATE_ERROR … Version is not ready to be submitted
+yet, please try again later`, identical on every retry — refused to let the version
+join another submission (`Item is already present in another reviewSubmission`), and
+refused to delete the item (`Item was already submitted`). The web UI's *Update review*
+is what clears it; the API form of that is `PATCH /v1/reviewSubmissionItems/{id}` with
+`{"resolved": true}`. `asc-submission.mjs` now resolves rejected items before it
+submits, so this one command works again after a rejection:
 
 ```
-gh workflow run ios-submission.yml -R innotelinc/atheniq -f apply=true -f attach_build=true -f ready=true -f submit=false
 gh workflow run ios-submission.yml -R innotelinc/atheniq -f submit=true
 ```
 
-The first line is the safe re-run of the draft (idempotent: it reuses the version,
-rewrites the same metadata, re-attaches the newest build). The second is the
-irreversible one and should only follow a green screenshot status and a published
-privacy questionnaire.
+Finding that item is its own wrinkle: the top-level `reviewSubmissionItems` collection
+refuses `GET_COLLECTION` ("allowed operations are: CREATE, DELETE, UPDATE"), so the
+item is only reachable through `GET /v1/reviewSubmissions/{id}/items`.
 
 ---
 
@@ -319,19 +341,19 @@ privacy questionnaire.
 
 ## 5 · Order of operations
 
-1. **AthenIQ first**, because it is the only one that needs work that a rerun cannot
-   fix: publish App Privacy and create the demo accounts. Its screenshot sets are now
-   all three complete.
-2. **Mintmark second**: attach build 13, write What's New, submit. Its screenshots and
-   privacy are already in place, so it is the cheap one.
-3. **Sage last**: nothing to change. Submit only after deciding the trial/consumable
-   pricing still reads correctly in the purchase sheet — a build swap does not touch
-   it, but it is what a reviewer will actually buy.
+1. **AthenIQ** — submitted 24 Nov and queued. What a rerun cannot fix is still open:
+   the App Privacy questionnaire has to be published in the web UI, and the review
+   notes offer an account on request instead of carrying credentials.
+2. **Sage** — queued as `WAITING_FOR_REVIEW` with build 101; nothing to change.
+3. **Mintmark** — build 13 and the What's New are done; what remains is its review
+   submission.
 
-Two rules that cost a cycle each if forgotten:
+Rules that cost a cycle each if forgotten:
 
 - **Screenshots lock once a version is in review.** Editing them means cancelling the
   submission (`PATCH canceled: true`), which leaves the version `DEVELOPER_REJECTED`
-  with its wells open — exactly the state Sage is in today — and then resubmitting.
+  with its wells open — the state Sage was in on 18 Nov — and then resubmitting.
+- **A rejected item outlives the rejection.** It stays `REJECTED` inside the
+  submission and pins the version until it is resolved; no retry clears it.
 - **An approved version never accepts new screenshots.** Once 1.1 for Mintmark is
   approved, any further art change rides a 1.2.
