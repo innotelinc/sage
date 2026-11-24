@@ -257,13 +257,15 @@ AthenIQ is a free companion app for AthenIQ Institute students. Signing in is op
 
 **That last sentence is the risk.** Guideline 2.1 expects credentials for anything
 behind a login, and "we will make one if you ask" is a common rejection — it costs a
-review cycle, not just a message. Before submitting, create a student demo account
-(enrolled, with progress and one certificate) and a registrar demo account, and put
-both pairs in the notes. The app also gates a paid flow outside StoreKit ("paid for on
-the web by transfer"): the notes already say so plainly, which is the right answer for
-a reader app, but expect the reviewer to exercise it.
+review cycle, not just a message. The 24 Nov submission went in with that sentence as
+written, so if 1.0.0 comes back rejected under 2.1, this is the thing to fix: create a
+student demo account (enrolled, with progress and one certificate) and a registrar demo
+account, and put both pairs in the notes before the resubmission. The app also gates a
+paid flow outside StoreKit ("paid for on the web by transfer"): the notes already say so
+plainly, which is the right answer for a reader app, but expect the reviewer to exercise
+it.
 
-### Blockers, in order
+### What was cleared, and what is still open
 
 1. ~~**Screenshots.**~~ **Cleared.** The app declares tablet support, so App Store
    Connect wants all three sizes before a version can go to review: 6.9-inch
@@ -285,17 +287,20 @@ a reader app, but expect the reviewer to exercise it.
    The first captures on simulator hardware; the second re-reads the sets later, so
    `UPLOAD_COMPLETE` (still checking) can be told apart from a rejected image.
 
-2. **App Privacy.** Publishing the questionnaire is a web-UI act and it is what a
-   first submission dies on: `STATE_ERROR.APP_DATA_USAGES_REQUIRED` — "You must have
-   published answers to your app's data usages". Saved is not published. Declare, for
-   app functionality: contact info (the account email), user content (enrollments,
-   progress), identifiers (user id), and the payment reference for transfer-paid
-   courses; no tracking, no advertising. Build 3 collects none of it until a student
-   signs in, which is what the notes say.
+2. **App Privacy — still the unverified one.** Publishing the questionnaire is a
+   web-UI act, and it is what a first submission normally dies on:
+   `STATE_ERROR.APP_DATA_USAGES_REQUIRED` — "You must have published answers to your
+   app's data usages". Saved is not published. The 24 Nov submission being accepted
+   settles nothing either way: the status run cannot read `appDataUsages`, so it prints
+   `?` whether or not the answers exist. Declare, for app functionality: contact info
+   (the account email), user content (enrollments, progress), identifiers (user id), and
+   the payment reference for transfer-paid courses; no tracking, no advertising. Build 3
+   collects none of it until a student signs in, which is what the notes say.
 
-3. **Review contact.** The record carries `admissions@atheniq.institute`. App Review
-   replies to that address and expects an answer within a day; if it is a shared or
-   unmonitored inbox, point it at the address the other two apps use.
+3. **Review contact.** The record carries `admissions@atheniq.institute`, and a reply
+   now lands there while the version is in review. App Review expects an answer within a
+   day; if that is a shared or unmonitored inbox, point it at the address the other two
+   apps use.
 
 A read-only status run (45351810831, `-f status=true`, 24 Nov) reports every field the
 API can see as `ok`: description, keywords, both URLs, copyright, name, subtitle, privacy
