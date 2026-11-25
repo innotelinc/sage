@@ -1,0 +1,12 @@
+{
+  "app": "SAGE",
+  "appId": "6829329963",
+  "bundleId": "us.inotell.sage",
+  "platform": "IOS",
+  "version": "1.0",
+  "build": "101",
+  "state": "WAITING_FOR_REVIEW",
+  "listingDoc": "docs/store-submission-pack.md",
+  "listingBlock": true,
+  "notes": "1.0 with build 101 is queued: the submission is WAITING_FOR_REVIEW holding the version and the three session products. Read back read-only on 25 November 2026 (run 45529174961)."
+}
