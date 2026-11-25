@@ -7,10 +7,10 @@ would be sent, not estimated.
 Nothing here submits anything. The last line of each section is the one command that
 does, and it is deliberately the only place `publish` / `submit` appears.
 
-Both iOS apps have since gone in: Sage's 1.0 is queued as `WAITING_FOR_REVIEW`, and
-AthenIQ's first submission was rejected and has been resubmitted. The states below are
-what App Store Connect holds now, not the drafts this document was first written
-against.
+Both iOS apps have since gone in and cleared: AthenIQ's 1.0.0 was approved and released
+with build 3, Mintmark's 1.1 is on sale with build 14, and Sage's 1.0 is queued as
+`WAITING_FOR_REVIEW`. The states below are what App Store Connect holds now, read back
+on 25 November 2026, not the drafts this document was first written against.
 
 ## At a glance
 
@@ -19,11 +19,11 @@ against.
 | ASC app id | `6829329963` | `6834939837` | `6835960485` |
 | Bundle id | `us.inotell.sage` | `us.inotel.mintmark` | `institute.atheniq.app` |
 | Version | 1.0 | 1.1 | 1.0.0 |
-| Build | **101** attached (newest valid) | **13** attached, in place of 9 | **3** attached |
-| Version state | `WAITING_FOR_REVIEW` | `PREPARE_FOR_SUBMISSION` | `WAITING_FOR_REVIEW` |
+| Build | **101** attached (newest valid) | **14** attached, in place of 13 | **3** attached |
+| Version state | `WAITING_FOR_REVIEW` | `READY_FOR_SALE` | `READY_FOR_SALE` |
 | Submission | `WAITING_FOR_REVIEW` · 4 items (version + 3 products) | `d405a608-…` | `1a3f4ae7-4672-4aef-9155-8b6bc525620f` · submitted 24 Nov, 07:55 UTC |
-| Store state | 1.0 never approved — withdrawn 18 Nov, resubmitted | **live** at build 8; 1.1 not submitted | first submission rejected, resubmitted |
-| What is left | Apple's review, nothing on our side | the review submission — build 13 and the What's New are done | App Privacy, a demo account |
+| Store state | 1.0 never approved — withdrawn 18 Nov, resubmitted | **live** at 1.1, build 14 (1.0 shipped build 8) | **approved** — released 1.0.0, build 3 |
+| What is left | Apple's review, nothing on our side | nothing — 1.1 is on sale | nothing on our side; Apple publishes the storefront page |
 | Runner | `.github/workflows/asc-iap.yml` | console / API by hand | `.github/workflows/ios-submission.yml` |
 
 Two facts decide most of the work:
@@ -32,9 +32,9 @@ Two facts decide most of the work:
   an expired build, was withdrawn on 18 Nov, had build 101 attached, and is queued
   again. Everything account-level (privacy published, age rating, pricing, products)
   is known-good; only the build changed.
-- **AthenIQ has now been to review once and was rejected.** Its account-level answers
-  are still unverified, and the rejection left an item in the submission marked
-  `REJECTED`, which pins the version until it is resolved.
+- **AthenIQ went to review once, was rejected, and was resubmitted — the resubmission
+  was approved** (1.0.0, build 3, `READY_FOR_SALE`). The rejection left an item in the
+  submission marked `REJECTED`, and the resubmission is what resolved it.
 
 ---
 
@@ -51,6 +51,20 @@ Two facts decide most of the work:
 | Items | version 1.0 + `session.trial` + `session.standard` + `session.intensive` |
 | Version state | `WAITING_FOR_REVIEW` — the 18 Nov withdrawal is behind it |
 | Release type | after approval (automatic) |
+
+<!-- store-state:begin — generated from store.json; edit that file, then run the store-state script with --write -->
+| What App Store Connect holds | Value |
+| --- | --- |
+| App | `SAGE` — app id `6829329963`, bundle `us.inotell.sage` |
+| Version | `1.0` |
+| Build | `101` |
+| State | `WAITING_FOR_REVIEW` |
+| Released | not recorded |
+<!-- store-state:end -->
+
+The table above is generated from [`store.json`](../store.json), the one record of
+what Apple holds: the scheduled store-state job compares it with App Store Connect
+once a day and fails when the two have drifted apart.
 
 The listing, review contact, age rating and products are all written by
 `scripts/asc-iap.mjs`, so the repository copy is the truth and the record matches it.
